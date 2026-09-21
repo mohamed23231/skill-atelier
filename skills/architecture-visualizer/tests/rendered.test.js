@@ -9,7 +9,9 @@ const fixtures = require('./fixtures.js');
 
 const REGION_NAMES = ['topbar', 'navigator', 'canvas', 'inspector'];
 const CAMERA_CONTROL_SELECTORS = ['#btn-zoom-in', '#btn-zoom-out', '#btn-fit', '#btn-reset'];
-const PANEL_BREAKPOINT = 1100;
+const templateHtml = fs.readFileSync(path.join(__dirname, '../src/engine/template.html'), 'utf8');
+const bpMatch = templateHtml.match(/const\s+PANEL_BREAKPOINT\s*=\s*(\d+)/);
+const PANEL_BREAKPOINT = bpMatch ? Number(bpMatch[1]) : 1100;
 const VIEWPORTS = [
   { width: 320, height: 800, mobile: false },
   { width: 768, height: 900, mobile: false },
@@ -855,7 +857,7 @@ function desktopInspectorCloseSteps() {
       __record('initialInspectorOpen', __open('inspector'));
       __record('initialCanvasWidth', __rect(__region('canvas')).width);
       __click(__q('[data-action="inspector-toggle"]'));
-      await __sleep(220);
+      await __sleep(320);
       __record('inspectorOpenAfterToggle', __open('inspector'));
       __record('inspectorVisibleAfterToggle', __visible(__region('inspector')));
       __record('canvasWidthInspectorOpen', __rect(__region('canvas')).width);
@@ -878,7 +880,7 @@ function desktopInspectorCloseSteps() {
     ev(`(async function () {
       ${PAGE_HELPERS}
       __click(__q('[data-action="inspector-toggle"]'));
-      await __sleep(220);
+      await __sleep(320);
       __record('inspectorOpenAfterReopen', __open('inspector'));
       __record('inspectorVisibleAfterReopen', __visible(__region('inspector')));
       return __observed();
@@ -897,7 +899,7 @@ function tabletNavigatorOverlaySteps() {
       __record('navigatorInitialVisible', __visible(__region('navigator')));
       __record('canvasWidthInitial', __rect(__region('canvas')).width);
       __click(__q('[data-action="navigator-toggle"]'));
-      await __sleep(250);
+      await __sleep(320);
       __record('navigatorOpenAfterToggle', __open('navigator'));
       __record('navigatorVisibleAfterToggle', __visible(__region('navigator')));
       __record('navigatorRectOpen', __rect(__region('navigator')));

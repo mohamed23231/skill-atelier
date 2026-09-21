@@ -18,10 +18,12 @@
   const CYLINDER_R = 12;
   const PILL_RX = 0.5; // actor: rx = height * 0.5 (stadium shape)
   const WORKER_RX = 22;
+  const EXTERNAL_RX = 14;
   const DEFAULT_RX = 10;
 
   function nodeCornerRadius(node) {
     const h = node.height || 0;
+    if (node.type === 'external') return Math.min(EXTERNAL_RX, h / 2);
     if (node.type === 'worker' || node.type === 'cloud_function') return Math.min(WORKER_RX, h / 2);
     return Math.min(DEFAULT_RX, h / 2);
   }

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Workbench panels**: inspector visibility is driven solely by `data-open`, panels use `role="dialog"`, closed panels are marked `inert` and `aria-hidden="true"`, and `aria-modal` is set only for open overlay drawers.
+- **Workbench docking & canvas reflow**: docked panels reflow canvas and fit view when `userMovedView` is false; selection on canvas nodes opens inspector via `setDrawerOpen()` with proper responsive reflow and backdrop handling.
+- **Tabs bar**: minimize toggle is placed outside `role="tablist"` navigation, vertical wheel scrolling respects scroll boundaries and deltaMode without locking vertical page scroll, and active view tabs synchronize on URL restoration and view switching.
+- **Shape-aware geometry**: external nodes use matching 14px corner radius (`nodeCornerRadius`) so edge endpoints land accurately on the rendered outline.
+- **Shipped examples**: regenerated from current template.
+
+---
+
 ## [2.0.0] - 2026-09-21
 
 Major architecture modeling and workbench release introducing the version 2 model schema, first-class evidence verification, policy enforcement, multi-scenario playback, and an overhauled responsive four-region workbench.

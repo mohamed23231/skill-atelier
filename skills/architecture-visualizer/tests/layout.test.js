@@ -182,14 +182,22 @@ const cases = [
         if (!target) return;
         const face = e.points.targetFace || 'left';
         let gap;
-        if (face === 'left' || face === 'right') {
+        if (face === 'left') {
           const dy = e.points.y2 - (target.y + target.height / 2);
-          const boundaryX = face === 'left' ? geometry.shapeLeftX(target, dy) : geometry.shapeRightX(target, dy);
-          gap = Math.abs(e.points.x2 - boundaryX);
+          const boundaryX = geometry.shapeLeftX(target, dy);
+          gap = boundaryX - e.points.x2;
+        } else if (face === 'right') {
+          const dy = e.points.y2 - (target.y + target.height / 2);
+          const boundaryX = geometry.shapeRightX(target, dy);
+          gap = e.points.x2 - boundaryX;
+        } else if (face === 'top') {
+          const dx = e.points.x2 - (target.x + target.width / 2);
+          const boundaryY = geometry.shapeTopY(target, dx);
+          gap = boundaryY - e.points.y2;
         } else {
           const dx = e.points.x2 - (target.x + target.width / 2);
-          const boundaryY = face === 'top' ? geometry.shapeTopY(target, dx) : geometry.shapeBottomY(target, dx);
-          gap = Math.abs(e.points.y2 - boundaryY);
+          const boundaryY = geometry.shapeBottomY(target, dx);
+          gap = e.points.y2 - boundaryY;
         }
         assert.ok(
           gap >= geometry.EDGE_END_GAP - 2 && gap <= geometry.EDGE_END_GAP + 4,
