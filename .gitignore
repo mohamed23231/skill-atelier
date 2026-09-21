@@ -22,6 +22,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# delegate-fleet local state (briefs, runs, discovered fleet)
+.delegate-fleet/
+
 # Environment
 .env
 .env.*

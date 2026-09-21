@@ -14,9 +14,17 @@ The flagship skill is **[architecture-visualizer](skills/architecture-visualizer
 turns a feature, migration, refactor, or system design into a grounded, interactive architecture
 visualization, and validates the result against a mechanical quality gate before presenting it.
 
+It ships with **[delegate-fleet](skills/delegate-fleet/)** — one brain, many workers. Your orchestrating
+model plans, briefs, verifies and commits; the implementation runs on whichever coding-agent CLI you
+have. Workers are chosen by **capability**, never by price or reputation: ask for `edit`, `readOnly`
+or `resumeById` and the fleet answers with the workers that can actually do it here. 20 backends ship
+supported, third-party adapters load from your own project, and a relay sits between as a
+deterministic trust boundary that reports facts and never decides whether work is good.
+
 ```
 skills/
   architecture-visualizer/   grounded architecture visualization + `arch-viz` CLI
+  delegate-fleet/            capability-based delegation to worker CLIs + `relay`/`fleet`
 ```
 
 ## See it work
@@ -92,6 +100,7 @@ standalone artifacts; it never changes the target project's runtime, dependencie
 | Skill | Description | Status |
 | ----- | ----------- | ------ |
 | [architecture-visualizer](skills/architecture-visualizer/) | Grounded, interactive architecture visualizations with a 14-point quality gate and a zero-dependency CLI. | Available |
+| [delegate-fleet](skills/delegate-fleet/) | Capability-based delegation to 20 coding-agent CLIs. Verifies what each installed CLI can really do, bounds execution, distinguishes worker changes from your uncommitted work, and leaves review, acceptance and the commit with the orchestrator. | Available |
 
 The catalog is intentionally small. New skills are held to the packaging rules in
 [docs/MAINTAINERS.md](docs/MAINTAINERS.md).
