@@ -1,0 +1,66 @@
+name: New skill proposal
+description: Propose a new skill for the collection.
+title: "[Skill]: "
+labels:
+  - new skill
+  - needs triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read the packaging rules in `docs/MAINTAINERS.md` before filling this in.
+        A skill is a folder with a `SKILL.md` that an agent loads on demand.
+  - type: input
+    id: name
+    attributes:
+      label: Proposed skill name
+      description: Lowercase words separated by single hyphens. This becomes the folder name.
+      placeholder: 'database-migration-planner'
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem it solves
+      description: What task does an agent get wrong today without this skill?
+    validations:
+      required: true
+  - type: textarea
+    id: triggers
+    attributes:
+      label: When should an agent load it?
+      description: The kinds of requests that should activate the skill.
+      placeholder: 'When the user asks to plan a zero-downtime database migration.'
+    validations:
+      required: true
+  - type: textarea
+    id: contents
+    attributes:
+      label: What it contains
+      description: Instructions, reference material, scripts, and examples you expect to include.
+    validations:
+      required: true
+  - type: input
+    id: requirements
+    attributes:
+      label: Runtime requirements
+      description: Node, Python, or system tools needed. Prefer none.
+      placeholder: 'None, or Node 22+ with no dependencies'
+    validations:
+      required: true
+  - type: input
+    id: prototype
+    attributes:
+      label: Prototype or prior art
+      description: Link to a working version, or say none.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I read docs/MAINTAINERS.md and this skill follows the packaging rules.
+          required: true
+        - label: I searched existing issues and this is not a duplicate.
+          required: true

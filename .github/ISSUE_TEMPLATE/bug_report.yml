@@ -1,0 +1,79 @@
+name: Bug report
+description: Report a defect in a skill, the CLI, the generated output, or the repository tooling.
+title: "[Bug]: "
+labels:
+  - bug
+  - needs triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include secrets, tokens, or private data.
+        For a security problem, use the private reporting link instead of this form.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project is affected?
+      options:
+        - architecture-visualizer skill
+        - arch-viz CLI
+        - Generated visualization (HTML)
+        - Repository tooling or CI
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Skill version, release tag, or commit SHA.
+      placeholder: '2.0.0 or a commit SHA'
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Describe the defect and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands or prompts, and the smallest spec JSON that reproduces the problem.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Node.js version, agent harness and version, and browser for visual issues.
+      placeholder: 'macOS 15, Node 22.11, Claude Code 1.x, Chrome 130'
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: Console output, stack trace, or a screenshot link.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I removed secrets and private data from this report.
+          required: true

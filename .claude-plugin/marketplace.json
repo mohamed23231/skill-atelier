@@ -1,0 +1,21 @@
+{
+  "name": "skill-atelier",
+  "owner": {
+    "name": "Skill Atelier Contributors"
+  },
+  "metadata": {
+    "description": "Vendor-neutral engineering skills for AI coding agents",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "architecture-visualizer",
+      "description": "Grounded, interactive architecture visualizations with a mechanical quality gate and a zero-dependency CLI.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/architecture-visualizer"
+      ]
+    }
+  ]
+}

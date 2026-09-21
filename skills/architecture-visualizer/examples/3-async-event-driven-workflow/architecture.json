@@ -1,0 +1,1165 @@
+{
+  "schemaVersion": 2,
+  "meta": {
+    "title": "Distributed Order Fulfillment Saga with Outbox & DLQ",
+    "description": "Event-driven microservice orchestration for order checkout, payment capture, inventory allocation, and automated compensating rollbacks via Kafka and Dead Letter Queues.",
+    "status": "ACCEPTED",
+    "grounding": "illustrative",
+    "author": "Principal Distributed Systems Architect",
+    "date": "2026-09-17",
+    "assumptions": [
+      "Kafka topic partition count is aligned with SKU/Order ID hash keys for strict FIFO per order",
+      "All service event handlers are idempotent using unique event UUID deduplication",
+      "Maximum allowed saga execution time is 45 seconds before triggering auto-compensation"
+    ],
+    "decisions": [
+      {
+        "id": "ADR-201",
+        "title": "Transactional Outbox Pattern for Atomic Persistence and Message Publishing",
+        "status": "ACCEPTED",
+        "context": "Writing to orders DB and publishing to Kafka in a single HTTP request causes dual-write inconsistencies if Kafka is unreachable.",
+        "decision": "Persist domain events into an order_outbox table within the same ACID database transaction; an asynchronous poller worker publishes events to Kafka.",
+        "consequences": "Guarantees at-least-once delivery; consumers must be idempotent."
+      },
+      {
+        "id": "ADR-202",
+        "title": "Orchestrated Saga Pattern over Pure Choreography",
+        "status": "ACCEPTED",
+        "context": "Choreographed sagas with 5+ services lead to cyclic event dependencies and difficult rollback visibility.",
+        "decision": "Use OrderSagaOrchestrator to explicitly manage state machine steps, track timeouts, and dispatch compensating commands.",
+        "consequences": "Centralized failure visibility; orchestrator requires high availability and state persistence."
+      },
+      {
+        "id": "ADR-203",
+        "title": "Exponential Backoff with Dead Letter Queue (DLQ) Quarantine",
+        "status": "ACCEPTED",
+        "context": "Poison pill messages must not block consumer partitions indefinitely.",
+        "decision": "Retry failed event processing 3 times with exponential backoff; route permanently failing messages to fulfillment.dlq and trigger PagerDuty alert.",
+        "consequences": "Prevents partition stalls; requires engineering runbook for manual DLQ inspection and replay."
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b_client",
+      "label": "Client Layer",
+      "type": "system",
+      "order": 1
+    },
+    {
+      "id": "b_orchestrator",
+      "label": "Order Management & Outbox Tier",
+      "type": "container",
+      "order": 2
+    },
+    {
+      "id": "b_event_bus",
+      "label": "Event Streaming Infrastructure",
+      "type": "container",
+      "order": 3
+    },
+    {
+      "id": "b_subsystems",
+      "label": "Fulfillment Subsystems & Microservices",
+      "type": "container",
+      "order": 4
+    },
+    {
+      "id": "b_dead_letter",
+      "label": "Reliability & Failure Recovery Tier",
+      "type": "container",
+      "order": 5
+    }
+  ],
+  "nodes": [
+    {
+      "id": "checkout_app",
+      "label": "Checkout Mobile App",
+      "boundary": "b_client",
+      "type": "mobile",
+      "technology": "React Native (iOS/Android)",
+      "status": "VERIFIED",
+      "delta": "UNCHANGED",
+      "evidenceIds": [
+        "ev_checkout_app"
+      ],
+      "description": "User shopping app initiating order placement and receiving real-time WebSocket status updates.",
+      "details": {
+        "responsibilities": [
+          "Submit order",
+          "Render order status timeline",
+          "Handle payment authorization"
+        ],
+        "apis": [
+          {
+            "method": "POST",
+            "path": "/api/v1/orders",
+            "desc": "Submit a checkout basket"
+          }
+        ],
+        "files": [
+          "src/screens/CheckoutScreen.tsx"
+        ]
+      }
+    },
+    {
+      "id": "saga_orchestrator",
+      "label": "Saga Orchestrator",
+      "boundary": "b_orchestrator",
+      "type": "service",
+      "technology": "Node.js / Temporal",
+      "status": "VERIFIED",
+      "delta": "CHANGED",
+      "evidenceIds": [
+        "ev_saga_orchestrator"
+      ],
+      "description": "Central state machine coordinator managing saga progression, timers, and compensating transactions.",
+      "details": {
+        "responsibilities": [
+          "Orchestrate saga states",
+          "Emit compensating commands on failure",
+          "Persist state transitions"
+        ],
+        "files": [
+          "src/saga/OrderFulfillmentSaga.ts",
+          "src/saga/SagaStateMachine.ts"
+        ],
+        "apis": [
+          {
+            "method": "POST",
+            "path": "/api/v1/orders/checkout",
+            "desc": "Initiates order checkout saga"
+          }
+        ],
+        "tables": [
+          "orders",
+          "saga_instances",
+          "order_outbox"
+        ],
+        "tasks": [
+          {
+            "id": "T1",
+            "title": "Implement state machine transitions (Created -> Authorized -> Reserved -> Dispatched)",
+            "status": "done"
+          },
+          {
+            "id": "T2",
+            "title": "Add compensating rollback logic for warehouse stock exhaustion",
+            "status": "pending"
+          }
+        ],
+        "failureModes": [
+          {
+            "failure": "Orchestrator node restart mid-saga",
+            "impact": "In-flight saga orphaned",
+            "mitigation": "Persist state in saga_instances; resume from WAL checkpoint on startup"
+          }
+        ]
+      }
+    },
+    {
+      "id": "outbox_table",
+      "label": "Outbox Table",
+      "boundary": "b_orchestrator",
+      "type": "storage",
+      "technology": "PostgreSQL 16",
+      "status": "VERIFIED",
+      "delta": "ADDED",
+      "evidenceIds": [
+        "ev_outbox_table"
+      ],
+      "description": "Transactional outbox table written atomically in the same transaction as order record creation.",
+      "details": {
+        "tables": [
+          "order_outbox"
+        ]
+      }
+    },
+    {
+      "id": "outbox_poller",
+      "label": "Outbox Relay Worker",
+      "boundary": "b_orchestrator",
+      "type": "worker",
+      "technology": "Go Daemon / Debezium",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "Relays pending outbox records into Kafka with at-least-once delivery guarantees.",
+      "details": {
+        "responsibilities": [
+          "Poll pending records",
+          "Publish to Kafka topic",
+          "Mark outbox records as published"
+        ]
+      }
+    },
+    {
+      "id": "kafka_broker",
+      "label": "Apache Kafka Event Bus",
+      "boundary": "b_event_bus",
+      "type": "topic",
+      "technology": "Apache Kafka 3.6 / Strimzi",
+      "status": "VERIFIED",
+      "delta": "UNCHANGED",
+      "evidenceIds": [
+        "ev_kafka_broker"
+      ],
+      "description": "Distributed message broker routing domain events: order.events, payment.events, inventory.events, warehouse.events.",
+      "details": {
+        "responsibilities": [
+          "Partitioned message log",
+          "Consumer group offset tracking"
+        ],
+        "files": [
+          "infra/kafka/topics/order-events.yaml"
+        ]
+      }
+    },
+    {
+      "id": "payment_service",
+      "label": "Payment Service",
+      "boundary": "b_subsystems",
+      "type": "service",
+      "technology": "Java / Spring Boot",
+      "status": "VERIFIED",
+      "delta": "UNCHANGED",
+      "evidenceIds": [
+        "ev_payment_service"
+      ],
+      "description": "Interacts with payment gateways (Stripe / Adyen) for authorization, capture, and compensation refunds.",
+      "details": {
+        "responsibilities": [
+          "Authorize card funds",
+          "Capture payment",
+          "Execute compensating refund"
+        ],
+        "failureModes": [
+          {
+            "failure": "Payment gateway timeout",
+            "impact": "Transaction undetermined",
+            "mitigation": "Idempotent payment query before compensation"
+          }
+        ],
+        "apis": [
+          {
+            "method": "POST",
+            "path": "/payments/refund",
+            "desc": "Compensating refund for a failed saga"
+          }
+        ],
+        "files": [
+          "services/payment/src/PaymentController.java"
+        ]
+      }
+    },
+    {
+      "id": "inventory_service",
+      "label": "Inventory Service",
+      "boundary": "b_subsystems",
+      "type": "service",
+      "technology": "Node.js / Fastify",
+      "status": "VERIFIED",
+      "delta": "CHANGED",
+      "evidenceIds": [
+        "ev_inventory_service"
+      ],
+      "description": "Performs atomic stock reservation in Redis/Postgres and releases reservations during compensation.",
+      "details": {
+        "responsibilities": [
+          "Reserve inventory SKU quantity",
+          "Release reserved stock on order cancellation"
+        ],
+        "tables": [
+          "inventory_allocations"
+        ]
+      }
+    },
+    {
+      "id": "warehouse_service",
+      "label": "Warehouse Service",
+      "boundary": "b_subsystems",
+      "type": "service",
+      "technology": "Python / FastAPI",
+      "status": "VERIFIED",
+      "delta": "UNCHANGED",
+      "evidenceIds": [
+        "ev_warehouse_service"
+      ],
+      "description": "Communicates with Automated Storage & Retrieval Systems (ASRS) and 3PL courier APIs.",
+      "details": {
+        "responsibilities": [
+          "Generate pick list",
+          "Dispatch parcel label",
+          "Trigger dispatch failure event if item damaged"
+        ],
+        "apis": [
+          {
+            "method": "POST",
+            "path": "/dispatch",
+            "desc": "Create a warehouse dispatch order"
+          }
+        ],
+        "files": [
+          "services/warehouse/app/dispatch.py"
+        ]
+      }
+    },
+    {
+      "id": "dlq_queue",
+      "label": "Fulfillment DLQ",
+      "boundary": "b_dead_letter",
+      "type": "queue",
+      "technology": "Kafka DLQ topic",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "Isolates unprocessable or repeatedly failed messages after 3 failed retries.",
+      "details": {
+        "responsibilities": [
+          "Quarantine poison messages",
+          "Retain payload and stack trace headers"
+        ]
+      }
+    },
+    {
+      "id": "dlq_triage_worker",
+      "label": "DLQ Triage Worker",
+      "boundary": "b_dead_letter",
+      "type": "worker",
+      "technology": "TypeScript / PagerDuty SDK",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "Listens to DLQ topic, writes failed event record to DB, and pages on-call engineering team.",
+      "details": {
+        "responsibilities": [
+          "Trigger PagerDuty incident",
+          "Store failure context in dead_letter_records"
+        ],
+        "tables": [
+          "dead_letter_records"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_client_saga",
+      "source": "checkout_app",
+      "target": "saga_orchestrator",
+      "label": "HTTPS POST /checkout",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true,
+      "packetLabel": "OrderSubmit"
+    },
+    {
+      "id": "e_saga_outbox",
+      "source": "saga_orchestrator",
+      "target": "outbox_table",
+      "label": "Atomic SQL INSERT",
+      "communication": "sync",
+      "pathType": "write",
+      "animated": true
+    },
+    {
+      "id": "e_outbox_poller",
+      "source": "outbox_table",
+      "target": "outbox_poller",
+      "label": "Poll Pending Events",
+      "communication": "sync",
+      "pathType": "read",
+      "animated": true
+    },
+    {
+      "id": "e_poller_kafka",
+      "source": "outbox_poller",
+      "target": "kafka_broker",
+      "label": "Produce OrderCreatedEvent",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true,
+      "packetLabel": "OrderCreated"
+    },
+    {
+      "id": "e_kafka_payment",
+      "source": "kafka_broker",
+      "target": "payment_service",
+      "label": "Consume OrderCreated",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true
+    },
+    {
+      "id": "e_payment_kafka",
+      "source": "payment_service",
+      "target": "kafka_broker",
+      "label": "Produce PaymentAuthorized",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true,
+      "packetLabel": "PaymentAuthorized"
+    },
+    {
+      "id": "e_kafka_inventory",
+      "source": "kafka_broker",
+      "target": "inventory_service",
+      "label": "Consume PaymentAuthorized",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true
+    },
+    {
+      "id": "e_inventory_kafka",
+      "source": "inventory_service",
+      "target": "kafka_broker",
+      "label": "Produce InventoryReserved",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true,
+      "packetLabel": "InventoryReserved"
+    },
+    {
+      "id": "e_kafka_warehouse",
+      "source": "kafka_broker",
+      "target": "warehouse_service",
+      "label": "Consume InventoryReserved",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true
+    },
+    {
+      "id": "e_warehouse_dlq",
+      "source": "warehouse_service",
+      "target": "dlq_queue",
+      "label": "Route 3x Failed Message",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true,
+      "packetLabel": "WarehouseFailedEvent"
+    },
+    {
+      "id": "e_dlq_triage",
+      "source": "dlq_queue",
+      "target": "dlq_triage_worker",
+      "label": "Consume Poison Message",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true
+    },
+    {
+      "id": "e12",
+      "source": "kafka_broker",
+      "target": "saga_orchestrator",
+      "label": "Failure event",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true,
+      "packetLabel": "warehouse.dispatch.failed"
+    },
+    {
+      "id": "e13",
+      "source": "saga_orchestrator",
+      "target": "payment_service",
+      "label": "Compensate: refund",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true,
+      "delta": "ADDED"
+    },
+    {
+      "id": "e14",
+      "source": "saga_orchestrator",
+      "target": "inventory_service",
+      "label": "Compensate: release",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true,
+      "delta": "ADDED"
+    }
+  ],
+  "views": {
+    "sequence": {
+      "title": "Order Fulfillment Saga with Compensating Rollback Flow",
+      "steps": [
+        {
+          "step": 1,
+          "from": "checkout_app",
+          "to": "saga_orchestrator",
+          "label": "Customer submits Checkout for Order #9901",
+          "sync": true
+        },
+        {
+          "step": 2,
+          "from": "saga_orchestrator",
+          "to": "outbox_table",
+          "label": "Atomically commit Order (STATUS=PENDING) and Outbox event in single DB TX",
+          "sync": true
+        },
+        {
+          "step": 3,
+          "from": "outbox_poller",
+          "to": "kafka_broker",
+          "label": "Publish OrderCreatedEvent to Kafka topic 'order.events'",
+          "sync": false
+        },
+        {
+          "step": 4,
+          "from": "kafka_broker",
+          "to": "payment_service",
+          "label": "Payment Service captures payment from Stripe token ($149.00)",
+          "sync": false
+        },
+        {
+          "step": 5,
+          "from": "payment_service",
+          "to": "kafka_broker",
+          "label": "Emit PaymentCapturedEvent to 'payment.events'",
+          "sync": false
+        },
+        {
+          "step": 6,
+          "from": "kafka_broker",
+          "to": "inventory_service",
+          "label": "Inventory Service allocates SKU stock (Quantity: 2)",
+          "sync": false
+        },
+        {
+          "step": 7,
+          "from": "inventory_service",
+          "to": "kafka_broker",
+          "label": "Emit InventoryReservedEvent to 'inventory.events'",
+          "sync": false
+        },
+        {
+          "step": 8,
+          "from": "kafka_broker",
+          "to": "warehouse_service",
+          "label": "Warehouse Service attempts dispatch but encounters damaged physical stock",
+          "sync": false
+        },
+        {
+          "step": 9,
+          "from": "warehouse_service",
+          "to": "kafka_broker",
+          "label": "Emit WarehouseDispatchFailedEvent to trigger saga compensation",
+          "sync": false
+        },
+        {
+          "step": 10,
+          "from": "kafka_broker",
+          "to": "saga_orchestrator",
+          "label": "Orchestrator receives failure event; executes CompensateOrderSaga()",
+          "sync": false
+        },
+        {
+          "step": 11,
+          "from": "saga_orchestrator",
+          "to": "payment_service",
+          "label": "COMPENSATION: Invoke RefundPayment(order_id) to refund $149.00",
+          "sync": true
+        },
+        {
+          "step": 12,
+          "from": "saga_orchestrator",
+          "to": "inventory_service",
+          "label": "COMPENSATION: Invoke ReleaseInventory(order_id) to unlock reserved units",
+          "sync": true
+        },
+        {
+          "step": 13,
+          "from": "warehouse_service",
+          "to": "dlq_queue",
+          "label": "Route corrupted payload to fulfillment.dlq after 3 retries",
+          "sync": false
+        },
+        {
+          "step": 14,
+          "from": "dlq_queue",
+          "to": "dlq_triage_worker",
+          "label": "Trigger PagerDuty High-Severity Alert for on-call triage",
+          "sync": false
+        }
+      ]
+    },
+    "database_er": {
+      "tables": [
+        {
+          "name": "orders",
+          "delta": "EXISTING",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "pk": true
+            },
+            {
+              "name": "customer_id",
+              "type": "uuid"
+            },
+            {
+              "name": "total_amount",
+              "type": "numeric(10,2)"
+            },
+            {
+              "name": "status",
+              "type": "varchar(32)"
+            },
+            {
+              "name": "created_at",
+              "type": "timestamptz"
+            }
+          ]
+        },
+        {
+          "name": "order_outbox",
+          "delta": "ADDED",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "pk": true
+            },
+            {
+              "name": "aggregate_id",
+              "type": "uuid"
+            },
+            {
+              "name": "event_type",
+              "type": "varchar(100)"
+            },
+            {
+              "name": "payload",
+              "type": "jsonb"
+            },
+            {
+              "name": "status",
+              "type": "varchar(20)"
+            },
+            {
+              "name": "created_at",
+              "type": "timestamptz"
+            }
+          ]
+        },
+        {
+          "name": "saga_instances",
+          "delta": "ADDED",
+          "columns": [
+            {
+              "name": "saga_id",
+              "type": "uuid",
+              "pk": true
+            },
+            {
+              "name": "order_id",
+              "type": "uuid",
+              "fk": "orders.id"
+            },
+            {
+              "name": "current_state",
+              "type": "varchar(50)"
+            },
+            {
+              "name": "compensation_status",
+              "type": "varchar(50)"
+            },
+            {
+              "name": "updated_at",
+              "type": "timestamptz"
+            }
+          ]
+        },
+        {
+          "name": "dead_letter_records",
+          "delta": "ADDED",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "pk": true
+            },
+            {
+              "name": "topic",
+              "type": "varchar(100)"
+            },
+            {
+              "name": "original_payload",
+              "type": "jsonb"
+            },
+            {
+              "name": "error_stack",
+              "type": "text"
+            },
+            {
+              "name": "retry_count",
+              "type": "int"
+            },
+            {
+              "name": "quarantined_at",
+              "type": "timestamptz"
+            }
+          ]
+        }
+      ],
+      "relations": [
+        {
+          "from": "orders",
+          "to": "saga_instances",
+          "type": "1:1",
+          "label": "tracked_by"
+        },
+        {
+          "from": "orders",
+          "to": "order_outbox",
+          "type": "1:N",
+          "label": "generates"
+        }
+      ]
+    },
+    "implementation_plan": {
+      "phases": [
+        {
+          "name": "Phase 1: Transactional Outbox Schema & Publisher Daemon",
+          "tasks": [
+            {
+              "id": "P1-T1",
+              "title": "Create order_outbox table with status index and JSONB payload column",
+              "componentId": "outbox_table",
+              "complexity": "low",
+              "files": [
+                "src/db/migrations/20260917_create_order_outbox.sql"
+              ]
+            },
+            {
+              "id": "P1-T2",
+              "title": "Deploy Outbox Relay Worker daemon with batch polling and Kafka producer confirmation",
+              "componentId": "outbox_poller",
+              "complexity": "high",
+              "files": [
+                "src/workers/outbox-relay/OutboxRelayWorker.ts"
+              ],
+              "risks": [
+                "Outbox table query contention under high insert rate; index on status and created_at"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 2: Saga State Machine & Orchestration Logic",
+          "tasks": [
+            {
+              "id": "P2-T1",
+              "title": "Define SagaStateMachine transitions with timeout guards",
+              "componentId": "saga_orchestrator",
+              "complexity": "high",
+              "files": [
+                "src/saga/SagaStateMachine.ts"
+              ]
+            },
+            {
+              "id": "P2-T2",
+              "title": "Implement automated compensating rollback handlers for Payment and Inventory",
+              "componentId": "saga_orchestrator",
+              "complexity": "high",
+              "files": [
+                "src/saga/compensations/CompensatingRollbackHandler.ts"
+              ]
+            },
+            {
+              "id": "P2-T3",
+              "title": "Add idempotent ReleaseInventory compensation handler",
+              "componentId": "inventory_service",
+              "complexity": "medium",
+              "files": [
+                "services/inventory/src/InventoryCompensationHandler.ts"
+              ],
+              "risks": [
+                "Double release if the handler is not keyed by saga id"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 3: Dead Letter Queue (DLQ) & PagerDuty Alerting Pipeline",
+          "tasks": [
+            {
+              "id": "P3-T1",
+              "title": "Configure Kafka dead-letter topic 'fulfillment.dlq' with 30-day retention",
+              "componentId": "dlq_queue",
+              "complexity": "low",
+              "files": [
+                "infra/kafka/topics/fulfillment-dlq.yaml"
+              ]
+            },
+            {
+              "id": "P3-T2",
+              "title": "Build DLQ Triage Worker to persist failure context and fire PagerDuty API triggers",
+              "componentId": "dlq_triage_worker",
+              "complexity": "medium",
+              "files": [
+                "src/workers/dlq/DlqTriageWorker.ts"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "evidence": [
+    {
+      "id": "ev_checkout_app",
+      "nodeId": "checkout_app",
+      "type": "file",
+      "locator": "src/screens/CheckoutScreen.tsx",
+      "verification": "compatibility",
+      "description": "Mobile checkout user interface screen"
+    },
+    {
+      "id": "ev_saga_orchestrator",
+      "nodeId": "saga_orchestrator",
+      "type": "file",
+      "locator": "src/saga/OrderFulfillmentSaga.ts",
+      "verification": "compatibility",
+      "description": "Order fulfillment distributed saga orchestrator implementation"
+    },
+    {
+      "id": "ev_outbox_table",
+      "nodeId": "outbox_table",
+      "type": "table",
+      "locator": "order_outbox",
+      "verification": "compatibility",
+      "description": "Transactional outbox persistence table"
+    },
+    {
+      "id": "ev_kafka_broker",
+      "nodeId": "kafka_broker",
+      "type": "file",
+      "locator": "infra/kafka/topics/order-events.yaml",
+      "verification": "compatibility",
+      "description": "Kafka topic definition for domain order events"
+    },
+    {
+      "id": "ev_payment_service",
+      "nodeId": "payment_service",
+      "type": "file",
+      "locator": "services/payment/src/PaymentController.java",
+      "verification": "compatibility",
+      "description": "Payment processing controller and refund API"
+    },
+    {
+      "id": "ev_inventory_service",
+      "nodeId": "inventory_service",
+      "type": "table",
+      "locator": "inventory_allocations",
+      "verification": "compatibility",
+      "description": "Inventory SKU allocation tracking table"
+    },
+    {
+      "id": "ev_warehouse_service",
+      "nodeId": "warehouse_service",
+      "type": "file",
+      "locator": "services/warehouse/app/dispatch.py",
+      "verification": "compatibility",
+      "description": "Warehouse dispatch handler and 3PL courier interface"
+    }
+  ],
+  "policies": [
+    {
+      "id": "pol_checkout_routes_to_orchestrator",
+      "kind": "required_dependency",
+      "from": "checkout_app",
+      "to": "saga_orchestrator",
+      "description": "Checkout app traffic must initiate through the Saga Orchestrator"
+    },
+    {
+      "id": "pol_no_client_to_subsystems",
+      "kind": "forbidden_dependency",
+      "from": "checkout_app",
+      "to": "payment_service",
+      "description": "Checkout client must not invoke fulfillment subsystems directly without saga orchestration"
+    },
+    {
+      "id": "pol_no_client_to_outbox",
+      "kind": "forbidden_dependency",
+      "from": "checkout_app",
+      "to": "outbox_table",
+      "description": "Client applications must not access internal outbox tables directly"
+    },
+    {
+      "id": "pol_verified_node_evidence",
+      "kind": "required_evidence",
+      "description": "All verified services and topics in the saga workflow must carry compatibility evidence",
+      "status": "VERIFIED"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "scenario_fulfillment_saga_dlq",
+      "name": "Order Fulfillment Saga with Parallel Execution & DLQ Compensation",
+      "description": "Executes parallel payment and inventory fulfillment branches, handling physical warehouse damage via DLQ quarantine and automated compensations.",
+      "stages": [
+        {
+          "id": "stage_submit_checkout",
+          "name": "Initiate Checkout",
+          "type": "interaction",
+          "source": "checkout_app",
+          "target": "saga_orchestrator",
+          "from": "checkout_app",
+          "to": "saga_orchestrator",
+          "edgeId": "e_client_saga",
+          "label": "HTTPS POST /checkout",
+          "payload": {
+            "orderId": "9901",
+            "amount": 149,
+            "sku": "SKU-DESK-01",
+            "quantity": 2
+          },
+          "status": "success"
+        },
+        {
+          "id": "stage_persist_outbox",
+          "name": "Atomic Order & Outbox Commit",
+          "type": "interaction",
+          "source": "saga_orchestrator",
+          "target": "outbox_table",
+          "from": "saga_orchestrator",
+          "to": "outbox_table",
+          "edgeId": "e_saga_outbox",
+          "label": "Atomic SQL INSERT",
+          "payload": {
+            "orderId": "9901",
+            "eventType": "OrderCreatedEvent",
+            "status": "PENDING"
+          },
+          "status": "success",
+          "metadata": {
+            "transactional": true
+          }
+        },
+        {
+          "id": "stage_relay_outbox_event",
+          "name": "Outbox Polling & Kafka Dispatch",
+          "type": "interaction",
+          "source": "outbox_table",
+          "target": "outbox_poller",
+          "from": "outbox_table",
+          "to": "outbox_poller",
+          "edgeId": "e_outbox_poller",
+          "label": "Poll Pending Events",
+          "payload": {
+            "status": "PENDING",
+            "limit": 100
+          },
+          "status": "success"
+        },
+        {
+          "id": "stage_publish_order_created",
+          "name": "Publish to Kafka Event Bus",
+          "type": "interaction",
+          "source": "outbox_poller",
+          "target": "kafka_broker",
+          "from": "outbox_poller",
+          "to": "kafka_broker",
+          "edgeId": "e_poller_kafka",
+          "label": "Produce OrderCreatedEvent",
+          "payload": {
+            "topic": "order.events",
+            "orderId": "9901"
+          },
+          "status": "success"
+        },
+        {
+          "id": "stage_parallel_fulfillment_branches",
+          "name": "Parallel Fulfillment Branches (Payment & Inventory)",
+          "type": "parallel",
+          "description": "Concurrent execution of payment authorization and stock reservation",
+          "stages": [
+            {
+              "id": "stage_payment_branch",
+              "name": "Payment Authorization Branch",
+              "type": "interaction",
+              "source": "kafka_broker",
+              "target": "payment_service",
+              "from": "kafka_broker",
+              "to": "payment_service",
+              "edgeId": "e_kafka_payment",
+              "label": "Consume OrderCreated",
+              "payload": {
+                "orderId": "9901",
+                "amount": 149
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_payment_emitted",
+              "name": "Emit Payment Authorized",
+              "type": "interaction",
+              "source": "payment_service",
+              "target": "kafka_broker",
+              "from": "payment_service",
+              "to": "kafka_broker",
+              "edgeId": "e_payment_kafka",
+              "label": "Produce PaymentAuthorized",
+              "payload": {
+                "orderId": "9901",
+                "chargeId": "ch_3Mv9x"
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_inventory_branch",
+              "name": "Inventory Reservation Branch",
+              "type": "interaction",
+              "source": "kafka_broker",
+              "target": "inventory_service",
+              "from": "kafka_broker",
+              "to": "inventory_service",
+              "edgeId": "e_kafka_inventory",
+              "label": "Consume PaymentAuthorized",
+              "payload": {
+                "orderId": "9901",
+                "sku": "SKU-DESK-01",
+                "quantity": 2
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_inventory_emitted",
+              "name": "Emit Inventory Reserved",
+              "type": "interaction",
+              "source": "inventory_service",
+              "target": "kafka_broker",
+              "from": "inventory_service",
+              "to": "kafka_broker",
+              "edgeId": "e_inventory_kafka",
+              "label": "Produce InventoryReserved",
+              "payload": {
+                "orderId": "9901",
+                "reservationId": "res_88291"
+              },
+              "status": "success"
+            }
+          ]
+        },
+        {
+          "id": "stage_warehouse_dispatch_attempt",
+          "name": "Warehouse Dispatch Attempt",
+          "type": "interaction",
+          "source": "kafka_broker",
+          "target": "warehouse_service",
+          "from": "kafka_broker",
+          "to": "warehouse_service",
+          "edgeId": "e_kafka_warehouse",
+          "label": "Consume InventoryReserved",
+          "payload": {
+            "orderId": "9901",
+            "warehouseId": "WH-DXB-02"
+          },
+          "status": "success"
+        },
+        {
+          "id": "stage_warehouse_outcome_branch",
+          "name": "Warehouse Dispatch & DLQ Failure Recovery",
+          "type": "branch",
+          "description": "Branching based on physical package condition at retrieval time",
+          "condition": "Physical items intact in warehouse bin",
+          "branches": [
+            {
+              "name": "Dispatch Successful",
+              "condition": "Items verified and courier label generated",
+              "status": "success",
+              "stages": []
+            },
+            {
+              "name": "Damaged Item DLQ Quarantine & Compensation",
+              "condition": "Physical stock damaged; retry exhausted (3 attempts failed)",
+              "status": "recovery",
+              "recovery": "Quarantine poison event to DLQ, notify on-call, and execute orchestrator compensations across payment and inventory",
+              "stages": [
+                {
+                  "id": "stage_route_dlq",
+                  "name": "Quarantine to DLQ Queue",
+                  "type": "interaction",
+                  "source": "warehouse_service",
+                  "target": "dlq_queue",
+                  "from": "warehouse_service",
+                  "to": "dlq_queue",
+                  "edgeId": "e_warehouse_dlq",
+                  "label": "Route 3x Failed Message",
+                  "payload": {
+                    "orderId": "9901",
+                    "retries": 3,
+                    "error": "PHYSICAL_DAMAGE_STOCK_EXHAUSTED"
+                  },
+                  "status": "recovery"
+                },
+                {
+                  "id": "stage_dlq_triage_alert",
+                  "name": "Triage Worker PagerDuty Alert",
+                  "type": "interaction",
+                  "source": "dlq_queue",
+                  "target": "dlq_triage_worker",
+                  "from": "dlq_queue",
+                  "to": "dlq_triage_worker",
+                  "edgeId": "e_dlq_triage",
+                  "label": "Consume Poison Message",
+                  "payload": {
+                    "severity": "CRITICAL",
+                    "incident": "PD-58291"
+                  },
+                  "status": "recovery"
+                },
+                {
+                  "id": "stage_orchestrator_failure_notify",
+                  "name": "Deliver Failure Event to Orchestrator",
+                  "type": "interaction",
+                  "source": "kafka_broker",
+                  "target": "saga_orchestrator",
+                  "from": "kafka_broker",
+                  "to": "saga_orchestrator",
+                  "edgeId": "e12",
+                  "label": "Failure event",
+                  "payload": {
+                    "orderId": "9901",
+                    "eventType": "warehouse.dispatch.failed"
+                  },
+                  "status": "recovery"
+                },
+                {
+                  "id": "stage_compensation_refund",
+                  "name": "Compensating Payment Refund",
+                  "type": "interaction",
+                  "source": "saga_orchestrator",
+                  "target": "payment_service",
+                  "from": "saga_orchestrator",
+                  "to": "payment_service",
+                  "edgeId": "e13",
+                  "label": "Compensate: refund",
+                  "payload": {
+                    "orderId": "9901",
+                    "refundAmount": 149
+                  },
+                  "status": "recovered"
+                },
+                {
+                  "id": "stage_compensation_release_inventory",
+                  "name": "Compensating Inventory Release",
+                  "type": "interaction",
+                  "source": "saga_orchestrator",
+                  "target": "inventory_service",
+                  "from": "saga_orchestrator",
+                  "to": "inventory_service",
+                  "edgeId": "e14",
+                  "label": "Compensate: release",
+                  "payload": {
+                    "orderId": "9901",
+                    "reservationId": "res_88291"
+                  },
+                  "status": "recovered"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

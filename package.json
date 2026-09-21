@@ -1,0 +1,29 @@
+{
+  "name": "skill-atelier",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vendor-neutral Agent Skills for AI coding agents.",
+  "license": "MIT",
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamed23231/skill-atelier.git"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "test": "node scripts/test-all.js",
+    "validate": "node scripts/validate-repo.js",
+    "check": "node scripts/validate-repo.js && node scripts/test-all.js"
+  },
+  "keywords": [
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "cursor",
+    "opencode",
+    "architecture",
+    "architecture-visualization"
+  ]
+}

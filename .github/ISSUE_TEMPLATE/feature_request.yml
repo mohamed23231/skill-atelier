@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a change to an existing skill, the CLI, or the repository.
+title: "[Feature]: "
+labels:
+  - enhancement
+  - needs triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests work best when they describe a problem, not only a solution.
+        To propose a brand-new skill, use the "New skill proposal" form instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - architecture-visualizer skill
+        - arch-viz CLI
+        - Generated visualization (HTML)
+        - Repository tooling or CI
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and where does it break down today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What would you like to happen? Alternatives are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, mockups, or examples that clarify the request.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and discussions and this is not a duplicate.
+          required: true

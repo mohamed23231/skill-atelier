@@ -1,0 +1,38 @@
+{
+  "name": "@skill-atelier/architecture-visualizer",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Deterministic, dependency-free software architecture visualizer with evidence verification, policy evaluation, scenario playback, and standalone offline workbench output.",
+  "main": "src/index.js",
+  "bin": {
+    "arch-viz": "bin/arch-viz.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamed23231/skill-atelier.git",
+    "directory": "skills/architecture-visualizer"
+  },
+  "scripts": {
+    "test": "node tests/run-tests.js",
+    "validate": "node bin/arch-viz.js validate",
+    "build": "node bin/arch-viz.js build"
+  },
+  "keywords": [
+    "architecture",
+    "system-design",
+    "software-architecture",
+    "c4-model",
+    "sequence-diagram",
+    "data-flow",
+    "svg",
+    "evidence-verification",
+    "policy-engine",
+    "scenario-playback",
+    "offline-workbench"
+  ],
+  "author": "Skill Atelier contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

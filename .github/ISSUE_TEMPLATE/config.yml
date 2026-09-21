@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/mohamed23231/skill-atelier/security/advisories/new
+    about: Report a vulnerability privately. Do not open a public issue.
+  - name: Question or idea
+    url: https://github.com/mohamed23231/skill-atelier/discussions
+    about: Ask a question or explore an idea before opening an issue.

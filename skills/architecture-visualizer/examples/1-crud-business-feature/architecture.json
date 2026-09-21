@@ -1,0 +1,910 @@
+{
+  "schemaVersion": 2,
+  "meta": {
+    "title": "Supplier Discounts & Volume Rebates in Inventory Valuation",
+    "description": "Integration of dynamic supplier discount rules and tiered rebate calculations into the inventory valuation pipeline with immutable audit trail.",
+    "status": "PROPOSED",
+    "grounding": "illustrative",
+    "author": "Staff Systems Architect",
+    "date": "2026-09-17",
+    "assumptions": [
+      "Supplier discount tiers are versioned and date-bounded",
+      "Valuation calculations use Weighted Average Cost (WAC) with retrospective rebate adjustments",
+      "Audit logs must meet SOX compliance requirements"
+    ],
+    "decisions": [
+      {
+        "id": "ADR-001",
+        "title": "Decouple Discount Rule Engine into a Dedicated Subservice",
+        "status": "ACCEPTED",
+        "context": "Discount rules, volume brackets, and contract terms change frequently and independently of inventory batch tracking.",
+        "decision": "Extract Supplier Discount calculation logic into a dedicated SupplierDiscountService rather than bloating InventoryValuationService.",
+        "consequences": "Clear single responsibility, easier unit testing of complex rebate math, small network hop over internal gRPC."
+      },
+      {
+        "id": "ADR-002",
+        "title": "Append-Only Immutable Audit Log for Valuation Modifications",
+        "status": "ACCEPTED",
+        "context": "Financial auditors require verifiable proof of how every line item's net cost was computed.",
+        "decision": "Write an audit log row containing raw inputs, discount formula used, and resulting net valuation for every valuation event.",
+        "consequences": "Increases write volume; mitigated by append-only table partitioning by month."
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b_client",
+      "label": "Client Applications",
+      "type": "system",
+      "order": 1
+    },
+    {
+      "id": "b_gateway",
+      "label": "API Gateway Tier",
+      "type": "container",
+      "order": 2
+    },
+    {
+      "id": "b_services",
+      "label": "Core Procurement & Inventory Services",
+      "type": "container",
+      "order": 3
+    },
+    {
+      "id": "b_persistence",
+      "label": "Storage & Persistence Tier",
+      "type": "container",
+      "order": 4
+    }
+  ],
+  "nodes": [
+    {
+      "id": "procurement_portal",
+      "label": "Procurement Portal",
+      "boundary": "b_client",
+      "type": "frontend",
+      "technology": "React / TypeScript SPA",
+      "status": "VERIFIED",
+      "delta": "CHANGED",
+      "evidenceIds": [
+        "ev_procurement_portal"
+      ],
+      "description": "Internal administrative web UI for procurement officers, PO approval, and finance valuation reporting.",
+      "details": {
+        "responsibilities": [
+          "PO creation & approval",
+          "Supplier contract management",
+          "Valuation reporting dashboard"
+        ],
+        "files": [
+          "src/admin/procurement/PODetailsPage.tsx",
+          "src/admin/finance/InventoryValuationView.tsx"
+        ]
+      }
+    },
+    {
+      "id": "api_gateway",
+      "label": "Enterprise API Gateway",
+      "boundary": "b_gateway",
+      "type": "api_gateway",
+      "technology": "Kong / Envoy",
+      "status": "VERIFIED",
+      "delta": "UNCHANGED",
+      "evidenceIds": [
+        "ev_api_gateway"
+      ],
+      "description": "Terminates mTLS, enforces JWT role-based access control (RBAC), and routes procurement traffic.",
+      "details": {
+        "responsibilities": [
+          "Authentication & Authorization",
+          "Rate limiting",
+          "Request routing"
+        ],
+        "apis": [
+          {
+            "method": "POST",
+            "path": "/api/v1/purchase-orders",
+            "desc": "Create new purchase order"
+          },
+          {
+            "method": "GET",
+            "path": "/api/v1/inventory/valuation",
+            "desc": "Retrieve real-time inventory valuation"
+          }
+        ]
+      }
+    },
+    {
+      "id": "purchasing_service",
+      "label": "Purchasing Service",
+      "boundary": "b_services",
+      "type": "service",
+      "technology": "Node.js / Express",
+      "status": "VERIFIED",
+      "delta": "UNCHANGED",
+      "evidenceIds": [
+        "ev_purchasing_service"
+      ],
+      "description": "Manages purchase order lifecycle, vendor agreements, and goods receipts.",
+      "details": {
+        "responsibilities": [
+          "PO validation",
+          "Vendor catalog lookup",
+          "Receipt acknowledgment"
+        ],
+        "files": [
+          "src/services/purchasing/PurchaseOrderService.ts"
+        ],
+        "tables": [
+          "purchase_orders",
+          "po_items",
+          "suppliers"
+        ]
+      }
+    },
+    {
+      "id": "supplier_discount_service",
+      "label": "Discount Service",
+      "boundary": "b_services",
+      "type": "service",
+      "technology": "Node.js / TypeScript",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "New service evaluating active contract tiers, tiered volume rebates, and early-payment discounts.",
+      "details": {
+        "responsibilities": [
+          "Evaluate discount tiers",
+          "Calculate retroactive rebates",
+          "Apply volume bracket discounts"
+        ],
+        "files": [
+          "src/services/discounts/SupplierDiscountEngine.ts",
+          "src/services/discounts/TierEvaluationRule.ts"
+        ],
+        "apis": [
+          {
+            "method": "POST",
+            "path": "/internal/discounts/evaluate",
+            "desc": "Calculates applicable discount matrix for a PO item"
+          }
+        ],
+        "tables": [
+          "supplier_discounts",
+          "discount_tiers"
+        ],
+        "tasks": [
+          {
+            "id": "T1",
+            "title": "Implement discount rule matcher",
+            "status": "pending"
+          },
+          {
+            "id": "T2",
+            "title": "Add volume bracket evaluation logic",
+            "status": "pending"
+          }
+        ],
+        "failureModes": [
+          {
+            "failure": "Conflicting discount rules",
+            "impact": "Over-discounting or miscalculation",
+            "mitigation": "Strict priority ordering and validation guardrails"
+          }
+        ]
+      }
+    },
+    {
+      "id": "inventory_valuation_service",
+      "label": "Valuation Service",
+      "boundary": "b_services",
+      "type": "service",
+      "technology": "Node.js / TypeScript",
+      "status": "VERIFIED",
+      "delta": "CHANGED",
+      "evidenceIds": [
+        "ev_inventory_valuation_service"
+      ],
+      "description": "Calculates asset valuation using Weighted Average Cost (WAC) adjusted by applicable supplier discounts.",
+      "details": {
+        "responsibilities": [
+          "Calculate inventory asset value",
+          "Apply supplier discount deductions",
+          "Emit valuation audit records"
+        ],
+        "files": [
+          "src/services/inventory/InventoryValuationService.ts"
+        ],
+        "apis": [
+          {
+            "method": "GET",
+            "path": "/internal/valuation/sku/:skuId",
+            "desc": "Get current valuation for SKU"
+          }
+        ],
+        "tables": [
+          "inventory_batches",
+          "valuation_audit_logs"
+        ],
+        "tasks": [
+          {
+            "id": "T3",
+            "title": "Update WAC calculation to factor supplier discounts",
+            "status": "pending"
+          },
+          {
+            "id": "T4",
+            "title": "Add immutable audit log writing",
+            "status": "pending"
+          }
+        ]
+      }
+    },
+    {
+      "id": "primary_db",
+      "label": "Procurement DB",
+      "boundary": "b_persistence",
+      "type": "database",
+      "technology": "PostgreSQL 16",
+      "status": "VERIFIED",
+      "delta": "CHANGED",
+      "evidenceIds": [
+        "ev_primary_db"
+      ],
+      "description": "Primary relational database storing purchase orders, suppliers, discount rules, and inventory batches.",
+      "details": {
+        "tables": [
+          "purchase_orders",
+          "po_items",
+          "suppliers",
+          "supplier_discounts",
+          "inventory_batches"
+        ]
+      }
+    },
+    {
+      "id": "audit_store",
+      "label": "Audit Log Store",
+      "boundary": "b_persistence",
+      "type": "storage",
+      "technology": "PostgreSQL Partitioned Table",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "Append-only immutable record of all discount applications and valuation changes for SOX compliance.",
+      "details": {
+        "tables": [
+          "valuation_audit_logs"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_portal_gateway",
+      "source": "procurement_portal",
+      "target": "api_gateway",
+      "label": "HTTPS / REST",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true,
+      "packetLabel": "POST /purchase-orders"
+    },
+    {
+      "id": "e_gateway_purchasing",
+      "source": "api_gateway",
+      "target": "purchasing_service",
+      "label": "gRPC CreatePO",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true
+    },
+    {
+      "id": "e_purchasing_discount",
+      "source": "purchasing_service",
+      "target": "supplier_discount_service",
+      "label": "gRPC EvaluateDiscounts",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true,
+      "packetLabel": "DiscountQuery"
+    },
+    {
+      "id": "e_purchasing_db",
+      "source": "purchasing_service",
+      "target": "primary_db",
+      "label": "SQL INSERT PO",
+      "communication": "sync",
+      "pathType": "write",
+      "animated": true
+    },
+    {
+      "id": "e_valuation_discount",
+      "source": "inventory_valuation_service",
+      "target": "supplier_discount_service",
+      "label": "gRPC GetActiveDiscounts",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true
+    },
+    {
+      "id": "e_valuation_db",
+      "source": "inventory_valuation_service",
+      "target": "primary_db",
+      "label": "SQL Read Batches",
+      "communication": "sync",
+      "pathType": "read",
+      "animated": true
+    },
+    {
+      "id": "e_valuation_audit",
+      "source": "inventory_valuation_service",
+      "target": "audit_store",
+      "label": "SQL Append Audit",
+      "communication": "sync",
+      "pathType": "write",
+      "animated": true,
+      "packetLabel": "AuditLogRecord"
+    }
+  ],
+  "views": {
+    "sequence": {
+      "title": "Supplier Discount Valuation Lifecycle",
+      "steps": [
+        {
+          "step": 1,
+          "from": "procurement_portal",
+          "to": "api_gateway",
+          "label": "Submit Purchase Order with Supplier & Items",
+          "sync": true
+        },
+        {
+          "step": 2,
+          "from": "api_gateway",
+          "to": "purchasing_service",
+          "label": "Forward validated PO payload",
+          "sync": true
+        },
+        {
+          "step": 3,
+          "from": "purchasing_service",
+          "to": "supplier_discount_service",
+          "label": "Evaluate applicable discounts for supplier & volume brackets",
+          "sync": true
+        },
+        {
+          "step": 4,
+          "from": "supplier_discount_service",
+          "to": "purchasing_service",
+          "label": "Return calculated discount matrix (12% volume rebate applied)",
+          "sync": true
+        },
+        {
+          "step": 5,
+          "from": "purchasing_service",
+          "to": "primary_db",
+          "label": "Persist Purchase Order and calculated line-item net prices",
+          "sync": true
+        },
+        {
+          "step": 6,
+          "from": "inventory_valuation_service",
+          "to": "supplier_discount_service",
+          "label": "Fetch active supplier rebate schedules for SKU batches",
+          "sync": true
+        },
+        {
+          "step": 7,
+          "from": "inventory_valuation_service",
+          "to": "audit_store",
+          "label": "Append immutable valuation audit record with applied discount formulas",
+          "sync": true
+        }
+      ]
+    },
+    "database_er": {
+      "tables": [
+        {
+          "name": "suppliers",
+          "delta": "EXISTING",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "pk": true
+            },
+            {
+              "name": "name",
+              "type": "varchar(255)"
+            },
+            {
+              "name": "annual_tier",
+              "type": "varchar(50)"
+            },
+            {
+              "name": "created_at",
+              "type": "timestamptz"
+            }
+          ]
+        },
+        {
+          "name": "supplier_discounts",
+          "delta": "ADDED",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "pk": true
+            },
+            {
+              "name": "supplier_id",
+              "type": "uuid",
+              "fk": "suppliers.id"
+            },
+            {
+              "name": "discount_type",
+              "type": "varchar(50)"
+            },
+            {
+              "name": "threshold_amount",
+              "type": "numeric(12,2)"
+            },
+            {
+              "name": "percentage_rate",
+              "type": "numeric(5,2)"
+            },
+            {
+              "name": "valid_from",
+              "type": "date"
+            },
+            {
+              "name": "valid_to",
+              "type": "date"
+            }
+          ]
+        },
+        {
+          "name": "purchase_orders",
+          "delta": "EXISTING",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "pk": true
+            },
+            {
+              "name": "supplier_id",
+              "type": "uuid",
+              "fk": "suppliers.id"
+            },
+            {
+              "name": "total_gross",
+              "type": "numeric(12,2)"
+            },
+            {
+              "name": "total_discount",
+              "type": "numeric(12,2)"
+            },
+            {
+              "name": "total_net",
+              "type": "numeric(12,2)"
+            },
+            {
+              "name": "status",
+              "type": "varchar(50)"
+            }
+          ]
+        },
+        {
+          "name": "valuation_audit_logs",
+          "delta": "ADDED",
+          "columns": [
+            {
+              "name": "id",
+              "type": "uuid",
+              "pk": true
+            },
+            {
+              "name": "batch_id",
+              "type": "uuid"
+            },
+            {
+              "name": "sku_id",
+              "type": "uuid"
+            },
+            {
+              "name": "gross_valuation",
+              "type": "numeric(14,4)"
+            },
+            {
+              "name": "discount_applied",
+              "type": "numeric(14,4)"
+            },
+            {
+              "name": "net_valuation",
+              "type": "numeric(14,4)"
+            },
+            {
+              "name": "formula_snapshot",
+              "type": "jsonb"
+            },
+            {
+              "name": "created_at",
+              "type": "timestamptz"
+            }
+          ]
+        }
+      ],
+      "relations": [
+        {
+          "from": "suppliers",
+          "to": "supplier_discounts",
+          "type": "1:N",
+          "label": "offers"
+        },
+        {
+          "from": "suppliers",
+          "to": "purchase_orders",
+          "type": "1:N",
+          "label": "fulfills"
+        }
+      ]
+    },
+    "implementation_plan": {
+      "phases": [
+        {
+          "name": "Phase 1: Database Migration & Schema Setup",
+          "tasks": [
+            {
+              "id": "P1-T1",
+              "title": "Create supplier_discounts table with date bounds and check constraints",
+              "componentId": "primary_db",
+              "complexity": "low",
+              "files": [
+                "src/db/migrations/20260917_create_supplier_discounts.sql"
+              ]
+            },
+            {
+              "id": "P1-T2",
+              "title": "Create partitioned valuation_audit_logs table with JSONB formula snapshot",
+              "componentId": "audit_store",
+              "complexity": "medium",
+              "files": [
+                "src/db/migrations/20260917_create_valuation_audit_logs.sql"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 2: Supplier Discount Service Implementation",
+          "tasks": [
+            {
+              "id": "P2-T1",
+              "title": "Implement SupplierDiscountEngine evaluating volume brackets and tiered rates",
+              "componentId": "supplier_discount_service",
+              "complexity": "high",
+              "files": [
+                "src/services/discounts/SupplierDiscountEngine.ts"
+              ],
+              "risks": [
+                "Edge cases where multiple volume thresholds overlap"
+              ]
+            },
+            {
+              "id": "P2-T2",
+              "title": "Add gRPC server endpoints for EvaluateDiscounts interface",
+              "componentId": "supplier_discount_service",
+              "complexity": "medium",
+              "files": [
+                "src/services/discounts/DiscountRpcServer.ts"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 3: Inventory Valuation Integration & Audit Logging",
+          "tasks": [
+            {
+              "id": "P3-T1",
+              "title": "Refactor InventoryValuationService to factor supplier discounts into WAC calculation",
+              "componentId": "inventory_valuation_service",
+              "complexity": "high",
+              "files": [
+                "src/services/inventory/InventoryValuationService.ts"
+              ]
+            },
+            {
+              "id": "P3-T2",
+              "title": "Implement synchronous write to valuation_audit_logs within transaction",
+              "componentId": "inventory_valuation_service",
+              "complexity": "medium",
+              "files": [
+                "src/services/inventory/AuditLogger.ts"
+              ]
+            },
+            {
+              "id": "P3-T3",
+              "title": "Update Procurement Portal to display discount breakdown in PO details",
+              "componentId": "procurement_portal",
+              "complexity": "medium",
+              "files": [
+                "src/admin/procurement/PODetailsPage.tsx"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "evidence": [
+    {
+      "id": "ev_procurement_portal",
+      "nodeId": "procurement_portal",
+      "type": "file",
+      "locator": "src/admin/procurement/PODetailsPage.tsx",
+      "verification": "compatibility",
+      "description": "Procurement portal purchase order admin interface"
+    },
+    {
+      "id": "ev_api_gateway",
+      "nodeId": "api_gateway",
+      "type": "api",
+      "locator": "POST /api/v1/purchase-orders",
+      "verification": "compatibility",
+      "description": "API Gateway purchase order ingestion endpoint"
+    },
+    {
+      "id": "ev_purchasing_service",
+      "nodeId": "purchasing_service",
+      "type": "file",
+      "locator": "src/services/purchasing/PurchaseOrderService.ts",
+      "verification": "compatibility",
+      "description": "Purchase order service business logic implementation"
+    },
+    {
+      "id": "ev_inventory_valuation_service",
+      "nodeId": "inventory_valuation_service",
+      "type": "file",
+      "locator": "src/services/inventory/InventoryValuationService.ts",
+      "verification": "compatibility",
+      "description": "Inventory valuation service calculation engine"
+    },
+    {
+      "id": "ev_primary_db",
+      "nodeId": "primary_db",
+      "type": "table",
+      "locator": "purchase_orders",
+      "verification": "compatibility",
+      "description": "Primary relational table for purchase orders"
+    }
+  ],
+  "policies": [
+    {
+      "id": "pol_portal_uses_gateway",
+      "kind": "required_dependency",
+      "from": "procurement_portal",
+      "to": "api_gateway",
+      "description": "Procurement portal requests must route through the API gateway tier"
+    },
+    {
+      "id": "pol_no_client_to_db",
+      "kind": "forbidden_dependency",
+      "from": "procurement_portal",
+      "to": "primary_db",
+      "description": "Client applications are forbidden from directly communicating with persistence layer"
+    },
+    {
+      "id": "pol_acyclic_procurement_graph",
+      "kind": "cycle",
+      "description": "Service dependency topology must remain strictly acyclic"
+    },
+    {
+      "id": "pol_verified_node_evidence",
+      "kind": "required_evidence",
+      "description": "All verified architecture components must provide traceable evidence locators",
+      "status": "VERIFIED"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "scenario_po_discount_valuation",
+      "name": "Purchase Order Creation & Discounted Valuation Lifecycle",
+      "description": "Serial procurement flow with dynamic volume discount lookup and fallback recovery path.",
+      "stages": [
+        {
+          "id": "stage_po_submission",
+          "name": "Submit Purchase Order",
+          "type": "interaction",
+          "source": "procurement_portal",
+          "target": "api_gateway",
+          "from": "procurement_portal",
+          "to": "api_gateway",
+          "edgeId": "e_portal_gateway",
+          "label": "POST /api/v1/purchase-orders",
+          "payload": {
+            "supplierId": "sup-789",
+            "items": [
+              {
+                "sku": "SKU-4401",
+                "quantity": 500,
+                "unitPrice": 45
+              }
+            ]
+          },
+          "status": "success",
+          "metadata": {
+            "auth": "Bearer JWT",
+            "clientVersion": "2.4.0"
+          }
+        },
+        {
+          "id": "stage_gateway_forward",
+          "name": "Route Validated Request",
+          "type": "interaction",
+          "source": "api_gateway",
+          "target": "purchasing_service",
+          "from": "api_gateway",
+          "to": "purchasing_service",
+          "edgeId": "e_gateway_purchasing",
+          "label": "gRPC CreatePO",
+          "payload": {
+            "poId": "po-9910",
+            "supplierId": "sup-789",
+            "grossTotal": 22500
+          },
+          "status": "success",
+          "metadata": {
+            "mtls": true,
+            "traceId": "c4b9-4401"
+          }
+        },
+        {
+          "id": "stage_discount_evaluation",
+          "name": "Evaluate Supplier Discounts",
+          "type": "interaction",
+          "source": "purchasing_service",
+          "target": "supplier_discount_service",
+          "from": "purchasing_service",
+          "to": "supplier_discount_service",
+          "edgeId": "e_purchasing_discount",
+          "label": "gRPC EvaluateDiscounts",
+          "payload": {
+            "supplierId": "sup-789",
+            "volume": 500,
+            "bracketYear": 2026
+          },
+          "status": "success",
+          "metadata": {
+            "timeoutMs": 1500
+          }
+        },
+        {
+          "id": "stage_discount_branching",
+          "name": "Discount Evaluation Result & Valuation",
+          "type": "branch",
+          "description": "Branching based on supplier discount calculation availability",
+          "condition": "Supplier discount service responds within timeout",
+          "branches": [
+            {
+              "name": "Volume Rebate Applied",
+              "condition": "Active tier found and valid rate returned",
+              "status": "success",
+              "stages": [
+                {
+                  "id": "stage_persist_discounted_po",
+                  "name": "Persist Discounted PO",
+                  "type": "interaction",
+                  "source": "purchasing_service",
+                  "target": "primary_db",
+                  "from": "purchasing_service",
+                  "to": "primary_db",
+                  "edgeId": "e_purchasing_db",
+                  "label": "SQL INSERT purchase_orders",
+                  "payload": {
+                    "poId": "po-9910",
+                    "totalDiscount": 2700,
+                    "netTotal": 19800
+                  },
+                  "status": "success"
+                },
+                {
+                  "id": "stage_read_batches",
+                  "name": "Read Batch Costs",
+                  "type": "interaction",
+                  "source": "inventory_valuation_service",
+                  "target": "primary_db",
+                  "from": "inventory_valuation_service",
+                  "to": "primary_db",
+                  "edgeId": "e_valuation_db",
+                  "label": "SQL Read Batches",
+                  "payload": {
+                    "sku": "SKU-4401"
+                  },
+                  "status": "success"
+                },
+                {
+                  "id": "stage_fetch_schedules",
+                  "name": "Fetch Rebate Schedules",
+                  "type": "interaction",
+                  "source": "inventory_valuation_service",
+                  "target": "supplier_discount_service",
+                  "from": "inventory_valuation_service",
+                  "to": "supplier_discount_service",
+                  "edgeId": "e_valuation_discount",
+                  "label": "gRPC GetActiveDiscounts",
+                  "payload": {
+                    "sku": "SKU-4401"
+                  },
+                  "status": "success"
+                },
+                {
+                  "id": "stage_append_valuation_audit",
+                  "name": "Append Valuation Audit Entry",
+                  "type": "interaction",
+                  "source": "inventory_valuation_service",
+                  "target": "audit_store",
+                  "from": "inventory_valuation_service",
+                  "to": "audit_store",
+                  "edgeId": "e_valuation_audit",
+                  "label": "SQL Append Audit",
+                  "payload": {
+                    "sku": "SKU-4401",
+                    "netValuation": 19800,
+                    "formulaSnapshot": {
+                      "rebateRate": 0.12
+                    }
+                  },
+                  "status": "success"
+                }
+              ]
+            },
+            {
+              "name": "Discount Service Timeout Fallback",
+              "condition": "Supplier discount service unavailable or timed out",
+              "status": "recovery",
+              "recovery": "Persist baseline PO at standard price and flag for retrospective valuation reconcile",
+              "stages": [
+                {
+                  "id": "stage_fallback_persist_po",
+                  "name": "Persist Standard PO with Review Flag",
+                  "type": "interaction",
+                  "source": "purchasing_service",
+                  "target": "primary_db",
+                  "from": "purchasing_service",
+                  "to": "primary_db",
+                  "edgeId": "e_purchasing_db",
+                  "label": "SQL INSERT purchase_orders (standard)",
+                  "payload": {
+                    "poId": "po-9910",
+                    "totalDiscount": 0,
+                    "netTotal": 22500,
+                    "status": "PENDING_REBATE_SYNC"
+                  },
+                  "status": "recovery",
+                  "metadata": {
+                    "fallbackApplied": true
+                  }
+                },
+                {
+                  "id": "stage_fallback_audit_log",
+                  "name": "Log Unadjusted Valuation Audit",
+                  "type": "interaction",
+                  "source": "inventory_valuation_service",
+                  "target": "audit_store",
+                  "from": "inventory_valuation_service",
+                  "to": "audit_store",
+                  "edgeId": "e_valuation_audit",
+                  "label": "SQL Append Audit (Warning)",
+                  "payload": {
+                    "sku": "SKU-4401",
+                    "netValuation": 22500,
+                    "warning": "REBATE_ENGINE_TIMEOUT"
+                  },
+                  "status": "recovery"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

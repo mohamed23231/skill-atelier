@@ -1,0 +1,866 @@
+{
+  "schemaVersion": 2,
+  "meta": {
+    "title": "Zero-Downtime Partitioning & Migration of Monolithic Orders DB",
+    "description": "Phased zero-downtime database migration from a monolithic 120M-row orders table to declarative monthly range-partitioned tables using dual-writes, Debezium CDC backfill, and shadow read verification.",
+    "status": "PROPOSED",
+    "grounding": "illustrative",
+    "author": "Principal Database Reliability Architect",
+    "date": "2026-09-17",
+    "assumptions": [
+      "Peak write throughput is ~1,500 transactions per second (TPS)",
+      "Target PostgreSQL 16 supports declarative range partitioning with runtime partition pruning",
+      "Network latency between proxy, legacy DB, and new DB cluster is under 1.5ms"
+    ],
+    "decisions": [
+      {
+        "id": "ADR-101",
+        "title": "Use Application-Level Dual Writing via Migration Proxy Layer",
+        "status": "ACCEPTED",
+        "context": "Need immediate write consistency on newly created orders without relying solely on CDC replication lag.",
+        "decision": "Implement dual-write routing in a lightweight Migration Proxy Layer: Primary write to Legacy DB (synchronous), asynchronous secondary write to Partitioned DB with fallback buffer.",
+        "consequences": "Slight increase in API write latency (~3-5ms); absolute guarantee of real-time dual writes during migration window."
+      },
+      {
+        "id": "ADR-102",
+        "title": "Debezium CDC for Historical Backfill and In-Flight Catchup",
+        "status": "ACCEPTED",
+        "context": "Backfilling 120M rows via batch SQL queries degrades primary DB IOPS and causes lock contention.",
+        "decision": "Use Debezium reading PostgreSQL WAL logs published to Kafka, throttled to 2,500 rows/sec during off-peak hours.",
+        "consequences": "Zero table locking on active rows; requires Kafka cluster resources."
+      },
+      {
+        "id": "ADR-103",
+        "title": "Shadow Read Verification Gate at 100% Volume for 7 Days",
+        "status": "ACCEPTED",
+        "context": "Cutover cannot occur until we have absolute mathematical certainty of zero row discrepancy between legacy and new partitions.",
+        "decision": "Route 100% of read queries to both stores in shadow mode; compare responses asynchronously; gate cutover on zero checksum discrepancies for 7 consecutive days.",
+        "consequences": "Doubled read IOPS during verification phase; complete risk elimination."
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "id": "b_client",
+      "label": "Client Traffic & Gateway",
+      "type": "system",
+      "order": 1
+    },
+    {
+      "id": "b_migration_core",
+      "label": "Application & Migration Proxy Layer",
+      "type": "container",
+      "order": 2
+    },
+    {
+      "id": "b_cdc_pipeline",
+      "label": "CDC Replication & Backfill Pipeline",
+      "type": "container",
+      "order": 3
+    },
+    {
+      "id": "b_storage_tier",
+      "label": "Database Storage Engines",
+      "type": "container",
+      "order": 4
+    }
+  ],
+  "nodes": [
+    {
+      "id": "client_traffic",
+      "label": "Web & Mobile Clients",
+      "boundary": "b_client",
+      "type": "actor",
+      "technology": "Web SPA & Mobile Apps",
+      "status": "INFERRED",
+      "delta": "UNCHANGED",
+      "description": "Incoming customer order placements, tracking inquiries, and checkout traffic.",
+      "details": {
+        "responsibilities": [
+          "Place orders",
+          "Fetch order history"
+        ]
+      }
+    },
+    {
+      "id": "orders_api_service",
+      "label": "Orders API Service",
+      "boundary": "b_migration_core",
+      "type": "service",
+      "technology": "Node.js / TypeScript",
+      "status": "VERIFIED",
+      "delta": "CHANGED",
+      "evidenceIds": [
+        "ev_orders_api_service"
+      ],
+      "description": "Domain service handling order operations; modified to use the Migration Data Access Layer.",
+      "details": {
+        "responsibilities": [
+          "Validate order payloads",
+          "Calculate totals",
+          "Execute persistence calls"
+        ],
+        "files": [
+          "src/services/orders/OrderService.ts",
+          "src/services/orders/OrderRepository.ts"
+        ]
+      }
+    },
+    {
+      "id": "migration_proxy",
+      "label": "Migration Proxy",
+      "boundary": "b_migration_core",
+      "type": "service",
+      "technology": "TypeScript / pg-pool",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "Dynamic routing layer controlling dual-writes, shadow reads, and feature flag cutover.",
+      "details": {
+        "responsibilities": [
+          "Dual-write dispatching",
+          "Shadow read fan-out",
+          "Discrepancy metric reporting"
+        ],
+        "files": [
+          "src/db/migration-proxy/MigrationDataSource.ts",
+          "src/db/migration-proxy/ShadowReadComparator.ts"
+        ],
+        "tasks": [
+          {
+            "id": "T1",
+            "title": "Implement dual-write async queue",
+            "status": "pending"
+          },
+          {
+            "id": "T2",
+            "title": "Implement shadow read hashing and metrics",
+            "status": "pending"
+          }
+        ],
+        "failureModes": [
+          {
+            "failure": "Target DB write failure",
+            "impact": "Secondary write lost",
+            "mitigation": "DLQ buffer and idempotent replay"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cdc_debezium_worker",
+      "label": "Debezium CDC Connector",
+      "boundary": "b_cdc_pipeline",
+      "type": "worker",
+      "technology": "Debezium / Kafka Connect",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "Streams PostgreSQL Write-Ahead Log (WAL) logical replication records into Kafka.",
+      "details": {
+        "responsibilities": [
+          "Stream WAL changes",
+          "Snapshot historical partitions without locking"
+        ]
+      },
+      "order": 1
+    },
+    {
+      "id": "kafka_buffer",
+      "label": "Kafka Backfill Topic",
+      "boundary": "b_cdc_pipeline",
+      "type": "topic",
+      "technology": "Apache Kafka 3.6",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "High-throughput log buffer decoupling CDC extraction from target DB ingestion.",
+      "details": {
+        "responsibilities": [
+          "Buffer backfill events",
+          "Guarantee partition ordering by order_id"
+        ]
+      },
+      "order": 2
+    },
+    {
+      "id": "backfill_consumer",
+      "label": "Backfill Consumer",
+      "boundary": "b_cdc_pipeline",
+      "type": "worker",
+      "technology": "Go / Sarama",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "Batches Kafka events and bulk inserts into appropriate monthly range partitions.",
+      "details": {
+        "responsibilities": [
+          "Batch insert historical records",
+          "Handle ON CONFLICT DO UPDATE upserts"
+        ]
+      },
+      "order": 3
+    },
+    {
+      "id": "legacy_orders_db",
+      "label": "Legacy Orders DB",
+      "boundary": "b_storage_tier",
+      "type": "database",
+      "technology": "PostgreSQL 14 (Monolithic)",
+      "status": "VERIFIED",
+      "delta": "REMOVED",
+      "evidenceIds": [
+        "ev_legacy_orders_db"
+      ],
+      "description": "Current monolithic unpartitioned table with 120M rows, suffering high autovacuum bloat.",
+      "details": {
+        "tables": [
+          "orders_legacy"
+        ]
+      }
+    },
+    {
+      "id": "partitioned_orders_db",
+      "label": "Partitioned Orders DB",
+      "boundary": "b_storage_tier",
+      "type": "database",
+      "technology": "PostgreSQL 16 (partitioned)",
+      "status": "INFERRED",
+      "delta": "ADDED",
+      "description": "New database partitioned by created_at timestamp into monthly partitions with BRIN indexing.",
+      "details": {
+        "tables": [
+          "orders_partitioned",
+          "orders_2026_08",
+          "orders_2026_09",
+          "orders_2026_10"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_client_orders",
+      "source": "client_traffic",
+      "target": "orders_api_service",
+      "label": "HTTPS REST / Orders",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true,
+      "packetLabel": "POST /orders"
+    },
+    {
+      "id": "e_service_proxy",
+      "source": "orders_api_service",
+      "target": "migration_proxy",
+      "label": "DAO Call",
+      "communication": "sync",
+      "pathType": "request",
+      "animated": true
+    },
+    {
+      "id": "e_proxy_legacy",
+      "source": "migration_proxy",
+      "target": "legacy_orders_db",
+      "label": "Primary Sync Write",
+      "communication": "sync",
+      "pathType": "write",
+      "animated": true,
+      "packetLabel": "SQL Primary"
+    },
+    {
+      "id": "e_proxy_target",
+      "source": "migration_proxy",
+      "target": "partitioned_orders_db",
+      "label": "Dual Async Write",
+      "communication": "async",
+      "pathType": "write",
+      "animated": true,
+      "packetLabel": "SQL Shadow"
+    },
+    {
+      "id": "e_legacy_cdc",
+      "source": "legacy_orders_db",
+      "target": "cdc_debezium_worker",
+      "label": "WAL Replication Slot",
+      "communication": "async",
+      "pathType": "replication",
+      "animated": true
+    },
+    {
+      "id": "e_cdc_kafka",
+      "source": "cdc_debezium_worker",
+      "target": "kafka_buffer",
+      "label": "Produce CDC Events",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true,
+      "packetLabel": "order.cdc.event"
+    },
+    {
+      "id": "e_kafka_consumer",
+      "source": "kafka_buffer",
+      "target": "backfill_consumer",
+      "label": "Consume Batches",
+      "communication": "async",
+      "pathType": "event",
+      "animated": true
+    },
+    {
+      "id": "e_consumer_partitioned",
+      "source": "backfill_consumer",
+      "target": "partitioned_orders_db",
+      "label": "Bulk Upsert Partition",
+      "communication": "async",
+      "pathType": "write",
+      "animated": true
+    }
+  ],
+  "views": {
+    "sequence": {
+      "title": "Dual-Write and Shadow Read Verification Cycle",
+      "steps": [
+        {
+          "step": 1,
+          "from": "client_traffic",
+          "to": "orders_api_service",
+          "label": "Client submits new Order #847291",
+          "sync": true
+        },
+        {
+          "step": 2,
+          "from": "orders_api_service",
+          "to": "migration_proxy",
+          "label": "Invoke MigrationDataSource.saveOrder(order)",
+          "sync": true
+        },
+        {
+          "step": 3,
+          "from": "migration_proxy",
+          "to": "legacy_orders_db",
+          "label": "Execute primary synchronous INSERT into orders_legacy",
+          "sync": true
+        },
+        {
+          "step": 4,
+          "from": "legacy_orders_db",
+          "to": "migration_proxy",
+          "label": "Return primary success commit acknowledgment",
+          "sync": true
+        },
+        {
+          "step": 5,
+          "from": "migration_proxy",
+          "to": "partitioned_orders_db",
+          "label": "Execute asynchronous secondary INSERT into orders_partitioned",
+          "sync": false
+        },
+        {
+          "step": 6,
+          "from": "client_traffic",
+          "to": "orders_api_service",
+          "label": "Client reads Order #847291 status",
+          "sync": true
+        },
+        {
+          "step": 7,
+          "from": "migration_proxy",
+          "to": "legacy_orders_db",
+          "label": "Fetch order from legacy DB (served to user)",
+          "sync": true
+        },
+        {
+          "step": 8,
+          "from": "migration_proxy",
+          "to": "partitioned_orders_db",
+          "label": "Shadow read order from partitioned DB and verify checksum match",
+          "sync": false
+        }
+      ]
+    },
+    "database_er": {
+      "tables": [
+        {
+          "name": "orders_legacy",
+          "delta": "REMOVED",
+          "columns": [
+            {
+              "name": "id",
+              "type": "bigint",
+              "pk": true
+            },
+            {
+              "name": "customer_id",
+              "type": "uuid"
+            },
+            {
+              "name": "total_amount",
+              "type": "numeric(10,2)"
+            },
+            {
+              "name": "created_at",
+              "type": "timestamptz"
+            }
+          ]
+        },
+        {
+          "name": "orders_partitioned",
+          "delta": "ADDED",
+          "columns": [
+            {
+              "name": "id",
+              "type": "bigint",
+              "pk": true
+            },
+            {
+              "name": "created_at",
+              "type": "timestamptz",
+              "pk": true
+            },
+            {
+              "name": "customer_id",
+              "type": "uuid"
+            },
+            {
+              "name": "total_amount",
+              "type": "numeric(10,2)"
+            },
+            {
+              "name": "status",
+              "type": "varchar(32)"
+            }
+          ]
+        },
+        {
+          "name": "orders_2026_09",
+          "delta": "ADDED",
+          "columns": [
+            {
+              "name": "RANGE",
+              "type": "['2026-09-01' TO '2026-10-01')"
+            }
+          ]
+        },
+        {
+          "name": "orders_2026_10",
+          "delta": "ADDED",
+          "columns": [
+            {
+              "name": "RANGE",
+              "type": "['2026-10-01' TO '2026-11-01')"
+            }
+          ]
+        }
+      ],
+      "relations": [
+        {
+          "from": "orders_partitioned",
+          "to": "orders_2026_09",
+          "type": "1:1",
+          "label": "partition_for"
+        },
+        {
+          "from": "orders_partitioned",
+          "to": "orders_2026_10",
+          "type": "1:1",
+          "label": "partition_for"
+        }
+      ]
+    },
+    "implementation_plan": {
+      "phases": [
+        {
+          "name": "Phase 1: Target Schema Provisioning & Partitions",
+          "tasks": [
+            {
+              "id": "P1-T1",
+              "title": "Deploy PostgreSQL 16 partitioned orders schema with monthly range partition rules",
+              "componentId": "partitioned_orders_db",
+              "complexity": "medium",
+              "files": [
+                "src/db/migrations/20260917_create_partitioned_orders.sql"
+              ]
+            },
+            {
+              "id": "P1-T2",
+              "title": "Configure BRIN index on created_at and B-Tree index on (customer_id, created_at)",
+              "componentId": "partitioned_orders_db",
+              "complexity": "low",
+              "files": [
+                "src/db/migrations/20260917_create_partition_indexes.sql"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 2: Migration Proxy & Application Dual Writing",
+          "tasks": [
+            {
+              "id": "P2-T1",
+              "title": "Implement MigrationDataSource in OrderRepository with async dual-write dispatch",
+              "componentId": "migration_proxy",
+              "complexity": "high",
+              "files": [
+                "src/db/migration-proxy/MigrationDataSource.ts"
+              ]
+            },
+            {
+              "id": "P2-T2",
+              "title": "Deploy dual-write feature flag to production with 10% canary ramp-up to 100%",
+              "componentId": "orders_api_service",
+              "complexity": "medium",
+              "files": [
+                "src/config/FeatureFlags.ts"
+              ]
+            },
+            {
+              "id": "P2-T3",
+              "title": "Provision backfill topic with 24h retention",
+              "componentId": "kafka_buffer",
+              "complexity": "low",
+              "files": [
+                "infra/kafka/topics/orders-backfill.yaml"
+              ],
+              "risks": [
+                "Under-provisioned partitions throttle the backfill"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 3: CDC Pipeline & Historical Backfill Execution",
+          "tasks": [
+            {
+              "id": "P3-T1",
+              "title": "Deploy Debezium Kafka connector with pgoutput logical replication plugin",
+              "componentId": "cdc_debezium_worker",
+              "complexity": "medium",
+              "files": [
+                "infra/debezium/orders-connector.json"
+              ]
+            },
+            {
+              "id": "P3-T2",
+              "title": "Run backfill consumer to populate 120M historical rows with conflict resolution",
+              "componentId": "backfill_consumer",
+              "complexity": "high",
+              "files": [
+                "src/workers/backfill/ConsumerWorker.ts"
+              ],
+              "risks": [
+                "Replication lag exceeding WAL disk capacity; throttle to 2,500 rows/sec"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 4: Shadow Read Verification & Discrepancy Gating",
+          "tasks": [
+            {
+              "id": "P4-T1",
+              "title": "Enable shadow reading and real-time checksum comparison in Migration Proxy",
+              "componentId": "migration_proxy",
+              "complexity": "medium",
+              "files": [
+                "src/db/migration-proxy/ShadowReadComparator.ts"
+              ]
+            },
+            {
+              "id": "P4-T2",
+              "title": "Run 7-day observation gate requiring 0.000% data mismatch across 50M shadow reads",
+              "componentId": "migration_proxy",
+              "complexity": "low",
+              "files": [
+                "scripts/verify-migration-checksums.py"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Phase 5: Cutover to Partitioned Primary & Legacy Decommissioning",
+          "tasks": [
+            {
+              "id": "P5-T1",
+              "title": "Flip primary read and write traffic to Target Partitioned DB cluster",
+              "componentId": "migration_proxy",
+              "complexity": "high",
+              "files": [
+                "src/config/FeatureFlags.ts"
+              ]
+            },
+            {
+              "id": "P5-T2",
+              "title": "Decommission Debezium connector, remove dual-write proxy code, drop legacy table",
+              "componentId": "legacy_orders_db",
+              "complexity": "low",
+              "files": [
+                "src/db/migration-proxy/cleanup.ts"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "evidence": [
+    {
+      "id": "ev_orders_api_service",
+      "nodeId": "orders_api_service",
+      "type": "file",
+      "locator": "src/services/orders/OrderService.ts",
+      "verification": "compatibility",
+      "description": "Domain service handling order operations and persistence"
+    },
+    {
+      "id": "ev_legacy_orders_db",
+      "nodeId": "legacy_orders_db",
+      "type": "table",
+      "locator": "orders_legacy",
+      "verification": "compatibility",
+      "description": "Monolithic unpartitioned legacy orders table"
+    }
+  ],
+  "policies": [
+    {
+      "id": "pol_service_requires_proxy",
+      "kind": "required_dependency",
+      "from": "orders_api_service",
+      "to": "migration_proxy",
+      "description": "Orders API Service must route persistence operations through Migration Proxy"
+    },
+    {
+      "id": "pol_no_direct_service_to_target",
+      "kind": "forbidden_dependency",
+      "from": "orders_api_service",
+      "to": "partitioned_orders_db",
+      "description": "Orders API Service must not bypass Migration Proxy to access partitioned database directly"
+    },
+    {
+      "id": "pol_migration_topology_acyclic",
+      "kind": "cycle",
+      "description": "Dual-write and CDC replication pipelines must maintain acyclic dependencies"
+    },
+    {
+      "id": "pol_verified_node_evidence",
+      "kind": "required_evidence",
+      "description": "All verified systems in the migration baseline must link to verifiable source or schema evidence",
+      "status": "VERIFIED"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "scenario_dual_write_cutover",
+      "name": "Dual-Write Replication, Backfill & Cutover Verification",
+      "description": "Orchestrates concurrent dual-writing and CDC backfilling with observation gate deciding between primary cutover and rollback.",
+      "stages": [
+        {
+          "id": "stage_client_order_ingress",
+          "name": "Client Order Placement",
+          "type": "interaction",
+          "source": "client_traffic",
+          "target": "orders_api_service",
+          "from": "client_traffic",
+          "to": "orders_api_service",
+          "edgeId": "e_client_orders",
+          "label": "HTTPS POST /orders",
+          "payload": {
+            "customerId": "usr_998",
+            "orderTotal": 149.5,
+            "items": 3
+          },
+          "status": "success"
+        },
+        {
+          "id": "stage_dao_proxy_delegation",
+          "name": "Delegate to Migration Proxy",
+          "type": "interaction",
+          "source": "orders_api_service",
+          "target": "migration_proxy",
+          "from": "orders_api_service",
+          "to": "migration_proxy",
+          "edgeId": "e_service_proxy",
+          "label": "saveOrder(order)",
+          "payload": {
+            "orderId": 847291,
+            "partitionKey": "2026-09"
+          },
+          "status": "success"
+        },
+        {
+          "id": "stage_parallel_migration_activity",
+          "name": "Parallel Dual-Writing & CDC Historical Backfill",
+          "type": "parallel",
+          "description": "Simultaneous real-time dual writes and asynchronous CDC log replication",
+          "stages": [
+            {
+              "id": "stage_write_legacy_primary",
+              "name": "Synchronous Legacy DB Write",
+              "type": "interaction",
+              "source": "migration_proxy",
+              "target": "legacy_orders_db",
+              "from": "migration_proxy",
+              "to": "legacy_orders_db",
+              "edgeId": "e_proxy_legacy",
+              "label": "SQL Primary INSERT",
+              "payload": {
+                "orderId": 847291,
+                "table": "orders_legacy"
+              },
+              "status": "success",
+              "metadata": {
+                "sync": true,
+                "latencyMs": 3.2
+              }
+            },
+            {
+              "id": "stage_write_partitioned_secondary",
+              "name": "Asynchronous Partitioned DB Shadow Write",
+              "type": "interaction",
+              "source": "migration_proxy",
+              "target": "partitioned_orders_db",
+              "from": "migration_proxy",
+              "to": "partitioned_orders_db",
+              "edgeId": "e_proxy_target",
+              "label": "SQL Shadow INSERT",
+              "payload": {
+                "orderId": 847291,
+                "targetPartition": "orders_2026_09"
+              },
+              "status": "success",
+              "metadata": {
+                "sync": false,
+                "retryPolicy": "exponential"
+              }
+            },
+            {
+              "id": "stage_cdc_backfill_subpipeline",
+              "name": "CDC Backfill Pipeline",
+              "type": "interaction",
+              "source": "legacy_orders_db",
+              "target": "cdc_debezium_worker",
+              "from": "legacy_orders_db",
+              "to": "cdc_debezium_worker",
+              "edgeId": "e_legacy_cdc",
+              "label": "WAL Replication Stream",
+              "payload": {
+                "lsn": "0/16B2D40",
+                "batchSize": 2500
+              },
+              "status": "active",
+              "metadata": {
+                "throttledRate": "2500 rows/sec"
+              }
+            },
+            {
+              "id": "stage_cdc_to_kafka",
+              "name": "Publish to Kafka Buffer",
+              "type": "interaction",
+              "source": "cdc_debezium_worker",
+              "target": "kafka_buffer",
+              "from": "cdc_debezium_worker",
+              "to": "kafka_buffer",
+              "edgeId": "e_cdc_kafka",
+              "label": "Produce CDC Events",
+              "payload": {
+                "topic": "orders.backfill",
+                "partition": 4
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_kafka_to_consumer",
+              "name": "Consume Backfill Batches",
+              "type": "interaction",
+              "source": "kafka_buffer",
+              "target": "backfill_consumer",
+              "from": "kafka_buffer",
+              "to": "backfill_consumer",
+              "edgeId": "e_kafka_consumer",
+              "label": "Batch Consumption",
+              "payload": {
+                "consumerGroup": "orders-backfill-grp",
+                "batchCount": 500
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_consumer_bulk_upsert",
+              "name": "Bulk Upsert to Partitioned DB",
+              "type": "interaction",
+              "source": "backfill_consumer",
+              "target": "partitioned_orders_db",
+              "from": "backfill_consumer",
+              "to": "partitioned_orders_db",
+              "edgeId": "e_consumer_partitioned",
+              "label": "Bulk ON CONFLICT Upsert",
+              "payload": {
+                "targetTable": "orders_partitioned",
+                "rowsUpserted": 500
+              },
+              "status": "success"
+            }
+          ]
+        },
+        {
+          "id": "stage_cutover_decision_gate",
+          "name": "Shadow Verification Gate & Cutover Decision",
+          "type": "branch",
+          "description": "Decision gate evaluating 7-day shadow read checksum parity before switching traffic",
+          "condition": "Zero checksum discrepancies across 50M shadow reads over 7 consecutive days",
+          "branches": [
+            {
+              "name": "Proceed with Primary Cutover",
+              "condition": "Discrepancy rate == 0.000% and replication lag < 100ms",
+              "status": "success",
+              "stages": [
+                {
+                  "id": "stage_promote_partitioned_primary",
+                  "name": "Flip Primary Traffic to Partitioned DB",
+                  "type": "interaction",
+                  "source": "migration_proxy",
+                  "target": "partitioned_orders_db",
+                  "from": "migration_proxy",
+                  "to": "partitioned_orders_db",
+                  "edgeId": "e_proxy_target",
+                  "label": "Promote to Primary Target",
+                  "payload": {
+                    "primaryTarget": "partitioned_orders_db",
+                    "routingMode": "100% Partitioned"
+                  },
+                  "status": "success",
+                  "metadata": {
+                    "canaryRamp": "100%"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Rollback and Abort Cutover",
+              "condition": "Data mismatch detected or replication lag exceeds SLA (> 2s)",
+              "status": "recovery",
+              "recovery": "Halt dual writes, disable shadow comparisons, and maintain legacy orders DB as sole write authority",
+              "stages": [
+                {
+                  "id": "stage_rollback_to_legacy",
+                  "name": "Revert to Legacy Primary",
+                  "type": "interaction",
+                  "source": "migration_proxy",
+                  "target": "legacy_orders_db",
+                  "from": "migration_proxy",
+                  "to": "legacy_orders_db",
+                  "edgeId": "e_proxy_legacy",
+                  "label": "Revert Primary Traffic",
+                  "payload": {
+                    "primaryTarget": "legacy_orders_db",
+                    "dualWritesEnabled": false,
+                    "reason": "CHECKSUM_MISMATCH_DETECTED"
+                  },
+                  "status": "recovery",
+                  "metadata": {
+                    "alertLevel": "P1_CRITICAL"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
