@@ -8,6 +8,7 @@ const fixtures = require('./fixtures.js');
 
 const REGION_NAMES = ['topbar', 'navigator', 'canvas', 'inspector'];
 const CAMERA_CONTROL_SELECTORS = ['#btn-zoom-in', '#btn-zoom-out', '#btn-fit', '#btn-reset'];
+const PANEL_BREAKPOINT = 1100;
 const VIEWPORTS = [
   { width: 320, height: 800, mobile: false },
   { width: 768, height: 900, mobile: false },
@@ -563,6 +564,7 @@ const PAGE_HELPERS = [
 function regionsScript() {
   return `(async function () {
     ${PAGE_HELPERS}
+    await __sleep(120);
     var out = { innerWidth: window.innerWidth, innerHeight: window.innerHeight, present: {}, rects: {}, visible: {} };
     ${q(REGION_NAMES)}.forEach(function (name) {
       var el = __region(name);
@@ -833,6 +835,117 @@ function minimapSteps() {
   ];
 }
 
+function desktopInspectorCloseSteps() {
+  return [
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      window.__obs = {};
+      __record('innerWidth', window.innerWidth);
+      __record('initialInspectorOpen', __open('inspector'));
+      __record('initialCanvasWidth', __rect(__region('canvas')).width);
+      __click(__q('[data-action="inspector-toggle"]'));
+      await __sleep(220);
+      __record('inspectorOpenAfterToggle', __open('inspector'));
+      __record('inspectorVisibleAfterToggle', __visible(__region('inspector')));
+      __record('canvasWidthInspectorOpen', __rect(__region('canvas')).width);
+      __record('inspectorRectOpen', __rect(__region('inspector')));
+      __record('zoomControlRectOpen', __rect(__q('#btn-zoom-in')));
+      return __observed();
+    })()`),
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      __click(__q('[data-action="inspector-close"]'));
+      await __sleep(320);
+      var rect = __rect(__region('inspector'));
+      __record('inspectorOpenAfterClose', __open('inspector'));
+      __record('inspectorVisibleAfterClose', __visible(__region('inspector')));
+      __record('inspectorRectAfterClose', rect);
+      __record('inspectorOffscreenAfterClose', !!rect && rect.x >= window.innerWidth - 0.5);
+      __record('canvasWidthInspectorClosed', __rect(__region('canvas')).width);
+      return __observed();
+    })()`),
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      __click(__q('[data-action="inspector-toggle"]'));
+      await __sleep(220);
+      __record('inspectorOpenAfterReopen', __open('inspector'));
+      __record('inspectorVisibleAfterReopen', __visible(__region('inspector')));
+      return __observed();
+    })()`),
+  ];
+}
+
+function tabletNavigatorOverlaySteps() {
+  return [
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      window.__obs = {};
+      __record('innerWidth', window.innerWidth);
+      __record('docScrollWidthInitial', document.documentElement.scrollWidth);
+      __record('navigatorInitialOpen', __open('navigator'));
+      __record('navigatorInitialVisible', __visible(__region('navigator')));
+      __record('canvasWidthInitial', __rect(__region('canvas')).width);
+      __click(__q('[data-action="navigator-toggle"]'));
+      await __sleep(250);
+      __record('navigatorOpenAfterToggle', __open('navigator'));
+      __record('navigatorVisibleAfterToggle', __visible(__region('navigator')));
+      __record('navigatorRectOpen', __rect(__region('navigator')));
+      __record('canvasRectOpen', __rect(__region('canvas')));
+      __record('canvasWidthOpen', __rect(__region('canvas')).width);
+      __record('docScrollWidthOpen', document.documentElement.scrollWidth);
+      return __observed();
+    })()`),
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      __click(__q('[data-action="navigator-close"]'));
+      await __sleep(320);
+      __record('navigatorOpenAfterClose', __open('navigator'));
+      __record('navigatorVisibleAfterClose', __visible(__region('navigator')));
+      __record('navigatorRectAfterClose', __rect(__region('navigator')));
+      __record('canvasRectAfterClose', __rect(__region('canvas')));
+      __record('canvasWidthAfterClose', __rect(__region('canvas')).width);
+      __record('docScrollWidthAfterClose', document.documentElement.scrollWidth);
+      return __observed();
+    })()`),
+  ];
+}
+
+function longNavigatorTextSteps() {
+  return [
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      window.__obs = {};
+      var body = __q('.workbench-panel-body');
+      var evidence = __qa('[data-review-kind="evidence"]');
+      __record('evidenceCount', evidence.length);
+      __record('evidenceTextLength', evidence.length ? evidence[0].textContent.length : 0);
+      __record('innerWidth', window.innerWidth);
+      __record('docScrollWidth', document.documentElement.scrollWidth);
+      __record('bodyScrollWidth', body ? body.scrollWidth : null);
+      __record('bodyClientWidth', body ? body.clientWidth : null);
+      __record('bodyOverflowX', body ? window.getComputedStyle(body).overflowX : null);
+      __record('navigatorRect', __rect(__region('navigator')));
+      return __observed();
+    })()`),
+  ];
+}
+
+function longEvidenceSpec() {
+  const spec = fixtures.clone(fixtures.VERSION_2_SPEC);
+  const longToken = 'z'.repeat(400);
+  spec.nodes[0].label = `API Service ${longToken}`;
+  spec.evidence = [
+    {
+      id: `ev_${longToken}`,
+      type: 'file',
+      locator: { path: `src/${longToken}/${longToken}.ts` },
+      verification: 'compatibility',
+    },
+  ];
+  spec.nodes[0].evidenceIds = [`ev_${longToken}`];
+  return spec;
+}
+
 function rectsOverlap(a, b) {
   return !!(a && b && a.x < b.right - 0.5 && a.right > b.x + 0.5 && a.y < b.bottom - 0.5 && a.bottom > b.y + 0.5);
 }
@@ -847,6 +960,89 @@ function rectChanged(a, b) {
   );
 }
 
+function assertDesktopInspectorClose(raw) {
+  assert.ok(raw, 'no desktop inspector observations returned');
+  assert.strictEqual(raw.initialInspectorOpen, 'false', 'inspector should start closed at 1440px');
+  assert.strictEqual(raw.inspectorOpenAfterToggle, 'true', 'inspector header toggle did not open the inspector');
+  assert.ok(raw.inspectorVisibleAfterToggle, 'inspector is not visible after opening from the header toggle');
+  assert.ok(
+    raw.canvasWidthInspectorOpen < raw.initialCanvasWidth - 1,
+    `docked inspector did not consume canvas layout space (open=${raw.canvasWidthInspectorOpen}, closed=${raw.initialCanvasWidth})`
+  );
+  assert.ok(
+    raw.inspectorRectOpen && raw.inspectorRectOpen.width > 0.5,
+    'inspector has no rendered size while open at 1440px'
+  );
+  if (raw.zoomControlRectOpen) {
+    assert.ok(
+      raw.zoomControlRectOpen.right <= raw.inspectorRectOpen.x + 1,
+      `viewport controls are covered by the open inspector (controls right=${raw.zoomControlRectOpen.right}, inspector left=${raw.inspectorRectOpen.x})`
+    );
+  }
+  assert.strictEqual(raw.inspectorOpenAfterClose, 'false', 'inspector X control did not close the inspector');
+  assert.strictEqual(raw.inspectorVisibleAfterClose, false, 'inspector is still visible after clicking its X control');
+  assert.ok(
+    raw.inspectorOffscreenAfterClose,
+    `inspector drawer was not pushed off-screen after close: ${JSON.stringify(raw.inspectorRectAfterClose)}`
+  );
+  assert.ok(
+    raw.canvasWidthInspectorClosed > raw.canvasWidthInspectorOpen + 1,
+    `canvas usable width did not expand after the inspector closed (open=${raw.canvasWidthInspectorOpen}, closed=${raw.canvasWidthInspectorClosed})`
+  );
+  assert.strictEqual(raw.inspectorOpenAfterReopen, 'true', 'inspector did not reopen from the header toggle');
+  assert.ok(raw.inspectorVisibleAfterReopen, 'inspector is not visible after reopening from the header toggle');
+}
+
+function assertTabletNavigatorOverlay(raw) {
+  assert.ok(raw, 'no tablet navigator observations returned');
+  assert.strictEqual(raw.innerWidth, 900, `Emulation override not applied: innerWidth=${raw.innerWidth}, expected 900`);
+  assert.strictEqual(raw.navigatorInitialOpen, 'false', 'navigator should start closed at 900px');
+  assert.strictEqual(raw.navigatorInitialVisible, false, 'navigator should not be visible at 900px before opening');
+
+  assert.strictEqual(raw.navigatorOpenAfterToggle, 'true', 'navigator header toggle did not open the overlay');
+  assert.ok(raw.navigatorVisibleAfterToggle, 'navigator overlay is not visible after opening');
+  assert.ok(
+    rectsOverlap(raw.navigatorRectOpen, raw.canvasRectOpen),
+    'navigator should overlay the canvas at 900px'
+  );
+  assert.ok(
+    Math.abs(raw.canvasWidthOpen - raw.canvasWidthInitial) <= 1,
+    `overlay navigator permanently shrank the canvas (initial=${raw.canvasWidthInitial}, open=${raw.canvasWidthOpen})`
+  );
+
+  assert.strictEqual(raw.navigatorOpenAfterClose, 'false', 'navigator close control did not dismiss the overlay');
+  assert.strictEqual(raw.navigatorVisibleAfterClose, false, 'navigator overlay is still visible after dismissal');
+  assert.ok(
+    Math.abs(raw.canvasWidthAfterClose - raw.canvasWidthInitial) <= 1,
+    `canvas width changed after overlay dismissal (initial=${raw.canvasWidthInitial}, after=${raw.canvasWidthAfterClose})`
+  );
+  assert.ok(
+    !rectsOverlap(raw.navigatorRectAfterClose, raw.canvasRectAfterClose),
+    'dismissed navigator overlay still overlaps the canvas'
+  );
+  assert.ok(
+    raw.docScrollWidthInitial <= raw.innerWidth + 1 && raw.docScrollWidthOpen <= raw.innerWidth + 1 &&
+      raw.docScrollWidthAfterClose <= raw.innerWidth + 1,
+    `navigator caused horizontal page overflow (initial=${raw.docScrollWidthInitial}, open=${raw.docScrollWidthOpen}, after=${raw.docScrollWidthAfterClose}, viewport=${raw.innerWidth})`
+  );
+}
+
+function assertLongNavigatorText(raw) {
+  assert.ok(raw, 'no long navigator text observations returned');
+  assert.ok(raw.evidenceCount >= 1, 'long evidence record was not rendered in the navigator');
+  assert.ok(raw.evidenceTextLength > 200, `evidence text was truncated too early (length=${raw.evidenceTextLength})`);
+  assert.ok(raw.navigatorRect && raw.navigatorRect.width > 0.5, 'navigator has no rendered size');
+  assert.ok(
+    raw.docScrollWidth <= raw.innerWidth + 1,
+    `long navigator text overflowed the page horizontally (scrollWidth=${raw.docScrollWidth}, viewport=${raw.innerWidth})`
+  );
+  assert.ok(
+    raw.bodyScrollWidth <= raw.bodyClientWidth + 1,
+    `navigator body is horizontally scrollable (scrollWidth=${raw.bodyScrollWidth}, clientWidth=${raw.bodyClientWidth})`
+  );
+  assert.strictEqual(raw.bodyOverflowX, 'hidden', `navigator body overflow-x should be hidden, got ${raw.bodyOverflowX}`);
+}
+
 function assertRegionLayout(raw, width) {
   assert.ok(raw, `no region observations returned at ${width}px`);
 
@@ -856,13 +1052,12 @@ function assertRegionLayout(raw, width) {
 
   assert.strictEqual(raw.innerWidth, width, `Emulation override not applied: innerWidth=${raw.innerWidth}, expected ${width}`);
 
-  if (width >= 768) {
-    REGION_NAMES.forEach((name) => {
-      assert.ok(raw.visible[name], `[data-region="${name}"] is not visibly rendered at ${width}px`);
-    });
+  assert.ok(raw.visible.topbar, `topbar region not visible at ${width}px`);
+  assert.ok(raw.visible.canvas, `canvas region not visible at ${width}px`);
+  if (width >= PANEL_BREAKPOINT) {
+    assert.ok(raw.visible.navigator, `navigator should be docked open by default at ${width}px`);
+    assert.ok(!raw.visible.inspector, `inspector should be closed by default at ${width}px`);
   } else {
-    assert.ok(raw.visible.topbar, `topbar region not visible at ${width}px`);
-    assert.ok(raw.visible.canvas, `canvas region not visible at ${width}px`);
     assert.ok(!raw.visible.navigator, `navigator region should be collapsed by default at ${width}px`);
     assert.ok(!raw.visible.inspector, `inspector region should be collapsed by default at ${width}px`);
   }
@@ -1057,6 +1252,30 @@ const cases = [
   ],
 
   [
+    'B2b: at 1440 the inspector X closes the docked panel, expands the canvas and reopens from the header toggle',
+    () => {
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps: desktopInspectorCloseSteps() }]);
+      assertDesktopInspectorClose(lastEvalValue(results[0]));
+    },
+  ],
+
+  [
+    'B2b: at 900 the navigator is an overlay, dismisses cleanly and never shrinks or overlaps the canvas',
+    () => {
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 900, height: 900, mobile: false, steps: tabletNavigatorOverlaySteps() }]);
+      assertTabletNavigatorOverlay(lastEvalValue(results[0]));
+    },
+  ],
+
+  [
+    'B2b: long navigator outline/evidence text wraps without horizontal page or panel scrolling',
+    () => {
+      const results = runPhases(longEvidenceSpec(), [{ width: 1440, height: 900, mobile: false, steps: longNavigatorTextSteps() }]);
+      assertLongNavigatorText(lastEvalValue(results[0]));
+    },
+  ],
+
+  [
     'B2a: at 320 the navigator and inspector drawers trap focus, dismiss and restore focus',
     () => {
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 320, height: 800, mobile: false, steps: drawerSteps() }]);
@@ -1089,6 +1308,7 @@ const cases = [
       assertMinimapBehavior(lastEvalValue(results[0]));
     },
   ],
+
 ];
 
 module.exports = { name: 'Rendered DOM Verification', cases };
