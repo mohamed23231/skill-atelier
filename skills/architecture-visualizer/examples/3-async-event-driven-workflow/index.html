@@ -119,13 +119,6 @@
     .badge-status.UNCHANGED,
     .badge-status.CURRENT { color: var(--text-muted); }
 
-    .tabs-wrapper {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      min-width: 0;
-    }
-
     .tabs-section {
       display: flex;
       align-items: center;
@@ -939,8 +932,6 @@
       body:has(.inspector-drawer[data-open="true"]) #canvas-container { width: calc(100% - 320px); }
       body:has(.workbench-navigator[data-open="true"]):has(.inspector-drawer[data-open="true"]) #canvas-container { width: calc(100% - 560px); }
       body:has(.workbench-navigator[data-open="true"]) .filter-bar { left: 256px; }
-      /* Desktop: minimap is 176px wide at left 16px. The legend sits to its right (16 + 176 + 12 = 204px).
-         When navigator is open (240px wide), the canvas and minimap shift, so legend shifts to 444px (204 + 240). */
       .legend-box { left: 204px; }
       body:has(.workbench-navigator[data-open="true"]) .legend-box { left: 444px; }
       body:has(.inspector-drawer[data-open="true"]) .viewport-controls { right: 340px; }
@@ -960,7 +951,7 @@
 
     @media (max-width: 767px) {
       header { overflow: hidden; }
-      .tabs-wrapper, .tabs-section { display: none; }
+      .tabs-section { display: none; }
       .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme) { display: none; }
       .filter-bar { top: 64px; left: 8px; right: 8px; overflow-x: auto; }
       .search-input { min-width: 140px; width: 140px; }
@@ -990,17 +981,15 @@
     </div>
 
     <!-- View Mode Tabs -->
-    <div class="tabs-wrapper">
-      <nav class="tabs-section" role="tablist" aria-label="Architecture views" data-minimized="false">
-        <button class="tab-btn active" role="tab" aria-selected="true" data-view="architecture" aria-label="Architecture" title="Architecture">🏛️ Architecture</button>
-        <button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After">🔄 Delta</button>
-        <button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow">🌊 Data Flow</button>
-        <button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow">🎬 Sequence</button>
-        <button class="tab-btn" role="tab" aria-selected="false" data-view="database_er" aria-label="Database ER" title="Database ER">🗄️ Data Model</button>
-        <button class="tab-btn" role="tab" aria-selected="false" data-view="implementation_plan" aria-label="Implementation Plan" title="Implementation Plan">📋 Plan</button>
-      </nav>
+    <nav class="tabs-section" role="tablist" data-minimized="false">
+      <button class="tab-btn active" role="tab" aria-selected="true" data-view="architecture" aria-label="Architecture" title="Architecture">🏛️ Architecture</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After">🔄 Delta</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow">🌊 Data Flow</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow">🎬 Sequence</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="database_er" aria-label="Database ER" title="Database ER">🗄️ Data Model</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="implementation_plan" aria-label="Implementation Plan" title="Implementation Plan">📋 Plan</button>
       <button class="btn-icon tabs-min-toggle" data-action="tabs-minimize" aria-pressed="false" aria-label="Minimize view tabs" title="Minimize view tabs">«</button>
-    </div>
+    </nav>
 
     <!-- Header Actions -->
     <div class="header-actions">
@@ -1125,7 +1114,7 @@
   </div>
 
 <button class="workbench-backdrop" data-action="drawer-backdrop" aria-label="Close open panel"></button>
-<aside class="workbench-navigator" data-region="navigator" data-open="false" role="dialog" aria-label="Architecture navigator" aria-modal="false" aria-hidden="true" inert>
+<aside class="workbench-navigator" data-region="navigator" data-open="false" aria-label="Architecture navigator" aria-modal="false">
   <div class="workbench-panel-header"><strong>Navigator</strong><button class="btn-icon workbench-close" data-action="navigator-close" aria-label="Close navigator">✕</button></div>
   <div class="workbench-panel-body">
     <section><h2>Model outline</h2><div data-navigator-section="outline">Select a component to inspect it.</div></section>
@@ -1166,7 +1155,7 @@
   </div>
 
   <!-- Side Inspector Drawer -->
-  <aside id="inspector" class="inspector-drawer" data-region="inspector" data-open="false" data-inspector-kind="node" role="dialog" aria-label="Inspector" aria-modal="false" aria-hidden="true" inert>
+  <aside id="inspector" class="inspector-drawer" data-region="inspector" data-open="false" data-inspector-kind="node" aria-label="Inspector" aria-modal="false">
     <div class="inspector-header">
       <div>
         <h2 id="ins-title" style="font-size: 15px; font-weight: 700;">Component Details</h2>
@@ -6336,12 +6325,8 @@
     function refreshViewportForPanelChange() {
       window.clearTimeout(panelReflowTimer);
       panelReflowTimer = window.setTimeout(() => {
-        if (!state.userMovedView) {
-          fitToScreen();
-        } else {
-          updateMinimapViewport();
-        }
-      }, 250);
+        updateMinimapViewport();
+      }, 220);
     }
 
     function drawerTabbables(region) {
@@ -6352,14 +6337,6 @@
       });
     }
 
-    function applyDrawerAccessibility(region, open, overlay) {
-      if (!region) return;
-      region.setAttribute('data-open', open ? 'true' : 'false');
-      region.setAttribute('aria-modal', overlay && open ? 'true' : 'false');
-      region.setAttribute('aria-hidden', open ? 'false' : 'true');
-      region.inert = !open;
-    }
-
     function setDrawerOpen(kind, open, opener) {
       const region = document.querySelector(`[data-region="${kind}"]`);
       if (!region) return;
@@ -6368,11 +6345,12 @@
       if (open && overlay) {
         const otherKind = kind === 'navigator' ? 'inspector' : 'navigator';
         const other = document.querySelector(`[data-region="${otherKind}"]`);
-        if (other) applyDrawerAccessibility(other, false, overlay);
+        if (other) other.setAttribute('data-open', 'false');
         activeDrawer = kind;
         drawerReturnFocus = opener || document.activeElement;
       }
-      applyDrawerAccessibility(region, open, overlay);
+      region.setAttribute('data-open', open ? 'true' : 'false');
+      region.setAttribute('aria-modal', overlay && open ? 'true' : 'false');
       if (open && overlay) {
         window.requestAnimationFrame(() => drawerTabbables(region)[0]?.focus());
       }
@@ -6392,13 +6370,7 @@
     }
 
     function closeActiveDrawer() {
-      ['navigator', 'inspector'].forEach(kind => {
-        const el = document.querySelector(`[data-region="${kind}"]`);
-        if (el && el.getAttribute('data-open') === 'true') {
-          setDrawerOpen(kind, false);
-        }
-      });
-      activeDrawer = null;
+      if (activeDrawer) setDrawerOpen(activeDrawer, false);
     }
 
     function trapDrawerFocus(event) {
@@ -6977,12 +6949,14 @@
       const overlay = isOverlayPanels();
       const navigator = document.querySelector('[data-region="navigator"]');
       const inspectorRegion = document.querySelector('[data-region="inspector"]');
+      navigator.setAttribute('aria-modal', overlay ? 'true' : 'false');
+      inspectorRegion.setAttribute('aria-modal', overlay && inspectorRegion.getAttribute('data-open') === 'true' ? 'true' : 'false');
       if (!force && overlay === lastOverlayMode) return;
       lastOverlayMode = overlay;
       activeDrawer = null;
       drawerReturnFocus = null;
-      applyDrawerAccessibility(navigator, !overlay, overlay);
-      applyDrawerAccessibility(inspectorRegion, false, overlay);
+      navigator.setAttribute('data-open', overlay ? 'false' : 'true');
+      inspectorRegion.setAttribute('data-open', 'false');
     }
 
     // Initialize application
@@ -7054,17 +7028,12 @@
         tabsSection.addEventListener('wheel', event => {
           if (tabsSection.scrollWidth <= tabsSection.clientWidth) return;
           if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-          let delta = event.deltaY;
-          if (event.deltaMode === 1) delta *= 16;
-          else if (event.deltaMode === 2) delta *= tabsSection.clientHeight;
-          if (delta < 0 && tabsSection.scrollLeft <= 0) return;
-          if (delta > 0 && tabsSection.scrollLeft >= tabsSection.scrollWidth - tabsSection.clientWidth - 1) return;
           event.preventDefault();
-          tabsSection.scrollLeft += delta;
+          tabsSection.scrollLeft += event.deltaY;
         }, { passive: false });
 
         // Tabs bar: minimize toggle collapses the strip to the active view only
-        const tabsMinToggle = document.querySelector('[data-action="tabs-minimize"]');
+        const tabsMinToggle = tabsSection.querySelector('[data-action="tabs-minimize"]');
         if (tabsMinToggle) {
           tabsMinToggle.addEventListener('click', () => {
             const minimized = tabsSection.getAttribute('data-minimized') === 'true';
@@ -7079,6 +7048,12 @@
 
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.remove('active');
+            b.setAttribute('aria-selected', 'false');
+          });
+          btn.classList.add('active');
+          btn.setAttribute('aria-selected', 'true');
           switchView(btn.dataset.view);
         });
       });
@@ -7252,11 +7227,6 @@
     function switchView(viewName) {
       if (viewName !== VIEWS.SEQUENCE) stopScenarioPlayback();
       state.currentView = viewName;
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        const isActive = btn.dataset.view === viewName;
-        btn.classList.toggle('active', isActive);
-        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
-      });
       document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
       document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
       document.getElementById('view-database-er').classList.toggle('active', viewName === VIEWS.DATABASE_ER);
@@ -7677,8 +7647,8 @@
       const highlightBtn = document.getElementById('ins-btn-highlight');
       highlightBtn.textContent = state.highlightedChain === nodeId ? '✕ Clear Dependency Chain' : '🔗 Highlight Dependency Chain';
 
+      inspector.setAttribute('data-open', 'true');
       inspector.setAttribute('data-inspector-kind', 'node');
-      setDrawerOpen('inspector', true, document.querySelector('[data-action="inspector-toggle"]'));
     }
 
     function renderDetailList(containerId, items, renderItem, emptyMessage) {
