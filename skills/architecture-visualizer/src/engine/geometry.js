@@ -13,6 +13,103 @@
   const EDGE_END_GAP = 10;
   const LABEL_MAX_CHARS = 20;
   const ROUTE_SAMPLES = 48;
+  // Must match nodeShape() in template.html: queue/topic chevron notch depth
+  const CHEVRON_NOTCH = 16;
+  const CYLINDER_R = 12;
+  const PILL_RX = 0.5; // actor: rx = height * 0.5 (stadium shape)
+  const WORKER_RX = 22;
+  const DEFAULT_RX = 10;
+
+  function nodeCornerRadius(node) {
+    const h = node.height || 0;
+    if (node.type === 'worker' || node.type === 'cloud_function') return Math.min(WORKER_RX, h / 2);
+    return Math.min(DEFAULT_RX, h / 2);
+  }
+
+  // Right-face x of the *drawn* shape outline at a vertical offset from the face centre.
+  // Rectangular bounds overstate the width of chevrons, pills and rounded cards.
+  function shapeRightX(node, offset) {
+    const w = node.width || 0;
+    const h = node.height || 0;
+    const dy = Math.min(Math.abs(offset || 0), h / 2);
+    if (node.type === 'queue' || node.type === 'topic') {
+      const notch = Math.min(CHEVRON_NOTCH, w * 0.25);
+      return h > 0 ? node.x + w - notch * (dy / (h / 2)) : node.x + w;
+    }
+    if (node.type === 'actor') {
+      const r = h * PILL_RX;
+      return node.x + w - r + Math.sqrt(Math.max(0, r * r - dy * dy));
+    }
+    const rx = nodeCornerRadius(node);
+    const straight = h / 2 - rx;
+    if (dy > straight && rx > 0) {
+      const d = dy - straight;
+      return node.x + w - rx + Math.sqrt(Math.max(0, rx * rx - d * d));
+    }
+    return node.x + w;
+  }
+
+  // Left-face x of the drawn shape outline at a vertical offset from the face centre.
+  function shapeLeftX(node, offset) {
+    const h = node.height || 0;
+    const dy = Math.min(Math.abs(offset || 0), h / 2);
+    if (node.type === 'queue' || node.type === 'topic') return node.x; // flat rear edge
+    if (node.type === 'actor') {
+      const r = h * PILL_RX;
+      return node.x + r - Math.sqrt(Math.max(0, r * r - dy * dy));
+    }
+    const rx = nodeCornerRadius(node);
+    const straight = h / 2 - rx;
+    if (dy > straight && rx > 0) {
+      const d = dy - straight;
+      return node.x + rx - Math.sqrt(Math.max(0, rx * rx - d * d));
+    }
+    return node.x;
+  }
+
+  // Top/bottom-face y of the drawn shape outline at a horizontal offset from the centre.
+  // Only the cylinder (database/storage) deviates measurably from the rectangle.
+  function shapeTopY(node, offset) {
+    const w = node.width || 0;
+    if ((node.type === 'database' || node.type === 'storage') && w > 0) {
+      const dx = Math.min(Math.abs(offset || 0), w / 2);
+      const rise = 0.75 * CYLINDER_R * Math.sqrt(Math.max(0, 1 - ((2 * dx) / w) ** 2));
+      return node.y + CYLINDER_R - rise;
+    }
+    return node.y;
+  }
+
+  function shapeBottomY(node, offset) {
+    const w = node.width || 0;
+    const h = node.height || 0;
+    if ((node.type === 'database' || node.type === 'storage') && w > 0) {
+      const dx = Math.min(Math.abs(offset || 0), w / 2);
+      const rise = 0.75 * CYLINDER_R * Math.sqrt(Math.max(0, 1 - ((2 * dx) / w) ** 2));
+      return node.y + h - CYLINDER_R + rise;
+    }
+    return node.y + h;
+  }
+
+  // Clamp a horizontal port offset so top/bottom connections stay on the flat
+  // part of chevron (notched right side) and pill/rounded (corner caps) shapes.
+  function shapeHorizontalPortOffset(node, offset) {
+    const w = node.width || 0;
+    const h = node.height || 0;
+    let insetLeft = 0;
+    let insetRight = 0;
+    if (node.type === 'queue' || node.type === 'topic') {
+      insetRight = Math.min(CHEVRON_NOTCH, w * 0.25);
+    } else if (node.type === 'actor') {
+      insetLeft = h * PILL_RX;
+      insetRight = insetLeft;
+    } else {
+      insetLeft = nodeCornerRadius(node);
+      insetRight = insetLeft;
+    }
+    const minOffset = insetLeft - w / 2;
+    const maxOffset = w / 2 - insetRight;
+    return Math.max(minOffset, Math.min(maxOffset, offset || 0));
+  }
 
   function labelDisplayText(text) {
     const value = String(text || '');
@@ -187,11 +284,11 @@
       if (exit === 'face') {
         const x1 = source.x + source.width * 0.5;
         const x2 = target.x + target.width * 0.5;
-        const y1 = routeAbove ? source.y : source.y + source.height;
-        const y2 = routeAbove ? target.y - EDGE_END_GAP : target.y + target.height + EDGE_END_GAP;
+        const y1 = routeAbove ? shapeTopY(source, 0) : shapeBottomY(source, 0);
+        const y2 = routeAbove ? shapeTopY(target, 0) - EDGE_END_GAP : shapeBottomY(target, 0) + EDGE_END_GAP;
         const approach = Math.max(50, Math.min(220, Math.hypot(x2 - x1, y2 - y1) * 0.35));
         return {
-          points: { x1, y1, x2, y2, kind: 'skip' },
+          points: { x1, y1, x2, y2, kind: 'skip', sourceFace: routeAbove ? 'top' : 'bottom', targetFace: routeAbove ? 'top' : 'bottom' },
           controls: {
             cx1: x1,
             cy1: routeAbove ? Math.min(channelY, y1 - approach) : Math.max(channelY, y1 + approach),
@@ -201,13 +298,13 @@
         };
       }
 
-      const x1 = source.x + source.width;
+      const x1 = shapeRightX(source, sourcePortOffset);
       const y1 = source.y + source.height * 0.5 + sourcePortOffset;
-      const x2 = target.x - EDGE_END_GAP;
+      const x2 = shapeLeftX(target, targetPortOffset) - EDGE_END_GAP;
       const y2 = target.y + target.height * 0.5 + targetPortOffset;
       const approach = Math.max(40, Math.min(220, Math.hypot(x2 - x1, y2 - y1) * 0.35));
       return {
-        points: { x1, y1, x2, y2, kind: 'skip' },
+        points: { x1, y1, x2, y2, kind: 'skip', sourceFace: 'right', targetFace: 'left' },
         controls: { cx1: x1, cy1: channelY, cx2: x2 - approach, cy2: y2 },
       };
     }
@@ -217,23 +314,23 @@
 
     if (exit === 'face') {
       const x1 = source.x + source.width * 0.5;
-      const y1 = source.y + source.height;
+      const y1 = shapeBottomY(source, 0);
       const x2 = target.x + target.width * 0.5;
-      const y2 = target.y - EDGE_END_GAP;
+      const y2 = shapeTopY(target, 0) - EDGE_END_GAP;
       const approach = Math.max(40, Math.min(220, Math.hypot(x2 - x1, y2 - y1) * 0.35));
       return {
-        points: { x1, y1, x2, y2, kind: 'skip' },
+        points: { x1, y1, x2, y2, kind: 'skip', sourceFace: 'bottom', targetFace: 'top' },
         controls: { cx1: channelX, cy1: y1, cx2: x2, cy2: y2 - approach },
       };
     }
 
-    const x1 = routeLeft ? source.x : source.x + source.width;
+    const x1 = routeLeft ? shapeLeftX(source, sourcePortOffset) : shapeRightX(source, sourcePortOffset);
     const y1 = source.y + source.height * 0.5 + sourcePortOffset;
-    const x2 = routeLeft ? target.x - EDGE_END_GAP : target.x + target.width + EDGE_END_GAP;
+    const x2 = routeLeft ? shapeLeftX(target, targetPortOffset) - EDGE_END_GAP : shapeRightX(target, targetPortOffset) + EDGE_END_GAP;
     const y2 = target.y + target.height * 0.5 + targetPortOffset;
     const approach = Math.max(50, Math.min(220, Math.hypot(x2 - x1, y2 - y1) * 0.35));
     return {
-      points: { x1, y1, x2, y2, kind: 'skip' },
+      points: { x1, y1, x2, y2, kind: 'skip', sourceFace: routeLeft ? 'left' : 'right', targetFace: routeLeft ? 'left' : 'right' },
       controls: {
         cx1: routeLeft ? Math.min(channelX, x1 - approach) : Math.max(channelX, x1 + approach),
         cy1: y1,
@@ -561,10 +658,12 @@
 
   function calculateConnectionPoints(source, target, isLR, sourcePortOffset = 0, targetPortOffset = 0) {
     if (source.id === target.id) {
+      const selfSourceDy = -source.height * 0.2 + sourcePortOffset;
+      const selfTargetDy = source.height * 0.2 + targetPortOffset;
       return {
-        x1: source.x + source.width,
+        x1: shapeRightX(source, selfSourceDy),
         y1: source.y + source.height * 0.3 + sourcePortOffset,
-        x2: source.x + source.width + EDGE_END_GAP,
+        x2: shapeRightX(source, selfTargetDy) + EDGE_END_GAP,
         y2: source.y + source.height * 0.7 + targetPortOffset,
         kind: 'self',
         sourceFace: 'right',
@@ -576,11 +675,13 @@
       const sameColumn = Math.abs(target.x - source.x) < source.width * 0.5;
       if (sameColumn) {
         const downward = target.y >= source.y;
+        const sourceOff = shapeHorizontalPortOffset(source, sourcePortOffset);
+        const targetOff = shapeHorizontalPortOffset(target, targetPortOffset);
         return {
-          x1: source.x + source.width * 0.5 + sourcePortOffset,
-          y1: downward ? source.y + source.height : source.y,
-          x2: target.x + target.width * 0.5 + targetPortOffset,
-          y2: downward ? target.y - EDGE_END_GAP : target.y + target.height + EDGE_END_GAP,
+          x1: source.x + source.width * 0.5 + sourceOff,
+          y1: downward ? shapeBottomY(source, sourceOff) : shapeTopY(source, sourceOff),
+          x2: target.x + target.width * 0.5 + targetOff,
+          y2: downward ? shapeTopY(target, targetOff) - EDGE_END_GAP : shapeBottomY(target, targetOff) + EDGE_END_GAP,
           kind: 'sibling',
           sourceFace: downward ? 'bottom' : 'top',
           targetFace: downward ? 'top' : 'bottom',
@@ -589,9 +690,9 @@
       }
       if (target.x + target.width < source.x) {
         return {
-          x1: source.x,
+          x1: shapeLeftX(source, sourcePortOffset),
           y1: source.y + source.height * 0.5 + sourcePortOffset,
-          x2: target.x + target.width + EDGE_END_GAP,
+          x2: shapeRightX(target, targetPortOffset) + EDGE_END_GAP,
           y2: target.y + target.height * 0.5 + targetPortOffset,
           kind: 'backward',
           sourceFace: 'left',
@@ -599,9 +700,9 @@
         };
       }
       return {
-        x1: source.x + source.width,
+        x1: shapeRightX(source, sourcePortOffset),
         y1: source.y + source.height * 0.5 + sourcePortOffset,
-        x2: target.x - EDGE_END_GAP,
+        x2: shapeLeftX(target, targetPortOffset) - EDGE_END_GAP,
         y2: target.y + target.height * 0.5 + targetPortOffset,
         kind: 'forward',
         sourceFace: 'right',
@@ -613,9 +714,9 @@
     if (sameRow) {
       const rightward = target.x >= source.x;
       return {
-        x1: rightward ? source.x + source.width : source.x,
+        x1: rightward ? shapeRightX(source, sourcePortOffset) : shapeLeftX(source, sourcePortOffset),
         y1: source.y + source.height * 0.5 + sourcePortOffset,
-        x2: rightward ? target.x - EDGE_END_GAP : target.x + target.width + EDGE_END_GAP,
+        x2: rightward ? shapeLeftX(target, targetPortOffset) - EDGE_END_GAP : shapeRightX(target, targetPortOffset) + EDGE_END_GAP,
         y2: target.y + target.height * 0.5 + targetPortOffset,
         kind: 'sibling',
         sourceFace: rightward ? 'right' : 'left',
@@ -624,21 +725,25 @@
       };
     }
     if (target.y + target.height < source.y) {
+      const sourceOff = shapeHorizontalPortOffset(source, sourcePortOffset);
+      const targetOff = shapeHorizontalPortOffset(target, targetPortOffset);
       return {
-        x1: source.x + source.width * 0.5 + sourcePortOffset,
-        y1: source.y,
-        x2: target.x + target.width * 0.5 + targetPortOffset,
-        y2: target.y + target.height + EDGE_END_GAP,
+        x1: source.x + source.width * 0.5 + sourceOff,
+        y1: shapeTopY(source, sourceOff),
+        x2: target.x + target.width * 0.5 + targetOff,
+        y2: shapeBottomY(target, targetOff) + EDGE_END_GAP,
         kind: 'backward',
         sourceFace: 'top',
         targetFace: 'bottom',
       };
     }
+    const sourceOff = shapeHorizontalPortOffset(source, sourcePortOffset);
+    const targetOff = shapeHorizontalPortOffset(target, targetPortOffset);
     return {
-      x1: source.x + source.width * 0.5 + sourcePortOffset,
-      y1: source.y + source.height,
-      x2: target.x + target.width * 0.5 + targetPortOffset,
-      y2: target.y - EDGE_END_GAP,
+      x1: source.x + source.width * 0.5 + sourceOff,
+      y1: shapeBottomY(source, sourceOff),
+      x2: target.x + target.width * 0.5 + targetOff,
+      y2: shapeTopY(target, targetOff) - EDGE_END_GAP,
       kind: 'forward',
       sourceFace: 'bottom',
       targetFace: 'top',
@@ -734,6 +839,8 @@
 
   return {
     LABEL_HEIGHT,
+    EDGE_END_GAP,
+    CHEVRON_NOTCH,
     labelDisplayText,
     estimateLabelWidth,
     findLabelAnchor,
@@ -747,6 +854,11 @@
     calculateEdgeVisualBounds,
     cubicPointAt,
     generatePathCurve,
+    shapeRightX,
+    shapeLeftX,
+    shapeTopY,
+    shapeBottomY,
+    shapeHorizontalPortOffset,
     round,
   };
 });

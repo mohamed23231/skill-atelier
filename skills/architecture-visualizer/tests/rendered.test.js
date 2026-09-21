@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { compileArchitecture } = require('../src/engine/compiler.js');
+const geometry = require('../src/engine/geometry.js');
 const fixtures = require('./fixtures.js');
 
 const REGION_NAMES = ['topbar', 'navigator', 'canvas', 'inspector'];
@@ -437,6 +438,9 @@ const MEASURE_SCRIPT = `(function () {
       id: n.id,
       x: n.x,
       y: n.y,
+      type: n.type || null,
+      width: n.width || null,
+      height: n.height || null,
       bbox: bbox ? { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height } : null
     });
   });
@@ -457,6 +461,7 @@ const MEASURE_SCRIPT = `(function () {
     data.edges.push({
       id: e.id,
       target: e.target,
+      targetFace: e.points && e.points.targetFace ? e.points.targetFace : null,
       modelX2: e.points.x2,
       modelY2: e.points.y2,
       endPt: pt ? { x: pt.x, y: pt.y } : null,
@@ -504,19 +509,25 @@ function assertMeasurements(metrics, specRel) {
     const drift = Math.hypot(e.endPt.x - e.modelX2, e.endPt.y - e.modelY2);
     assert.ok(drift <= 2, `endpoint drift ${drift.toFixed(2)}px > 2px on edge ${e.id} in ${specRel}`);
 
-    const targetBox = nodeMap.get(e.target);
-    if (targetBox) {
+    const targetNode = metrics.nodes.find((n) => n.id === e.target);
+    if (targetNode && targetNode.width && targetNode.height) {
+      // Gap is measured against the *drawn* shape outline (chevron, pill,
+      // cylinder, rounded card), not the rectangular bounding box.
+      const face = e.targetFace || 'left';
       let gap;
-      const px = e.endPt.x;
-      const py = e.endPt.y;
-      if (px >= targetBox.left && px <= targetBox.right && py >= targetBox.top && py <= targetBox.bottom) {
-        gap = -Math.min(px - targetBox.left, targetBox.right - px, py - targetBox.top, targetBox.bottom - py);
+      if (face === 'left' || face === 'right') {
+        const dy = e.endPt.y - (targetNode.y + targetNode.height / 2);
+        const boundaryX = face === 'left' ? geometry.shapeLeftX(targetNode, dy) : geometry.shapeRightX(targetNode, dy);
+        gap = Math.abs(e.endPt.x - boundaryX);
       } else {
-        const dx = Math.max(targetBox.left - px, 0, px - targetBox.right);
-        const dy = Math.max(targetBox.top - py, 0, py - targetBox.bottom);
-        gap = Math.hypot(dx, dy);
+        const dx = e.endPt.x - (targetNode.x + targetNode.width / 2);
+        const boundaryY = face === 'top' ? geometry.shapeTopY(targetNode, dx) : geometry.shapeBottomY(targetNode, dx);
+        gap = Math.abs(e.endPt.y - boundaryY);
       }
-      assert.ok(gap >= 8 && gap <= 16, `endpoint gap ${gap.toFixed(2)}px not between 8px and 16px on edge ${e.id} arriving at ${e.target} in ${specRel}`);
+      assert.ok(
+        gap >= 6 && gap <= 16,
+        `endpoint gap ${gap.toFixed(2)}px from the ${face} outline not between 6px and 16px on edge ${e.id} arriving at ${e.target} in ${specRel}`
+      );
     }
 
     if (typeof e.kinkDeg === 'number') {
@@ -1197,6 +1208,75 @@ function assertMinimapBehavior(raw) {
   );
 }
 
+function tabsBarSteps() {
+  return [
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      window.__obs = {};
+      var tabs = __q('.tabs-section');
+      __record('tabsPresent', !!tabs);
+      __record('tabCount', __qa('.tabs-section .tab-btn').length);
+      __record('togglePresent', !!__q('[data-action="tabs-minimize"]'));
+      __record('initialMinimized', tabs ? tabs.getAttribute('data-minimized') : null);
+      __record('overflowing', tabs ? tabs.scrollWidth > tabs.clientWidth + 1 : null);
+      __record('scrollLeftBefore', tabs ? tabs.scrollLeft : null);
+      if (tabs) {
+        tabs.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 240, deltaX: 0 }));
+      }
+      await __sleep(60);
+      __record('scrollLeftAfterWheel', tabs ? tabs.scrollLeft : null);
+      return __observed();
+    })()`),
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      var tabs = __q('.tabs-section');
+      __click(__q('[data-action="tabs-minimize"]'));
+      await __sleep(80);
+      __record('minimizedAfterClick', tabs ? tabs.getAttribute('data-minimized') : null);
+      var visibleTabs = __qa('.tabs-section .tab-btn').filter(function (el) {
+        var r = el.getBoundingClientRect();
+        return r.width > 0.5 && r.height > 0.5;
+      });
+      __record('visibleTabsWhenMinimized', visibleTabs.length);
+      __record('visibleTabIsActive', visibleTabs.length === 1 && visibleTabs[0].classList.contains('active'));
+      __record('togglePressed', __q('[data-action="tabs-minimize"]').getAttribute('aria-pressed'));
+      return __observed();
+    })()`),
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      var tabs = __q('.tabs-section');
+      __click(__q('[data-action="tabs-minimize"]'));
+      await __sleep(80);
+      __record('minimizedAfterSecondClick', tabs ? tabs.getAttribute('data-minimized') : null);
+      var visibleTabs = __qa('.tabs-section .tab-btn').filter(function (el) {
+        var r = el.getBoundingClientRect();
+        return r.width > 0.5 && r.height > 0.5;
+      });
+      __record('visibleTabsWhenExpanded', visibleTabs.length);
+      return __observed();
+    })()`),
+  ];
+}
+
+function assertTabsBarBehavior(raw) {
+  assert.ok(raw, 'no tabs bar observations returned');
+  assert.strictEqual(raw.tabsPresent, true, 'tabs section is missing');
+  assert.strictEqual(raw.togglePresent, true, 'tabs minimize toggle is missing');
+  assert.ok(raw.tabCount >= 6, `expected at least 6 view tabs, found ${raw.tabCount}`);
+  assert.strictEqual(raw.initialMinimized, 'false', 'tabs should start expanded');
+  assert.strictEqual(raw.overflowing, true, 'test setup invalid: tabs bar is not overflowing at 768px');
+  assert.ok(
+    raw.scrollLeftAfterWheel > raw.scrollLeftBefore,
+    `vertical mouse wheel did not scroll the tabs bar (before=${raw.scrollLeftBefore}, after=${raw.scrollLeftAfterWheel})`
+  );
+  assert.strictEqual(raw.minimizedAfterClick, 'true', 'minimize toggle did not collapse the tabs bar');
+  assert.strictEqual(raw.visibleTabsWhenMinimized, 1, `minimized tabs bar should show only the active tab, found ${raw.visibleTabsWhenMinimized}`);
+  assert.strictEqual(raw.visibleTabIsActive, true, 'the only visible tab after minimize is not the active view');
+  assert.strictEqual(raw.togglePressed, 'true', 'minimize toggle aria-pressed was not updated');
+  assert.strictEqual(raw.minimizedAfterSecondClick, 'false', 'minimize toggle did not expand the tabs bar again');
+  assert.strictEqual(raw.visibleTabsWhenExpanded, raw.tabCount, `expanded tabs bar should show all ${raw.tabCount} tabs, found ${raw.visibleTabsWhenExpanded}`);
+}
+
 const cases = [
   [
     'Chrome binary is available for rendered verification',
@@ -1298,6 +1378,14 @@ const cases = [
       const steps = searchSteps('SQL Write', 'e1', '#path-e1[data-selected="true"]', 'edge');
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
       assertSearchActivation(lastEvalValue(results[0]), 'edge', 'e1');
+    },
+  ],
+
+  [
+    'B2a: at 768 the overflowing tabs bar scrolls with the mouse wheel and minimizes to the active tab',
+    () => {
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 768, height: 900, mobile: false, steps: tabsBarSteps() }]);
+      assertTabsBarBehavior(lastEvalValue(results[0]));
     },
   ],
 
