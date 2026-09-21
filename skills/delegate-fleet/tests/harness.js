@@ -72,13 +72,21 @@ function useStub(repo, backend = 'claude', extra = {}) {
   return cfgPath;
 }
 
-/** Mark a backend's capabilities as locally verified, as `doctor` would. */
-function markVerified(repo, backend, capabilities) {
+/**
+ * Mark a backend's capabilities as locally verified, as `doctor` would --
+ * including the executable identity, without which a record is not usable.
+ */
+function markVerified(repo, backend, capabilities, cliPath = STUB) {
   const dir = path.join(repo, '.delegate-fleet');
   fs.mkdirSync(dir, { recursive: true });
   const p = path.join(dir, 'verification.json');
   const cur = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : { backends: {} };
-  cur.backends[backend] = { at: new Date().toISOString(), platform: process.platform, version: 'stub', capabilities };
+  const st = fs.statSync(cliPath);
+  cur.backends[backend] = {
+    at: new Date().toISOString(), platform: process.platform, version: 'stub',
+    cliPath, cli: { path: cliPath, size: st.size, mtimeMs: Math.round(st.mtimeMs) },
+    capabilities,
+  };
   fs.writeFileSync(p, JSON.stringify(cur, null, 2));
 }
 

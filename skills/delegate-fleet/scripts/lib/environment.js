@@ -61,6 +61,30 @@ function resolveCli(cli, env = process.env) {
 function stateDir(repoRoot) { return path.join(repoRoot, STATE_DIR); }
 
 /**
+ * A cheap identity for the executable a verification record was taken from.
+ *
+ * Comparing the path alone is not enough: a package upgrade replaces the
+ * binary in place, and evidence about the old version would keep authorising
+ * runs against the new one. Size and mtime change on replacement and cost one
+ * stat, where running `--version` would cost a process spawn on every
+ * discover.
+ */
+function cliIdentity(cliPath) {
+  if (!cliPath) return null;
+  try {
+    const st = fs.statSync(cliPath);
+    return { path: cliPath, size: st.size, mtimeMs: Math.round(st.mtimeMs) };
+  } catch {
+    return null;
+  }
+}
+
+function sameIdentity(a, b) {
+  if (!a || !b) return false;
+  return a.path === b.path && a.size === b.size && a.mtimeMs === b.mtimeMs;
+}
+
+/**
  * Read a JSON file. Distinguishes "absent" from "malformed": a config the user
  * meant to apply but mistyped must be an error, not a silent fall-back to
  * defaults.
@@ -69,8 +93,12 @@ function readJson(file) {
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
-  } catch {
-    return { present: false, value: null, error: null };
+  } catch (err) {
+    // Only "not there" is absence. A permissions problem or a directory in the
+    // file's place would otherwise silently become "use the defaults", running
+    // with options the user did not configure.
+    if (err && err.code === 'ENOENT') return { present: false, value: null, error: null };
+    return { present: true, value: null, error: `${(err && err.code) || 'read failed'}: ${file}` };
   }
   try {
     return { present: true, value: JSON.parse(text), error: null };
@@ -88,7 +116,7 @@ function loadConfig(repoRoot) {
   const read = readJson(file);
   const workers = {};
   const errors = [];
-  if (read.error) return { workers, errors: [`${CONFIG_FILE}: not valid JSON (${read.error})`] };
+  if (read.error) return { workers, errors: [`${CONFIG_FILE}: could not be read as JSON (${read.error})`] };
   const raw = read.value;
   if (read.present && (raw === null || typeof raw !== 'object' || Array.isArray(raw))) {
     return { workers, errors: [`${CONFIG_FILE}: expected a JSON object at the top level`] };
@@ -151,11 +179,13 @@ function inspect(adapter, { config, verification, env } = {}) {
   const cli = cfg.cli || adapter.cli;
   const resolved = resolveCli(cli, env);
   const record = verification && verification.backends ? verification.backends[adapter.id] : null;
-  // Evidence is about one executable, not about a backend id. If the config
-  // now points `cli` somewhere else, the old record proves nothing about the
-  // binary that is about to run.
-  const staleFor = record && record.cliPath && resolved && record.cliPath !== resolved ? record.cliPath : null;
-  const local = staleFor ? null : record;
+  // Evidence is about one executable, not about a backend id. A record that
+  // does not identify the binary it came from, or that identifies a different
+  // one, proves nothing about what is about to run.
+  const current = cliIdentity(resolved);
+  const usable = Boolean(record) && sameIdentity(record.cli, current);
+  const staleFor = record && !usable ? (record.cli ? record.cli.path : 'an unidentified executable') : null;
+  const local = usable ? record : null;
 
   return {
     id: adapter.id,
@@ -228,6 +258,7 @@ function verify(adapter, opts = {}) {
     platform: process.platform,
     version: (version.output || '').trim().split('\n')[0]?.slice(0, 120) || null,
     cliPath,
+    cli: cliIdentity(cliPath),
     capabilities,
     reason: null,
   };
@@ -235,7 +266,7 @@ function verify(adapter, opts = {}) {
 
 module.exports = {
   STATE_DIR, CONFIG_FILE, VERIFICATION_FILE,
-  resolveCli, candidateDirs, stateDir,
+  resolveCli, candidateDirs, stateDir, cliIdentity, sameIdentity,
   loadConfig, loadVerification, saveVerification,
   inspect, discover, verify,
 };

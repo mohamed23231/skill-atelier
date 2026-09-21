@@ -133,7 +133,7 @@ function cmdDoctor(o) {
     if (res.capabilities) {
       report.backends[adapter.id] = {
         at: res.at, platform: res.platform, version: res.version,
-        cliPath: res.cliPath, capabilities: res.capabilities,
+        cliPath: res.cliPath, cli: res.cli, capabilities: res.capabilities,
       };
     } else {
       // Verification was attempted and did not succeed. Keeping the previous

@@ -108,6 +108,36 @@ function expressibleCapabilities(adapter) {
   return set;
 }
 
+/** Build a representative request, for checking what the invocation contains. */
+function probeRequest(mode) {
+  return {
+    prompt: 'x', mode, model: null, effort: null, session: null,
+    cwd: '/tmp/delegate-fleet-probe', promptFile: '/tmp/delegate-fleet-probe/brief.md',
+  };
+}
+
+function builtArgs(adapter, mode) {
+  try {
+    return ((adapter.build(probeRequest(mode)) || {}).args || []).map(String);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Does the invocation actually ask for machine-readable output?
+ *
+ * `structuredOutput` has no per-run switch, so nothing else would catch an
+ * adapter that claims it and then emits a human-readable stream. A token
+ * naming JSON in some form is the whole contract -- `--json`, `-o json`,
+ * `--output-format stream-json`, `ndjson`. A flag like `--output streaming`
+ * is a text stream and does not count.
+ */
+function deliversStructuredOutput(adapter) {
+  const args = builtArgs(adapter, 'edit');
+  return Boolean(args && args.some((a) => /json/i.test(a)));
+}
+
 /**
  * Does this adapter's read-only invocation actually *add* a restriction?
  *
@@ -117,20 +147,11 @@ function expressibleCapabilities(adapter) {
  * carries at least one argument that the edit run does not.
  */
 function enforcesReadOnly(adapter) {
-  const probeReq = (mode) => ({
-    prompt: 'x', mode, model: null, effort: null, session: null,
-    cwd: '/tmp/delegate-fleet-probe', promptFile: '/tmp/delegate-fleet-probe/brief.md',
-  });
-  let readOnlyArgs;
-  let editArgs;
-  try {
-    readOnlyArgs = (adapter.build(probeReq('read-only')) || {}).args || [];
-    editArgs = (adapter.build(probeReq('edit')) || {}).args || [];
-  } catch {
-    return false;
-  }
-  const edit = new Set(editArgs.map(String));
-  return readOnlyArgs.map(String).some((a) => !edit.has(a));
+  const readOnlyArgs = builtArgs(adapter, 'read-only');
+  const editArgs = builtArgs(adapter, 'edit');
+  if (!readOnlyArgs || !editArgs) return false;
+  const edit = new Set(editArgs);
+  return readOnlyArgs.some((a) => !edit.has(a));
 }
 
 /**
@@ -146,6 +167,7 @@ function clampToExpressible(states, adapter) {
     if (!expressible.has(name) && claims(out[name])) out[name] = EVIDENCE.unsupported;
   }
   if (claims(out.readOnly) && !enforcesReadOnly(adapter)) out.readOnly = EVIDENCE.unsupported;
+  if (claims(out.structuredOutput) && !deliversStructuredOutput(adapter)) out.structuredOutput = EVIDENCE.unsupported;
   return out;
 }
 
@@ -181,6 +203,7 @@ module.exports = {
   CAPABILITY_REQUEST_FIELD,
   expressibleCapabilities,
   enforcesReadOnly,
+  deliversStructuredOutput,
   clampToExpressible,
   EVIDENCE,
   EVIDENCE_STATES,

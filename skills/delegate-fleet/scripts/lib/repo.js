@@ -23,6 +23,14 @@ const { spawnSync } = require('node:child_process');
 // precisely the edit this module exists to catch.
 const HASH_CHUNK_BYTES = 1024 * 1024;
 
+/**
+ * A path whose state could not be established. Distinct from `null`, which
+ * means "absent". A stable hash derived from a failed probe would read as
+ * "unchanged" on both sides of a run and hide the very edit we are looking
+ * for, so this poisons the whole snapshot instead.
+ */
+const UNREADABLE = '\u0000unreadable';
+
 function git(repoRoot, args) {
   return spawnSync('git', args, {
     cwd: repoRoot,
@@ -67,7 +75,11 @@ function hashDirectory(abs) {
   const inner = spawnSync('git', ['-C', abs, 'status', '--porcelain', '-uall'], {
     encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'],
   });
+  // Not a git repository at all: an ordinary untracked directory.
   if (head.status !== 0 && inner.status !== 0) return 'dir';
+  // It IS a nested repository, but one of the probes failed -- timed out, or
+  // overran maxBuffer. Partial evidence is worse than none here.
+  if (head.status !== 0 || inner.status !== 0) return UNREADABLE;
   const state = `${(head.stdout || '').trim()}\n${(inner.stdout || '').trim()}`;
   return `dir:${crypto.createHash('sha256').update(state).digest('hex')}`;
 }
@@ -123,11 +135,15 @@ function snapshot(repoRoot) {
   }
   const entries = new Map();
   for (const e of parsePorcelainZ(res.stdout)) {
-    entries.set(e.path, {
-      code: e.code,
-      renamedFrom: e.renamedFrom,
-      hash: hashFile(path.join(repoRoot, e.path)),
-    });
+    const hash = hashFile(path.join(repoRoot, e.path));
+    if (hash === UNREADABLE) {
+      return {
+        ok: false,
+        reason: `could not establish the state of "${e.path}"; refusing to report a snapshot that could hide an edit`,
+        entries: new Map(), head: null, stash: null,
+      };
+    }
+    entries.set(e.path, { code: e.code, renamedFrom: e.renamedFrom, hash });
   }
   return {
     ok: true,
@@ -234,6 +250,7 @@ function reconcileScope(paths, scope) {
 }
 
 module.exports = {
+  UNREADABLE,
   snapshot,
   diffSnapshots,
   changedPaths,

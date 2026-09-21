@@ -18,7 +18,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   CAPABILITY_NAMES, EVIDENCE_STATES, CAPABILITY_REQUEST_FIELD,
-  expressibleCapabilities, claims,
+  expressibleCapabilities, enforcesReadOnly, deliversStructuredOutput, claims,
 } = require('../lib/capabilities.js');
 
 const PROMPT_DELIVERY = ['argv', 'stdin', 'file'];
@@ -71,6 +71,15 @@ function assertShape(a, origin) {
     throw new Error(
       `${where}: claims ${name} as "${a.capabilities[name]}" but build() never reads req.${CAPABILITY_REQUEST_FIELD[name]}`
     );
+  }
+  // The two capabilities with no per-run switch still have to be true of the
+  // invocation, or `select --need` would hand back a worker that cannot do the
+  // job and the relay would pass its argv straight through.
+  if (claims(a.capabilities.readOnly) && !enforcesReadOnly(a)) {
+    throw new Error(`${where}: claims readOnly but its read-only argv adds nothing its edit argv lacks`);
+  }
+  if (claims(a.capabilities.structuredOutput) && !deliversStructuredOutput(a)) {
+    throw new Error(`${where}: claims structuredOutput but build() asks for no machine-readable format`);
   }
   const delivery = a.promptDelivery || 'argv';
   if (!PROMPT_DELIVERY.includes(delivery)) {

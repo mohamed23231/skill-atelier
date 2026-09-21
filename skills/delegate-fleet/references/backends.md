@@ -27,7 +27,7 @@ the CLI genuinely cannot do it; `unknown` means not established, which is never 
 | `cline` | `cline` | documented | documented | — | documented | — | documented | stdin |
 | `pi` | `pi` | documented | documented | documented | documented | — | documented | stdin |
 | `omp` | `omp` | documented | documented | documented | documented | documented | documented | stdin |
-| `vibe` | `vibe` | documented | documented | documented | — | — | documented | argv |
+| `vibe` | `vibe` | documented | documented | documented | — | — | — | argv |
 | `warp` | `oz` | documented | — | documented | documented | — | documented | argv |
 | `commandcode` | `cmd` | documented | documented | documented | documented | documented | documented | stdin |
 | `qoder` | `qodercli` | documented | documented | documented | documented | — | documented | argv |
@@ -35,13 +35,16 @@ the CLI genuinely cannot do it; `unknown` means not established, which is never 
 Run `doctor` and these become facts about *your* machine: it promotes `documented` to `verified`
 where the installed CLI really has the flag, and demotes it to `—` where it does not.
 
-## What "verified" meant here
+## What `verified` means in this table
 
-The six marked `verified` were checked against their installed CLIs on macOS (arm64) on 2026-09-21:
-claude 2.1.278, codex-cli 0.146.0, cursor-agent 2026.09.18, opencode 1.18.31, gemini 0.58.0,
-agy 1.2.7. `grok` 1.0.34 and Warp `oz` v0.2026.09.16 were verified by `doctor` on the same machine.
-Everything else is honestly marked `documented` or `unknown` until your own `doctor` run says
-otherwise.
+`verified` records that the capability was exercised against a real installation of that CLI on
+macOS (arm64) while the adapter was written, and each adapter's `evidence` field carries the method
+and date. Everything else is marked `documented` or `unknown`.
+
+None of that is evidence about *your* machine, and the framework does not treat it as such: a
+declared `verified` reads as `documented` until `doctor` has run where you are. Run it, and this
+table stops mattering — your `.delegate-fleet/verification.json` is the authority, for your CLI
+versions.
 
 ## Honest limits worth knowing
 

@@ -71,6 +71,25 @@ node scripts/test-all.js
 
 Both must pass. CI runs them on Node 22 and 24.
 
+`validate-repo.js` rejects absolute home paths, private key material and common API-token shapes.
+Those rules are generic on purpose: this repository is public, and a denylist naming your employer
+or your private projects would publish exactly what it is meant to keep out.
+
+For names that must not be committed but also must not be listed here — your username, an employer,
+an internal hostname, a private repository — create `.validate-repo-private.json` (gitignored):
+
+```json
+{
+  "forbidden": [
+    { "pattern": "\\bmy-username\\b", "label": "personal identifier" },
+    { "pattern": "internal\\.example\\.com", "label": "private hostname" }
+  ]
+}
+```
+
+Each `pattern` is a JavaScript regular expression, case-insensitive unless you set `flags`, and is
+checked exactly like the built-in rules. Contributors without the file get the generic checks only.
+
 ## Review criteria
 
 A reviewer should be able to answer yes to each.

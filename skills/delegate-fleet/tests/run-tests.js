@@ -922,7 +922,7 @@ test('a malformed config.json is an error, never a silent fall-back', () => {
   fs.mkdirSync(path.join(repo, '.delegate-fleet'), { recursive: true });
   fs.writeFileSync(path.join(repo, '.delegate-fleet', 'config.json'), '{ "workers": { ');
   const cfg = environment.loadConfig(repo);
-  assert.ok(cfg.errors.some((e) => /not valid JSON/.test(e)), cfg.errors.join('; '));
+  assert.ok(cfg.errors.some((e) => /could not be read as JSON/.test(e)), cfg.errors.join('; '));
 });
 
 test('a config whose "workers" is not an object is rejected', () => {
@@ -969,6 +969,106 @@ test('captured output is capped in bytes and never splits a character', () => {
   assert.ok(sink.truncated);
   assert.ok(!sink.value.includes('�'), 'no character may be corrupted at a chunk boundary');
   assert.strictEqual(sink.value.split('\n')[0], 'é'.repeat(32), 'the cap counts bytes, not code units');
+});
+
+test('a structuredOutput claim must appear in the built invocation', () => {
+  // The capability has no per-run switch, so nothing else would catch an
+  // adapter that claims it and then emits a human-readable stream.
+  for (const a of registry.BUILT_IN) {
+    if (!capabilities.claims(a.capabilities.structuredOutput)) continue;
+    assert.ok(
+      capabilities.deliversStructuredOutput(a),
+      `${a.id}: claims structuredOutput but build() asks for no machine-readable format`
+    );
+  }
+});
+
+test('an adapter claiming structured output it never requests is rejected at load time', () => {
+  const bad = {
+    id: 'chatty', cli: 'chatty',
+    capabilities: {
+      edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported',
+      modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'documented',
+    },
+    build(req) { return { args: ['--output', 'streaming', req.prompt] }; },
+    probe() { return {}; },
+  };
+  assert.throws(() => registry.assertShape(bad), /no machine-readable format/);
+});
+
+test('an adapter claiming read-only it does not enforce is rejected at load time', () => {
+  const bad = {
+    id: 'hopeful', cli: 'hopeful',
+    capabilities: {
+      edit: 'documented', readOnly: 'documented', resumeById: 'unsupported',
+      modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported',
+    },
+    // Omits --yes in read-only mode and trusts the CLI's default. That is a
+    // hope, not an enforcement.
+    build(req) { const a = []; if (req.mode !== 'read-only') a.push('--yes'); a.push(req.prompt); return { args: a }; },
+    probe() { return {}; },
+  };
+  assert.throws(() => registry.assertShape(bad), /adds nothing its edit argv lacks/);
+});
+
+test('a verification record that does not identify its executable is unusable', () => {
+  const adapter = registry.getAdapter('claude');
+  const verification = { backends: { claude: { at: 'then', capabilities: ALL_CAPS } } }; // no cli identity
+  const view = environment.inspect(adapter, {
+    config: { workers: { claude: { cli: H.STUB } } }, verification, env: process.env,
+  });
+  assert.strictEqual(view.localVerification, null);
+  assert.strictEqual(view.capabilities.readOnly, 'documented');
+});
+
+test('a verification record is discarded when the binary at that path is replaced', () => {
+  const repo = H.tmpRepo();
+  const fake = path.join(repo, 'fake-cli');
+  fs.writeFileSync(fake, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const adapter = registry.getAdapter('claude');
+  const config = { workers: { claude: { cli: fake } } };
+  H.markVerified(repo, 'claude', ALL_CAPS, fake);
+  const verification = JSON.parse(fs.readFileSync(path.join(repo, '.delegate-fleet', 'verification.json'), 'utf8'));
+
+  const fresh = environment.inspect(adapter, { config, verification, env: process.env });
+  assert.strictEqual(fresh.capabilities.readOnly, 'verified', 'the record must apply to the binary it came from');
+
+  // An upgrade replaces the file in place: same path, different bytes.
+  fs.writeFileSync(fake, '#!/bin/sh\necho upgraded\nexit 0\n', { mode: 0o755 });
+  const after = environment.inspect(adapter, { config, verification, env: process.env });
+  assert.strictEqual(after.localVerification, null, 'evidence about the old binary must not survive');
+  assert.ok(after.staleVerification);
+  assert.strictEqual(after.capabilities.readOnly, 'documented');
+});
+
+test('a nested repository whose state cannot be read poisons the snapshot', () => {
+  // A stable hash built from a failed probe would read as "unchanged" on both
+  // sides of a run and hide the edit this module exists to catch.
+  const repo = H.tmpRepo({ files: { 'a.js': 'x\n' } });
+  const nested = path.join(repo, 'vendor');
+  fs.mkdirSync(nested, { recursive: true });
+  const git = (...args) => spawnSync('git', args, { cwd: nested, encoding: 'utf8' });
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'Test');
+  fs.writeFileSync(path.join(nested, 'dep.js'), 'y\n');
+  git('add', '-A'); git('commit', '-qm', 'dep');
+  assert.strictEqual(repoLib.hashFile(nested).startsWith('dir:'), true, 'a healthy nested repo hashes by its own state');
+
+  fs.writeFileSync(path.join(nested, '.git', 'index'), 'GARBAGE'); // rev-parse works, status does not
+  assert.strictEqual(repoLib.hashFile(nested), repoLib.UNREADABLE);
+  const snap = repoLib.snapshot(repo);
+  assert.strictEqual(snap.ok, false, 'the snapshot must refuse rather than report a clean tree');
+  assert.match(snap.reason, /could not establish the state/);
+});
+
+test('a config file that cannot be read is an error, not an absent file', () => {
+  const repo = H.tmpRepo();
+  // A directory where the file should be: readFileSync fails with EISDIR.
+  fs.mkdirSync(path.join(repo, '.delegate-fleet', 'config.json'), { recursive: true });
+  const cfg = environment.loadConfig(repo);
+  assert.ok(cfg.errors.length > 0, 'a read failure must not become "use the defaults"');
+  assert.match(cfg.errors[0], /could not be read/);
 });
 
 /* ---------------------------------- runner ---------------------------------- */

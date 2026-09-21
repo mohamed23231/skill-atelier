@@ -8,7 +8,9 @@ module.exports = {
   evidence: { source: 'amElnagdy/delegate-skills', verifiedHere: false },
   capabilities: {
     edit: 'documented', readOnly: 'documented', resumeById: 'documented',
-    modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'documented',
+    // `--output streaming` is a human-readable stream, not a machine-readable
+    // result, so there is no structured output to claim.
+    modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported',
   },
   build(req) {
     const args = ['--output', 'streaming', '--agent', req.mode === 'read-only' ? 'plan' : 'default', '--trust'];
@@ -23,7 +25,7 @@ module.exports = {
       resumeById: /--resume/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',
-      structuredOutput: /--output/.test(help) ? 'verified' : 'unsupported',
+      structuredOutput: /--output[\s\S]{0,200}?json/i.test(help) ? 'verified' : 'unsupported',
     };
   },
   denyPatterns: [/not authenticated/i, /invalid api key/i],

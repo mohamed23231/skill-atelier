@@ -69,9 +69,21 @@ Found by adversarial review of this rewrite, before release:
   (`--plan` *and* `--auto-approve`) and `opencode` (the `plan` agent must exist, now verified via
   `evidenceArgs`). Where a flag exists but the help never names the value, the state is `unknown`
   rather than a false `unsupported`.
+- **`structuredOutput` was unchecked.** It has no per-run switch, so nothing caught an adapter that
+  claimed it and then asked for a human-readable stream. The built invocation must now contain a
+  token naming JSON; `vibe` was claiming it while emitting `--output streaming`, and is corrected
+  to `unsupported`. `readOnly` is enforced the same way at load time, not only when clamping.
+- **A failed probe inside a nested repository became a stable hash.** If `HEAD` read but `git
+  status` timed out, the submodule hashed identically before and after a run and hid every edit
+  inside it. Such a path now poisons the snapshot, so the repository reports as unobserved.
+- **A config file that could not be read was treated as absent.** `EACCES` or `EISDIR` silently
+  became "use the defaults", running with options the user did not configure. Only `ENOENT` is
+  absence.
 - **Verification survived a change of executable.** Evidence was keyed by backend id, so pointing
-  `cli` elsewhere kept applying the old record. Records now carry the path they were taken from and
-  are discarded when it no longer matches; `doctor` also deletes a record when re-verification
+  `cli` elsewhere kept applying the old record. Records now carry an identity for the binary they
+  were taken from — path, size and mtime, one stat rather than a process spawn — and are discarded
+  when it no longer matches, which also covers an upgrade that replaces the binary in place. A
+  record that identifies no executable is unusable. `doctor` deletes a record when re-verification
   fails instead of leaving stale evidence behind.
 - **Worker writes under `.delegate-fleet/` were filtered out of scope reconciliation.** A worker
   could plant `.delegate-fleet/adapters/*.js` with no finding raised, and the next run would

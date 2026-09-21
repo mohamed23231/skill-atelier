@@ -40,3 +40,6 @@ Thumbs.db
 # Test and coverage output
 coverage/
 .nyc_output/
+
+# Private, machine-local denylist for scripts/validate-repo.js
+.validate-repo-private.json

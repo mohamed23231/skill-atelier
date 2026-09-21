@@ -117,15 +117,54 @@ for (const relative of REQUIRED_FILES) {
   if (!exists(relative)) fail(`missing required file: ${relative}`);
 }
 
+// Generic leaks, checked for everyone. Nothing here names a person, an
+// employer or a private project: this file is public, and a denylist of
+// private names would itself publish them.
 const FORBIDDEN = [
   { re: /\/Users\/[A-Za-z0-9._-]+\//, label: 'absolute macOS user path' },
   { re: /\/home\/[A-Za-z0-9._-]+\//, label: 'absolute Linux user path' },
-  { re: /\bmelshiaty\b/i, label: 'personal identifier' },
-  { re: /\bbappzaar\b/i, label: 'private project name' },
-  { re: /\bfastfishio\b/i, label: 'unverified remote' },
-  { re: /features\/o2d|marketplaces\/noon|@o2d\/|@noon\//, label: 'private project path' },
-  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, label: 'private key material' }
+  { re: /\/c\/Users\/[A-Za-z0-9._-]+\/|[A-Z]:\\Users\\[A-Za-z0-9._-]+\\/, label: 'absolute Windows user path' },
+  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, label: 'private key material' },
+  { re: /\bgh[pousr]_[A-Za-z0-9]{16,}\b/, label: 'GitHub token' },
+  { re: /\bsk-[A-Za-z0-9]{20,}\b/, label: 'API key' },
+  { re: /\bAKIA[0-9A-Z]{16}\b/, label: 'AWS access key id' },
 ];
+
+/**
+ * Names you must not publish but also must not list in a public file:
+ * your own username, an employer, a private repository, an internal hostname.
+ *
+ * Put them in `.validate-repo-private.json` (gitignored) as
+ * `{ "forbidden": [{ "pattern": "bappzaar", "label": "private project" }] }`
+ * and they are checked exactly like the rules above. Contributors without the
+ * file simply get the generic checks.
+ */
+function loadPrivateRules() {
+  const file = path.join(ROOT, '.validate-repo-private.json');
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return [];
+    fail(`.validate-repo-private.json: ${err.message}`);
+    return [];
+  }
+  const rules = [];
+  for (const entry of raw.forbidden || []) {
+    if (!entry || typeof entry.pattern !== 'string' || !entry.pattern) {
+      fail('.validate-repo-private.json: every forbidden entry needs a non-empty "pattern"');
+      continue;
+    }
+    try {
+      rules.push({ re: new RegExp(entry.pattern, entry.flags || 'i'), label: entry.label || 'private identifier' });
+    } catch (err) {
+      fail(`.validate-repo-private.json: ${entry.pattern} is not a valid regular expression (${err.message})`);
+    }
+  }
+  return rules;
+}
+
+FORBIDDEN.push(...loadPrivateRules());
 
 const skillDirs = [];
 walk(ROOT, (file) => {

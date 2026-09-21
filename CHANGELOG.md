@@ -27,6 +27,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `scripts/validate-repo.js` no longer carries a denylist of private names. A public repository
+  that lists the employer and project names it wants kept out has published them; those rules move
+  to an optional, gitignored `.validate-repo-private.json`, documented in `docs/MAINTAINERS.md`.
+  The built-in rules stay generic and gained absolute Windows home paths, private key material,
+  GitHub tokens, `sk-` API keys and AWS access key ids.
 - `scripts/validate-repo.js` skips paths that git already ignores. A tool's local state directory is
   not part of the repository, so it should not fail the personal-path rule on the machine that
   created it.
