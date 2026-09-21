@@ -22,7 +22,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Run structural checks
@@ -39,7 +39,7 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
       - name: Run every skill test suite
