@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { computeLayout, buildEdgeGeometry, cubicPointAt, curveSanityScore, resolveLabelCollisions } = require('../src/engine/layout.js');
+const geometry = require('../src/engine/geometry.js');
 const {
   VALID_SPEC,
   ADVERSARIAL_RECIPROCAL_SPEC,
@@ -172,16 +173,84 @@ const cases = [
   ],
 
   [
-    'edge endpoints are inset at least 8px outside destination node card',
+    'edge endpoints sit one EDGE_END_GAP off the drawn shape outline of the destination node',
     () => {
       const layout = computeLayout(clone(VALID_SPEC));
       layout.edges.forEach((e) => {
         if (!e.points) return;
         const target = layout.nodes.find((n) => n.id === e.target);
         if (!target) return;
-        const inside = e.points.x2 > target.x - 8 && e.points.x2 < target.x + target.width + 8 && e.points.y2 > target.y - 8 && e.points.y2 < target.y + target.height + 8;
-        assert.strictEqual(inside, false, `endpoint of ${e.id} is inside or too close to card ${target.id}`);
+        const face = e.points.targetFace || 'left';
+        let gap;
+        if (face === 'left') {
+          const dy = e.points.y2 - (target.y + target.height / 2);
+          const boundaryX = geometry.shapeLeftX(target, dy);
+          gap = boundaryX - e.points.x2;
+        } else if (face === 'right') {
+          const dy = e.points.y2 - (target.y + target.height / 2);
+          const boundaryX = geometry.shapeRightX(target, dy);
+          gap = e.points.x2 - boundaryX;
+        } else if (face === 'top') {
+          const dx = e.points.x2 - (target.x + target.width / 2);
+          const boundaryY = geometry.shapeTopY(target, dx);
+          gap = boundaryY - e.points.y2;
+        } else {
+          const dx = e.points.x2 - (target.x + target.width / 2);
+          const boundaryY = geometry.shapeBottomY(target, dx);
+          gap = e.points.y2 - boundaryY;
+        }
+        assert.ok(
+          gap >= geometry.EDGE_END_GAP - 2 && gap <= geometry.EDGE_END_GAP + 4,
+          `endpoint of ${e.id} sits ${gap.toFixed(2)}px off the ${face} outline of ${target.id} (expected ~${geometry.EDGE_END_GAP}px)`
+        );
       });
+    },
+  ],
+
+  [
+    'shaped nodes: endpoints land on the chevron, pill and cylinder outlines, not the bounding box',
+    () => {
+      // Chevron (queue/topic): backward edges arrive on the pointed right face.
+      // With a port offset the outline sits left of the rectangular edge.
+      const queue = { id: 'q', label: 'Q', type: 'topic', x: 100, y: 100, width: 200, height: 80 };
+      const right1 = { id: 'r1', label: 'R1', type: 'service', x: 500, y: 40, width: 160, height: 70 };
+      const g1 = buildEdgeGeometry(right1, queue, true, { targetPortOffset: 24 });
+      assert.strictEqual(g1.points.targetFace, 'right');
+      const chevronOutline = geometry.shapeRightX(queue, 24);
+      assert.ok(
+        chevronOutline < queue.x + queue.width - 5,
+        `chevron outline at offset should recede from the rectangular edge (got ${chevronOutline}, rect edge ${queue.x + queue.width})`
+      );
+      assert.ok(
+        Math.abs(g1.points.x2 - (chevronOutline + geometry.EDGE_END_GAP)) < 0.01,
+        `chevron endpoint x=${g1.points.x2} does not sit one gap off the outline at ${chevronOutline}`
+      );
+
+      // Pill (actor): the right cap is a semicircle, so an off-centre backward
+      // connection must land on the arc, not the corner of the bounding box.
+      const actor = { id: 'a', label: 'A', type: 'actor', x: 400, y: 300, width: 120, height: 60 };
+      const svcLeft = { id: 's', label: 'S', type: 'service', x: 0, y: 300, width: 160, height: 70 };
+      const g2 = buildEdgeGeometry(svcLeft, actor, true, { targetPortOffset: 20 });
+      assert.strictEqual(g2.points.targetFace, 'left');
+      const pillOutline = geometry.shapeLeftX(actor, 20);
+      assert.ok(pillOutline > actor.x + 5, `pill outline at offset should recede from the rectangular edge (got ${pillOutline})`);
+      assert.ok(
+        Math.abs(g2.points.x2 - (pillOutline - geometry.EDGE_END_GAP)) < 0.01,
+        `pill endpoint x=${g2.points.x2} does not sit one gap off the outline at ${pillOutline}`
+      );
+
+      // Cylinder (database/storage): the domed top rises above the rectangular
+      // top edge, so an off-centre top connection follows the dome.
+      const db = { id: 'd', label: 'D', type: 'database', x: 100, y: 500, width: 180, height: 80 };
+      const above = { id: 't', label: 'T', type: 'service', x: 120, y: 300, width: 160, height: 70 };
+      const g3 = buildEdgeGeometry(above, db, false, { targetPortOffset: 40 });
+      assert.strictEqual(g3.points.targetFace, 'top');
+      const domeOutline = geometry.shapeTopY(db, 40);
+      assert.ok(domeOutline > db.y + 1, `cylinder dome at offset should sit below the corner height (got ${domeOutline})`);
+      assert.ok(
+        Math.abs(g3.points.y2 - (domeOutline - geometry.EDGE_END_GAP)) < 0.01,
+        `cylinder endpoint y=${g3.points.y2} does not sit one gap off the dome at ${domeOutline}`
+      );
     },
   ],
 

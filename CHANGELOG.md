@@ -22,3 +22,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Root tooling and CI run on Node.js 22 and 24. Node 22+ is required only to run the bundled CLI; target
   repositories are read-only and may use any runtime.
+
+### Fixed
+
+- Workbench panels: inspector visibility is driven solely by `data-open` (the × close control works reliably
+  on desktop), and the navigator docks as a column on wide viewports instead of overlaying the canvas.
+- Tabs bar: vertical mouse-wheel scrolling reaches hidden views, and a minimize toggle collapses the strip
+  to the active tab.
+- Edge endpoints now land on the drawn shape outline (queue/topic chevron, actor pill, database cylinder,
+  rounded cards) instead of the rectangular bounding box, so arrows and flow-animation particles travel to
+  the visible end of every edge.
+- Shipped examples regenerated from the current template (they previously embedded an older UI).

@@ -134,6 +134,10 @@
 
     .tabs-section::-webkit-scrollbar { display: none; }
 
+    .tabs-section[data-minimized="true"] .tab-btn:not(.active) { display: none; }
+
+    .tabs-min-toggle { flex: 0 0 auto; }
+
     .tab-btn {
       background: transparent;
       border: none;
@@ -505,26 +509,27 @@
       filter: drop-shadow(0 0 4px var(--accent-blue));
     }
 
-    /* Inspector Drawer Panel */
+    /* Inspector Drawer Panel - visibility is controlled solely by data-open */
     .inspector-drawer {
-      position: absolute;
+      position: fixed;
       top: 56px;
+      bottom: 0;
       right: calc(-1 * min(430px, 102vw));
       width: min(420px, 100vw);
-      height: calc(100vh - 56px);
-      height: calc(100dvh - 56px);
       background: var(--bg-panel);
       border-left: 1px solid var(--border-color);
       z-index: 60;
       box-shadow: -8px 0 24px rgba(0,0,0,0.3);
-      transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      pointer-events: none;
+      transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    .inspector-drawer.open {
+    .inspector-drawer[data-open="true"] {
       right: 0;
+      pointer-events: auto;
     }
 
     .inspector-header {
@@ -877,19 +882,27 @@
       top: 56px;
       bottom: 0;
       left: 0;
-      width: 240px;
-      z-index: 45;
+      width: min(86vw, 300px);
+      z-index: 60;
       display: flex;
       flex-direction: column;
       background: var(--bg-panel);
       border-right: 1px solid var(--border-color);
       overflow: hidden;
+      transform: translateX(-105%);
+      pointer-events: none;
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .workbench-panel-header { min-height: 48px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); }
-    .workbench-panel-body { flex: 1; overflow-y: auto; padding: 12px; display: grid; align-content: start; gap: 16px; }
+    .workbench-navigator[data-open="true"] {
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+    .workbench-panel-header { min-height: 48px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--border-color); }
+    .workbench-panel-body { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 16px; }
     .workbench-panel-body h2 { margin: 0 0 6px; color: var(--text-main); font-size: 12px; }
-    .workbench-panel-body section > div { color: var(--text-muted); font-size: 11px; line-height: 1.45; }
-    .workbench-search-result, .workbench-outline-item { width: 100%; margin: 0 0 6px; padding: 7px 8px; text-align: left; color: var(--text-main); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; font: inherit; }
+    .workbench-panel-body section { min-width: 0; }
+    .workbench-panel-body section > div { min-width: 0; color: var(--text-muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+    .workbench-search-result, .workbench-outline-item { width: 100%; margin: 0 0 6px; padding: 7px 8px; text-align: left; color: var(--text-main); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; font: inherit; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
     [data-focus-member="true"] .node-rect, [data-focus-member="true"].edge-path { stroke-width: 3 !important; }
     [data-focus-member="false"] { opacity: 0.12 !important; }
     body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-affected { border-style: double; }
@@ -898,37 +911,50 @@
     body[data-presentation="true"] .workbench-navigator,
     body[data-presentation="true"] .inspector-drawer,
     body[data-presentation="true"] .legend-box { display: none !important; }
-    body[data-presentation="true"] #canvas-container { margin: 0; width: 100%; height: 100vh; height: 100dvh; }
-    body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; }
+    body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }
+    body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }
     .workbench-close, .workbench-mobile-toggle { min-width: 32px; }
-    .workbench-mobile-toggle, .workbench-close { display: none; }
+    .workbench-mobile-toggle, .workbench-close { display: inline-flex; }
     .workbench-backdrop { display: none; position: fixed; inset: 56px 0 0; z-index: 54; border: 0; background: rgba(2, 6, 23, 0.66); }
     .workbench-minimap { position: absolute; left: 16px; bottom: 16px; width: 176px; height: 116px; z-index: 35; overflow: hidden; border: 1px solid var(--border-color); border-radius: 8px; background: color-mix(in srgb, var(--bg-panel) 92%, transparent); box-shadow: var(--shadow-lg); }
     .workbench-minimap svg { width: 100%; height: 100%; display: block; }
     [data-minimap-viewport] { fill: rgba(56, 189, 248, 0.12); stroke: var(--accent-blue); stroke-width: 2; vector-effect: non-scaling-stroke; }
     [data-selected="true"] { outline: 3px double var(--accent-blue); outline-offset: 3px; }
     [data-action]:focus-visible, [data-search-result]:focus-visible { outline: 3px solid var(--accent-blue); outline-offset: 2px; }
-    #canvas-container { margin-left: 240px; width: calc(100% - 560px); }
-    .viewport-controls { right: 340px; }
-    .inspector-drawer { position: fixed; right: 0; width: 320px; box-shadow: none; }
-    @media (min-width: 768px) and (max-width: 900px) {
+    #canvas-container { margin-left: 0; width: 100%; }
+    .viewport-controls { right: 20px; }
+
+    /* Wide desktop: docked panels reflow the canvas, legend and viewport controls */
+    @media (min-width: 1100px) {
+      .workbench-navigator { width: 240px; }
+      .inspector-drawer { width: 320px; }
+      body:has(.workbench-navigator[data-open="true"]) #canvas-container { margin-left: 240px; width: calc(100% - 240px); }
+      body:has(.inspector-drawer[data-open="true"]) #canvas-container { width: calc(100% - 320px); }
+      body:has(.workbench-navigator[data-open="true"]):has(.inspector-drawer[data-open="true"]) #canvas-container { width: calc(100% - 560px); }
+      body:has(.workbench-navigator[data-open="true"]) .filter-bar { left: 256px; }
+      .legend-box { left: 204px; }
+      body:has(.workbench-navigator[data-open="true"]) .legend-box { left: 444px; }
+      body:has(.inspector-drawer[data-open="true"]) .viewport-controls { right: 340px; }
+    }
+
+    @media (min-width: 768px) and (max-width: 1099px) {
       .workbench-minimap { left: 8px; width: 112px; height: 76px; }
     }
+
+    /* Below the workbench breakpoint both panels are overlay drawers */
+    @media (max-width: 1099px) {
+      body:has(.workbench-navigator[data-open="true"]) .workbench-backdrop,
+      body:has(.inspector-drawer[data-open="true"]) .workbench-backdrop { display: block; }
+      .viewport-controls { right: 8px; }
+      .legend-box { display: none; }
+    }
+
     @media (max-width: 767px) {
       header { overflow: hidden; }
       .tabs-section { display: none; }
       .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme) { display: none; }
-      .workbench-mobile-toggle, .workbench-close { display: inline-flex; }
       .filter-bar { top: 64px; left: 8px; right: 8px; overflow-x: auto; }
       .search-input { min-width: 140px; width: 140px; }
-      #canvas-container { margin-left: 0; width: 100%; }
-      .workbench-navigator, .inspector-drawer { top: 56px; bottom: 0; height: auto; width: min(86vw, 320px); z-index: 60; transition: transform 0.2s ease; }
-      .workbench-navigator { transform: translateX(-105%); }
-      .workbench-navigator[data-open="true"] { transform: translateX(0); }
-      .inspector-drawer { right: 0; transform: translateX(105%); }
-      .inspector-drawer[data-open="true"] { transform: translateX(0); }
-      body:has(.workbench-navigator[data-open="true"]) .workbench-backdrop,
-      body:has(.inspector-drawer[data-open="true"]) .workbench-backdrop { display: block; }
       .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
       .viewport-controls { right: 8px; bottom: 8px; }
       .legend-box { display: none; }
@@ -955,13 +981,14 @@
     </div>
 
     <!-- View Mode Tabs -->
-    <nav class="tabs-section" role="tablist">
+    <nav class="tabs-section" role="tablist" data-minimized="false">
       <button class="tab-btn active" role="tab" aria-selected="true" data-view="architecture" aria-label="Architecture" title="Architecture">🏛️ Architecture</button>
       <button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After">🔄 Delta</button>
       <button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow">🌊 Data Flow</button>
       <button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow">🎬 Sequence</button>
       <button class="tab-btn" role="tab" aria-selected="false" data-view="database_er" aria-label="Database ER" title="Database ER">🗄️ Data Model</button>
       <button class="tab-btn" role="tab" aria-selected="false" data-view="implementation_plan" aria-label="Implementation Plan" title="Implementation Plan">📋 Plan</button>
+      <button class="btn-icon tabs-min-toggle" data-action="tabs-minimize" aria-pressed="false" aria-label="Minimize view tabs" title="Minimize view tabs">«</button>
     </nav>
 
     <!-- Header Actions -->
@@ -1087,7 +1114,7 @@
   </div>
 
 <button class="workbench-backdrop" data-action="drawer-backdrop" aria-label="Close open panel"></button>
-<aside class="workbench-navigator" data-region="navigator" data-open="true" aria-label="Architecture navigator" aria-modal="false">
+<aside class="workbench-navigator" data-region="navigator" data-open="false" aria-label="Architecture navigator" aria-modal="false">
   <div class="workbench-panel-header"><strong>Navigator</strong><button class="btn-icon workbench-close" data-action="navigator-close" aria-label="Close navigator">✕</button></div>
   <div class="workbench-panel-body">
     <section><h2>Model outline</h2><div data-navigator-section="outline">Select a component to inspect it.</div></section>
@@ -1128,7 +1155,7 @@
   </div>
 
   <!-- Side Inspector Drawer -->
-  <aside id="inspector" class="inspector-drawer" data-region="inspector" data-open="true" data-inspector-kind="node" aria-label="Inspector" aria-modal="false">
+  <aside id="inspector" class="inspector-drawer" data-region="inspector" data-open="false" data-inspector-kind="node" aria-label="Inspector" aria-modal="false">
     <div class="inspector-header">
       <div>
         <h2 id="ins-title" style="font-size: 15px; font-weight: 700;">Component Details</h2>
@@ -1234,6 +1261,105 @@
   const EDGE_END_GAP = 10;
   const LABEL_MAX_CHARS = 20;
   const ROUTE_SAMPLES = 48;
+  // Must match nodeShape() in template.html: queue/topic chevron notch depth
+  const CHEVRON_NOTCH = 16;
+  const CYLINDER_R = 12;
+  const PILL_RX = 0.5; // actor: rx = height * 0.5 (stadium shape)
+  const WORKER_RX = 22;
+  const EXTERNAL_RX = 14;
+  const DEFAULT_RX = 10;
+
+  function nodeCornerRadius(node) {
+    const h = node.height || 0;
+    if (node.type === 'external') return Math.min(EXTERNAL_RX, h / 2);
+    if (node.type === 'worker' || node.type === 'cloud_function') return Math.min(WORKER_RX, h / 2);
+    return Math.min(DEFAULT_RX, h / 2);
+  }
+
+  // Right-face x of the *drawn* shape outline at a vertical offset from the face centre.
+  // Rectangular bounds overstate the width of chevrons, pills and rounded cards.
+  function shapeRightX(node, offset) {
+    const w = node.width || 0;
+    const h = node.height || 0;
+    const dy = Math.min(Math.abs(offset || 0), h / 2);
+    if (node.type === 'queue' || node.type === 'topic') {
+      const notch = Math.min(CHEVRON_NOTCH, w * 0.25);
+      return h > 0 ? node.x + w - notch * (dy / (h / 2)) : node.x + w;
+    }
+    if (node.type === 'actor') {
+      const r = h * PILL_RX;
+      return node.x + w - r + Math.sqrt(Math.max(0, r * r - dy * dy));
+    }
+    const rx = nodeCornerRadius(node);
+    const straight = h / 2 - rx;
+    if (dy > straight && rx > 0) {
+      const d = dy - straight;
+      return node.x + w - rx + Math.sqrt(Math.max(0, rx * rx - d * d));
+    }
+    return node.x + w;
+  }
+
+  // Left-face x of the drawn shape outline at a vertical offset from the face centre.
+  function shapeLeftX(node, offset) {
+    const h = node.height || 0;
+    const dy = Math.min(Math.abs(offset || 0), h / 2);
+    if (node.type === 'queue' || node.type === 'topic') return node.x; // flat rear edge
+    if (node.type === 'actor') {
+      const r = h * PILL_RX;
+      return node.x + r - Math.sqrt(Math.max(0, r * r - dy * dy));
+    }
+    const rx = nodeCornerRadius(node);
+    const straight = h / 2 - rx;
+    if (dy > straight && rx > 0) {
+      const d = dy - straight;
+      return node.x + rx - Math.sqrt(Math.max(0, rx * rx - d * d));
+    }
+    return node.x;
+  }
+
+  // Top/bottom-face y of the drawn shape outline at a horizontal offset from the centre.
+  // Only the cylinder (database/storage) deviates measurably from the rectangle.
+  function shapeTopY(node, offset) {
+    const w = node.width || 0;
+    if ((node.type === 'database' || node.type === 'storage') && w > 0) {
+      const dx = Math.min(Math.abs(offset || 0), w / 2);
+      const rise = 0.75 * CYLINDER_R * Math.sqrt(Math.max(0, 1 - ((2 * dx) / w) ** 2));
+      return node.y + CYLINDER_R - rise;
+    }
+    return node.y;
+  }
+
+  function shapeBottomY(node, offset) {
+    const w = node.width || 0;
+    const h = node.height || 0;
+    if ((node.type === 'database' || node.type === 'storage') && w > 0) {
+      const dx = Math.min(Math.abs(offset || 0), w / 2);
+      const rise = 0.75 * CYLINDER_R * Math.sqrt(Math.max(0, 1 - ((2 * dx) / w) ** 2));
+      return node.y + h - CYLINDER_R + rise;
+    }
+    return node.y + h;
+  }
+
+  // Clamp a horizontal port offset so top/bottom connections stay on the flat
+  // part of chevron (notched right side) and pill/rounded (corner caps) shapes.
+  function shapeHorizontalPortOffset(node, offset) {
+    const w = node.width || 0;
+    const h = node.height || 0;
+    let insetLeft = 0;
+    let insetRight = 0;
+    if (node.type === 'queue' || node.type === 'topic') {
+      insetRight = Math.min(CHEVRON_NOTCH, w * 0.25);
+    } else if (node.type === 'actor') {
+      insetLeft = h * PILL_RX;
+      insetRight = insetLeft;
+    } else {
+      insetLeft = nodeCornerRadius(node);
+      insetRight = insetLeft;
+    }
+    const minOffset = insetLeft - w / 2;
+    const maxOffset = w / 2 - insetRight;
+    return Math.max(minOffset, Math.min(maxOffset, offset || 0));
+  }
 
   function labelDisplayText(text) {
     const value = String(text || '');
@@ -1408,11 +1534,11 @@
       if (exit === 'face') {
         const x1 = source.x + source.width * 0.5;
         const x2 = target.x + target.width * 0.5;
-        const y1 = routeAbove ? source.y : source.y + source.height;
-        const y2 = routeAbove ? target.y - EDGE_END_GAP : target.y + target.height + EDGE_END_GAP;
+        const y1 = routeAbove ? shapeTopY(source, 0) : shapeBottomY(source, 0);
+        const y2 = routeAbove ? shapeTopY(target, 0) - EDGE_END_GAP : shapeBottomY(target, 0) + EDGE_END_GAP;
         const approach = Math.max(50, Math.min(220, Math.hypot(x2 - x1, y2 - y1) * 0.35));
         return {
-          points: { x1, y1, x2, y2, kind: 'skip' },
+          points: { x1, y1, x2, y2, kind: 'skip', sourceFace: routeAbove ? 'top' : 'bottom', targetFace: routeAbove ? 'top' : 'bottom' },
           controls: {
             cx1: x1,
             cy1: routeAbove ? Math.min(channelY, y1 - approach) : Math.max(channelY, y1 + approach),
@@ -1422,13 +1548,13 @@
         };
       }
 
-      const x1 = source.x + source.width;
+      const x1 = shapeRightX(source, sourcePortOffset);
       const y1 = source.y + source.height * 0.5 + sourcePortOffset;
-      const x2 = target.x - EDGE_END_GAP;
+      const x2 = shapeLeftX(target, targetPortOffset) - EDGE_END_GAP;
       const y2 = target.y + target.height * 0.5 + targetPortOffset;
       const approach = Math.max(40, Math.min(220, Math.hypot(x2 - x1, y2 - y1) * 0.35));
       return {
-        points: { x1, y1, x2, y2, kind: 'skip' },
+        points: { x1, y1, x2, y2, kind: 'skip', sourceFace: 'right', targetFace: 'left' },
         controls: { cx1: x1, cy1: channelY, cx2: x2 - approach, cy2: y2 },
       };
     }
@@ -1438,23 +1564,23 @@
 
     if (exit === 'face') {
       const x1 = source.x + source.width * 0.5;
-      const y1 = source.y + source.height;
+      const y1 = shapeBottomY(source, 0);
       const x2 = target.x + target.width * 0.5;
-      const y2 = target.y - EDGE_END_GAP;
+      const y2 = shapeTopY(target, 0) - EDGE_END_GAP;
       const approach = Math.max(40, Math.min(220, Math.hypot(x2 - x1, y2 - y1) * 0.35));
       return {
-        points: { x1, y1, x2, y2, kind: 'skip' },
+        points: { x1, y1, x2, y2, kind: 'skip', sourceFace: 'bottom', targetFace: 'top' },
         controls: { cx1: channelX, cy1: y1, cx2: x2, cy2: y2 - approach },
       };
     }
 
-    const x1 = routeLeft ? source.x : source.x + source.width;
+    const x1 = routeLeft ? shapeLeftX(source, sourcePortOffset) : shapeRightX(source, sourcePortOffset);
     const y1 = source.y + source.height * 0.5 + sourcePortOffset;
-    const x2 = routeLeft ? target.x - EDGE_END_GAP : target.x + target.width + EDGE_END_GAP;
+    const x2 = routeLeft ? shapeLeftX(target, targetPortOffset) - EDGE_END_GAP : shapeRightX(target, targetPortOffset) + EDGE_END_GAP;
     const y2 = target.y + target.height * 0.5 + targetPortOffset;
     const approach = Math.max(50, Math.min(220, Math.hypot(x2 - x1, y2 - y1) * 0.35));
     return {
-      points: { x1, y1, x2, y2, kind: 'skip' },
+      points: { x1, y1, x2, y2, kind: 'skip', sourceFace: routeLeft ? 'left' : 'right', targetFace: routeLeft ? 'left' : 'right' },
       controls: {
         cx1: routeLeft ? Math.min(channelX, x1 - approach) : Math.max(channelX, x1 + approach),
         cy1: y1,
@@ -1782,10 +1908,12 @@
 
   function calculateConnectionPoints(source, target, isLR, sourcePortOffset = 0, targetPortOffset = 0) {
     if (source.id === target.id) {
+      const selfSourceDy = -source.height * 0.2 + sourcePortOffset;
+      const selfTargetDy = source.height * 0.2 + targetPortOffset;
       return {
-        x1: source.x + source.width,
+        x1: shapeRightX(source, selfSourceDy),
         y1: source.y + source.height * 0.3 + sourcePortOffset,
-        x2: source.x + source.width + EDGE_END_GAP,
+        x2: shapeRightX(source, selfTargetDy) + EDGE_END_GAP,
         y2: source.y + source.height * 0.7 + targetPortOffset,
         kind: 'self',
         sourceFace: 'right',
@@ -1797,11 +1925,13 @@
       const sameColumn = Math.abs(target.x - source.x) < source.width * 0.5;
       if (sameColumn) {
         const downward = target.y >= source.y;
+        const sourceOff = shapeHorizontalPortOffset(source, sourcePortOffset);
+        const targetOff = shapeHorizontalPortOffset(target, targetPortOffset);
         return {
-          x1: source.x + source.width * 0.5 + sourcePortOffset,
-          y1: downward ? source.y + source.height : source.y,
-          x2: target.x + target.width * 0.5 + targetPortOffset,
-          y2: downward ? target.y - EDGE_END_GAP : target.y + target.height + EDGE_END_GAP,
+          x1: source.x + source.width * 0.5 + sourceOff,
+          y1: downward ? shapeBottomY(source, sourceOff) : shapeTopY(source, sourceOff),
+          x2: target.x + target.width * 0.5 + targetOff,
+          y2: downward ? shapeTopY(target, targetOff) - EDGE_END_GAP : shapeBottomY(target, targetOff) + EDGE_END_GAP,
           kind: 'sibling',
           sourceFace: downward ? 'bottom' : 'top',
           targetFace: downward ? 'top' : 'bottom',
@@ -1810,9 +1940,9 @@
       }
       if (target.x + target.width < source.x) {
         return {
-          x1: source.x,
+          x1: shapeLeftX(source, sourcePortOffset),
           y1: source.y + source.height * 0.5 + sourcePortOffset,
-          x2: target.x + target.width + EDGE_END_GAP,
+          x2: shapeRightX(target, targetPortOffset) + EDGE_END_GAP,
           y2: target.y + target.height * 0.5 + targetPortOffset,
           kind: 'backward',
           sourceFace: 'left',
@@ -1820,9 +1950,9 @@
         };
       }
       return {
-        x1: source.x + source.width,
+        x1: shapeRightX(source, sourcePortOffset),
         y1: source.y + source.height * 0.5 + sourcePortOffset,
-        x2: target.x - EDGE_END_GAP,
+        x2: shapeLeftX(target, targetPortOffset) - EDGE_END_GAP,
         y2: target.y + target.height * 0.5 + targetPortOffset,
         kind: 'forward',
         sourceFace: 'right',
@@ -1834,9 +1964,9 @@
     if (sameRow) {
       const rightward = target.x >= source.x;
       return {
-        x1: rightward ? source.x + source.width : source.x,
+        x1: rightward ? shapeRightX(source, sourcePortOffset) : shapeLeftX(source, sourcePortOffset),
         y1: source.y + source.height * 0.5 + sourcePortOffset,
-        x2: rightward ? target.x - EDGE_END_GAP : target.x + target.width + EDGE_END_GAP,
+        x2: rightward ? shapeLeftX(target, targetPortOffset) - EDGE_END_GAP : shapeRightX(target, targetPortOffset) + EDGE_END_GAP,
         y2: target.y + target.height * 0.5 + targetPortOffset,
         kind: 'sibling',
         sourceFace: rightward ? 'right' : 'left',
@@ -1845,21 +1975,25 @@
       };
     }
     if (target.y + target.height < source.y) {
+      const sourceOff = shapeHorizontalPortOffset(source, sourcePortOffset);
+      const targetOff = shapeHorizontalPortOffset(target, targetPortOffset);
       return {
-        x1: source.x + source.width * 0.5 + sourcePortOffset,
-        y1: source.y,
-        x2: target.x + target.width * 0.5 + targetPortOffset,
-        y2: target.y + target.height + EDGE_END_GAP,
+        x1: source.x + source.width * 0.5 + sourceOff,
+        y1: shapeTopY(source, sourceOff),
+        x2: target.x + target.width * 0.5 + targetOff,
+        y2: shapeBottomY(target, targetOff) + EDGE_END_GAP,
         kind: 'backward',
         sourceFace: 'top',
         targetFace: 'bottom',
       };
     }
+    const sourceOff = shapeHorizontalPortOffset(source, sourcePortOffset);
+    const targetOff = shapeHorizontalPortOffset(target, targetPortOffset);
     return {
-      x1: source.x + source.width * 0.5 + sourcePortOffset,
-      y1: source.y + source.height,
-      x2: target.x + target.width * 0.5 + targetPortOffset,
-      y2: target.y - EDGE_END_GAP,
+      x1: source.x + source.width * 0.5 + sourceOff,
+      y1: shapeBottomY(source, sourceOff),
+      x2: target.x + target.width * 0.5 + targetOff,
+      y2: shapeTopY(target, targetOff) - EDGE_END_GAP,
       kind: 'forward',
       sourceFace: 'bottom',
       targetFace: 'top',
@@ -1955,6 +2089,8 @@
 
   return {
     LABEL_HEIGHT,
+    EDGE_END_GAP,
+    CHEVRON_NOTCH,
     labelDisplayText,
     estimateLabelWidth,
     findLabelAnchor,
@@ -1968,6 +2104,11 @@
     calculateEdgeVisualBounds,
     cubicPointAt,
     generatePathCurve,
+    shapeRightX,
+    shapeLeftX,
+    shapeTopY,
+    shapeBottomY,
+    shapeHorizontalPortOffset,
     round,
   };
 });
@@ -3226,7 +3367,7 @@
     const LAYOUT_DATA = {
   "dimensions": {
     "minX": 60,
-    "minY": -35,
+    "minY": -33.5,
     "maxX": 1380,
     "maxY": 528,
     "canvasWidth": 1500,
@@ -3234,15 +3375,15 @@
   },
   "totalVisualBounds": {
     "minX": 60,
-    "minY": -35,
+    "minY": -33.5,
     "maxX": 1380,
     "maxY": 528,
     "left": 60,
-    "top": -35,
+    "top": -33.5,
     "right": 1380,
     "bottom": 528,
     "width": 1320,
-    "height": 563
+    "height": 561.5
   },
   "config": {
     "direction": "LR",
@@ -3984,16 +4125,18 @@
         "x1": 540,
         "y1": 144,
         "x2": 1260,
-        "y2": 134,
-        "kind": "skip"
+        "y2": 137,
+        "kind": "skip",
+        "sourceFace": "top",
+        "targetFace": "top"
       },
       "controls": {
         "cx1": 540,
         "cy1": -76,
         "cx2": 1260,
-        "cy2": -86
+        "cy2": -83
       },
-      "path": "M 540 144 C 540 -76, 1260 -86, 1260 134",
+      "path": "M 540 144 C 540 -76, 1260 -83, 1260 137",
       "segments": [
         {
           "type": "M",
@@ -4005,33 +4148,33 @@
           "cx1": 540,
           "cy1": -76,
           "cx2": 1260,
-          "cy2": -86,
+          "cy2": -83,
           "x": 1260,
-          "y": 134
+          "y": 137
         }
       ],
       "endpoint": {
         "x": 1260,
-        "y": 134
+        "y": 137
       },
       "labelX": 900,
-      "labelY": -26,
+      "labelY": -24.5,
       "labelWidth": 117,
       "labelAnchor": {
         "x": 900,
-        "y": -26
+        "y": -24.5
       },
       "labelBounds": {
         "left": 841.5,
         "right": 958.5,
-        "top": -35,
-        "bottom": -17,
+        "top": -33.5,
+        "bottom": -15.5,
         "width": 117,
         "height": 18,
         "minX": 841.5,
         "maxX": 958.5,
-        "minY": -35,
-        "maxY": -17
+        "minY": -33.5,
+        "maxY": -15.5
       },
       "terminalTangent": {
         "x": 0,
@@ -4040,39 +4183,39 @@
       },
       "markerBounds": {
         "minX": 1254.75,
-        "minY": 123.5,
+        "minY": 126.5,
         "maxX": 1265.25,
-        "maxY": 134,
+        "maxY": 137,
         "left": 1254.75,
-        "top": 123.5,
+        "top": 126.5,
         "right": 1265.25,
-        "bottom": 134,
+        "bottom": 137,
         "width": 10.5,
         "height": 10.5
       },
       "pathBounds": {
         "minX": 540,
-        "minY": -26.09,
+        "minY": -24.54,
         "maxX": 1260,
         "maxY": 144,
         "left": 540,
-        "top": -26.09,
+        "top": -24.54,
         "right": 1260,
         "bottom": 144,
         "width": 720,
-        "height": 170.09
+        "height": 168.54
       },
       "totalVisualBounds": {
         "minX": 540,
-        "minY": -35,
+        "minY": -33.5,
         "maxX": 1265.25,
         "maxY": 144,
         "left": 540,
-        "top": -35,
+        "top": -33.5,
         "right": 1265.25,
         "bottom": 144,
         "width": 725.25,
-        "height": 179
+        "height": 177.5
       }
     },
     {
@@ -4091,16 +4234,18 @@
         "x1": 540,
         "y1": 144,
         "x2": 1260,
-        "y2": 264,
-        "kind": "skip"
+        "y2": 267,
+        "kind": "skip",
+        "sourceFace": "top",
+        "targetFace": "top"
       },
       "controls": {
         "cx1": 540,
         "cy1": -76,
         "cx2": 1260,
-        "cy2": 44
+        "cy2": 47
       },
-      "path": "M 540 144 C 540 -76, 1260 44, 1260 264",
+      "path": "M 540 144 C 540 -76, 1260 47, 1260 267",
       "segments": [
         {
           "type": "M",
@@ -4112,33 +4257,33 @@
           "cx1": 540,
           "cy1": -76,
           "cx2": 1260,
-          "cy2": 44,
+          "cy2": 47,
           "x": 1260,
-          "y": 264
+          "y": 267
         }
       ],
       "endpoint": {
         "x": 1260,
-        "y": 264
+        "y": 267
       },
       "labelX": 900,
-      "labelY": 39,
+      "labelY": 40.5,
       "labelWidth": 104,
       "labelAnchor": {
         "x": 900,
-        "y": 39
+        "y": 40.5
       },
       "labelBounds": {
         "left": 848,
         "right": 952,
-        "top": 30,
-        "bottom": 48,
+        "top": 31.5,
+        "bottom": 49.5,
         "width": 104,
         "height": 18,
         "minX": 848,
         "maxX": 952,
-        "minY": 30,
-        "maxY": 48
+        "minY": 31.5,
+        "maxY": 49.5
       },
       "terminalTangent": {
         "x": 0,
@@ -4147,39 +4292,39 @@
       },
       "markerBounds": {
         "minX": 1254.75,
-        "minY": 253.5,
+        "minY": 256.5,
         "maxX": 1265.25,
-        "maxY": 264,
+        "maxY": 267,
         "left": 1254.75,
-        "top": 253.5,
+        "top": 256.5,
         "right": 1265.25,
-        "bottom": 264,
+        "bottom": 267,
         "width": 10.5,
         "height": 10.5
       },
       "pathBounds": {
         "minX": 540,
-        "minY": 27.28,
+        "minY": 28.21,
         "maxX": 1260,
-        "maxY": 264,
+        "maxY": 267,
         "left": 540,
-        "top": 27.28,
+        "top": 28.21,
         "right": 1260,
-        "bottom": 264,
+        "bottom": 267,
         "width": 720,
-        "height": 236.72
+        "height": 238.79
       },
       "totalVisualBounds": {
         "minX": 540,
-        "minY": 27.28,
+        "minY": 28.21,
         "maxX": 1265.25,
-        "maxY": 264,
+        "maxY": 267,
         "left": 540,
-        "top": 27.28,
+        "top": 28.21,
         "right": 1265.25,
-        "bottom": 264,
+        "bottom": 267,
         "width": 725.25,
-        "height": 236.72
+        "height": 238.79
       }
     },
     {
@@ -4816,8 +4961,21 @@
       return parent;
     }
 
+    const PANEL_BREAKPOINT = 1100;
     let activeDrawer = null;
     let drawerReturnFocus = null;
+    let panelReflowTimer = null;
+
+    function isOverlayPanels() {
+      return window.innerWidth < PANEL_BREAKPOINT;
+    }
+
+    function refreshViewportForPanelChange() {
+      window.clearTimeout(panelReflowTimer);
+      panelReflowTimer = window.setTimeout(() => {
+        updateMinimapViewport();
+      }, 220);
+    }
 
     function drawerTabbables(region) {
       return Array.from(region.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')).filter(item => {
@@ -4830,7 +4988,9 @@
     function setDrawerOpen(kind, open, opener) {
       const region = document.querySelector(`[data-region="${kind}"]`);
       if (!region) return;
-      if (open && window.innerWidth < 768) {
+      const overlay = isOverlayPanels();
+      const wasOpen = region.getAttribute('data-open') === 'true';
+      if (open && overlay) {
         const otherKind = kind === 'navigator' ? 'inspector' : 'navigator';
         const other = document.querySelector(`[data-region="${otherKind}"]`);
         if (other) other.setAttribute('data-open', 'false');
@@ -4838,16 +4998,23 @@
         drawerReturnFocus = opener || document.activeElement;
       }
       region.setAttribute('data-open', open ? 'true' : 'false');
-      if (kind === 'inspector') region.classList.toggle('open', open);
-      if (open && window.innerWidth < 768) {
+      region.setAttribute('aria-modal', overlay && open ? 'true' : 'false');
+      if (open && overlay) {
         window.requestAnimationFrame(() => drawerTabbables(region)[0]?.focus());
       }
       if (!open && activeDrawer === kind) {
         const target = drawerReturnFocus;
         activeDrawer = null;
         drawerReturnFocus = null;
-        window.requestAnimationFrame(() => target?.focus());
+        if (overlay) window.requestAnimationFrame(() => target?.focus());
       }
+      if (wasOpen !== open) refreshViewportForPanelChange();
+    }
+
+    function toggleDrawer(kind, opener) {
+      const region = document.querySelector(`[data-region="${kind}"]`);
+      if (!region) return;
+      setDrawerOpen(kind, region.getAttribute('data-open') !== 'true', opener);
     }
 
     function closeActiveDrawer() {
@@ -4855,7 +5022,7 @@
     }
 
     function trapDrawerFocus(event) {
-      if (event.key !== 'Tab' || window.innerWidth >= 768 || !activeDrawer) return;
+      if (event.key !== 'Tab' || !isOverlayPanels() || !activeDrawer) return;
       const region = document.querySelector(`[data-region="${activeDrawer}"]`);
       const items = drawerTabbables(region);
       if (items.length === 0) return;
@@ -5425,19 +5592,24 @@
       });
     }
 
-    function syncResponsiveRegions() {
-      const mobile = window.innerWidth < 768;
+    let lastOverlayMode = null;
+    function syncResponsiveRegions(force) {
+      const overlay = isOverlayPanels();
       const navigator = document.querySelector('[data-region="navigator"]');
       const inspectorRegion = document.querySelector('[data-region="inspector"]');
-      navigator.setAttribute('data-open', mobile ? 'false' : 'true');
-      inspectorRegion.setAttribute('data-open', mobile ? 'false' : 'true');
-      navigator.setAttribute('aria-modal', mobile ? 'true' : 'false');
-      inspectorRegion.setAttribute('aria-modal', mobile ? 'true' : 'false');
+      navigator.setAttribute('aria-modal', overlay ? 'true' : 'false');
+      inspectorRegion.setAttribute('aria-modal', overlay && inspectorRegion.getAttribute('data-open') === 'true' ? 'true' : 'false');
+      if (!force && overlay === lastOverlayMode) return;
+      lastOverlayMode = overlay;
+      activeDrawer = null;
+      drawerReturnFocus = null;
+      navigator.setAttribute('data-open', overlay ? 'false' : 'true');
+      inspectorRegion.setAttribute('data-open', 'false');
     }
 
     // Initialize application
     function init() {
-      syncResponsiveRegions();
+      syncResponsiveRegions(true);
       restorePersistedLayout();
       if (ARCH_SPEC.meta) {
         document.getElementById('doc-title').textContent = ARCH_SPEC.meta.title || 'Architecture Visualization';
@@ -5498,6 +5670,30 @@
         }
       });
 
+      // Tabs bar: vertical mouse wheel scrolls the horizontal tab strip
+      const tabsSection = document.querySelector('.tabs-section');
+      if (tabsSection) {
+        tabsSection.addEventListener('wheel', event => {
+          if (tabsSection.scrollWidth <= tabsSection.clientWidth) return;
+          if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+          event.preventDefault();
+          tabsSection.scrollLeft += event.deltaY;
+        }, { passive: false });
+
+        // Tabs bar: minimize toggle collapses the strip to the active view only
+        const tabsMinToggle = tabsSection.querySelector('[data-action="tabs-minimize"]');
+        if (tabsMinToggle) {
+          tabsMinToggle.addEventListener('click', () => {
+            const minimized = tabsSection.getAttribute('data-minimized') === 'true';
+            tabsSection.setAttribute('data-minimized', minimized ? 'false' : 'true');
+            tabsMinToggle.setAttribute('aria-pressed', minimized ? 'false' : 'true');
+            tabsMinToggle.setAttribute('aria-label', minimized ? 'Minimize view tabs' : 'Expand view tabs');
+            tabsMinToggle.setAttribute('title', minimized ? 'Minimize view tabs' : 'Expand view tabs');
+            tabsMinToggle.textContent = minimized ? '«' : '»';
+          });
+        }
+      }
+
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.tab-btn').forEach(b => {
@@ -5545,10 +5741,10 @@
       document.getElementById('btn-animate').addEventListener('click', toggleFlowAnimation);
       const navigatorToggle = document.querySelector('[data-action="navigator-toggle"]');
       const inspectorToggle = document.querySelector('[data-action="inspector-toggle"]');
-      navigatorToggle.addEventListener('click', () => setDrawerOpen('navigator', true, navigatorToggle));
-      inspectorToggle.addEventListener('click', () => setDrawerOpen('inspector', true, inspectorToggle));
+      navigatorToggle.addEventListener('click', () => toggleDrawer('navigator', navigatorToggle));
+      inspectorToggle.addEventListener('click', () => toggleDrawer('inspector', inspectorToggle));
       document.querySelector('[data-action="navigator-close"]').addEventListener('click', () => setDrawerOpen('navigator', false));
-      document.querySelector('[data-action="inspector-close"]').addEventListener('click', () => setDrawerOpen('inspector', false));
+      document.querySelector('[data-action="inspector-close"]').addEventListener('click', closeInspector);
       document.querySelector('[data-action="drawer-backdrop"]').addEventListener('click', closeActiveDrawer);
       document.querySelector('[data-region="minimap"]').addEventListener('mousedown', event => event.stopPropagation());
       document.querySelector('[data-region="minimap"]').addEventListener('click', handleMinimapClick);
@@ -5579,7 +5775,6 @@
         });
       });
 
-      document.getElementById('ins-close').addEventListener('click', closeInspector);
       document.getElementById('ins-btn-highlight').addEventListener('click', () => {
         if (state.selectedNodeId) {
           state.highlightedChain = state.highlightedChain === state.selectedNodeId ? null : state.selectedNodeId;
@@ -6100,7 +6295,6 @@
       const highlightBtn = document.getElementById('ins-btn-highlight');
       highlightBtn.textContent = state.highlightedChain === nodeId ? '✕ Clear Dependency Chain' : '🔗 Highlight Dependency Chain';
 
-      inspector.classList.add('open');
       inspector.setAttribute('data-open', 'true');
       inspector.setAttribute('data-inspector-kind', 'node');
     }
@@ -6115,10 +6309,10 @@
     }
 
     function closeInspector() {
-      if (window.innerWidth < 768) inspector.setAttribute('data-open', 'false');
+      setDrawerOpen('inspector', false);
       document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
-      inspector.classList.remove('open');
       state.selectedNodeId = null;
+      state.selectedEdgeId = null;
       state.highlightedChain = null;
       document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
       applyVisibility();
