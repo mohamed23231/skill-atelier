@@ -3,6 +3,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.nyc_output']);
@@ -22,6 +23,26 @@ const SCAN_EXTENSIONS = new Set([
   '.txt'
 ]);
 const SELF = path.relative(ROOT, __filename);
+
+// Paths git already ignores are not part of the repository, so they are not
+// this checker's business. Without this, a tool's local state directory --
+// delegate-fleet's .delegate-fleet/, for example -- fails the personal-path
+// rule on the machine that created it even though it can never be committed.
+const IGNORED = (() => {
+  const set = new Set();
+  const res = spawnSync('git', ['-C', ROOT, 'status', '--porcelain', '--ignored=matching', '-z', '-uall'], {
+    encoding: 'utf8'
+  });
+  if (res.status !== 0 || !res.stdout) return set;
+  for (const record of res.stdout.split('\0')) {
+    if (record.startsWith('!! ')) set.add(record.slice(3).replace(/\/$/, ''));
+  }
+  return set;
+})();
+
+function isIgnored(full) {
+  return IGNORED.has(path.relative(ROOT, full));
+}
 
 const errors = [];
 const warnings = [];
@@ -48,6 +69,7 @@ function walk(dir, onFile, onDir) {
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (isIgnored(full)) continue;
       if (SKIP_DIRS.has(entry.name)) {
         if (entry.name === 'node_modules') {
           warn(`node_modules present at ${path.relative(ROOT, full)} (not committed; ignored)`);
@@ -57,6 +79,7 @@ function walk(dir, onFile, onDir) {
       if (onDir) onDir(full);
       walk(full, onFile, onDir);
     } else if (entry.isFile()) {
+      if (isIgnored(full)) continue;
       onFile(full);
     }
   }
