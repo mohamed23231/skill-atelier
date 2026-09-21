@@ -66,8 +66,12 @@ violated scope first.
 
 ## blocked
 
-`blocked = status !== "completed" || findings.length > 0`. Mechanical, so an orchestrator can gate on
-it. It means "a human decision is required", never "this is bad work".
+`blocked = status !== "completed" || findings.length > 0 || repository.observed === false`.
+Mechanical, so an orchestrator can gate on it. It means "a human decision is required", never
+"this is bad work".
+
+The third term matters: when git could not be read, scope, noop and commit detection were all
+disabled. Such a run has not been checked at all, so it is never reported as clean.
 
 ## repository.observed
 

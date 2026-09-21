@@ -31,7 +31,12 @@ module.exports = {
   probe(help) {
     return {
       edit: /--always-approve/.test(help) ? 'verified' : 'unknown',
-      readOnly: /--sandbox/.test(help) ? 'verified' : 'unsupported',
+      // build() emits `--sandbox read-only`. grok's help documents --sandbox
+      // as taking a <PROFILE> without naming the profiles, so a bare flag
+      // match proves nothing: unknown refuses the run without claiming the
+      // backend cannot do it.
+      readOnly: /--sandbox[\s\S]{0,300}?\bread-only\b/.test(help) ? 'verified'
+        : /--sandbox/.test(help) ? 'unknown' : 'unsupported',
       resumeById: /--resume/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: /--effort/.test(help) ? 'verified' : 'unsupported',

@@ -28,7 +28,9 @@ module.exports = {
   // Local verification: what the installed version's --help actually offers.
   probe(help) {
     return {
-      edit: /--permission-mode/.test(help) ? 'verified' : 'unknown',
+      // build() emits `--permission-mode acceptEdits`, so that mode must exist.
+      edit: /--permission-mode[\s\S]{0,400}?\bacceptEdits\b/.test(help) ? 'verified'
+        : /--permission-mode/.test(help) ? 'unknown' : 'unsupported',
       readOnly: /--permission-mode[\s\S]{0,400}?\bplan\b/.test(help) ? 'verified' : 'unsupported',
       resumeById: /--resume/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',

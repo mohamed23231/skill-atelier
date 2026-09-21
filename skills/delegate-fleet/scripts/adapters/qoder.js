@@ -19,7 +19,9 @@ module.exports = {
   },
   probe(help) {
     return {
-      edit: /--permission-mode/.test(help) ? 'verified' : 'unknown',
+      // build() emits `--permission-mode auto`, so that mode must exist.
+      edit: /--permission-mode[\s\S]{0,300}?\bauto\b/.test(help) ? 'verified'
+        : /--permission-mode/.test(help) ? 'unknown' : 'unsupported',
       readOnly: /--permission-mode[\s\S]{0,200}?plan/.test(help) ? 'verified' : 'unsupported',
       resumeById: /--resume/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',

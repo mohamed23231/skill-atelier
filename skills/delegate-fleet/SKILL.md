@@ -55,6 +55,11 @@ node <skill>/scripts/fleet.js doctor       # verify what the installed CLIs real
 documented claim to `verified` and **demotes** one that turns out to be wrong. Run it once per
 machine, and again after any CLI upgrade.
 
+**`verified` only ever comes from `doctor`.** An adapter file records what its author proved on
+their machine, so until `doctor` has run here every such claim reads as `documented`. A declaration
+cannot verify itself, and evidence is tied to one executable: change a backend's `cli` and the old
+record is discarded.
+
 A backend that is not installed here is `unavailable`, never unsupported. Say that plainly instead of
 silently substituting a different worker.
 

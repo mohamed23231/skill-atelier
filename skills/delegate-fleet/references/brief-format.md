@@ -40,6 +40,7 @@ Write briefs to `.delegate-fleet/briefs/<slug>.md` and keep `.delegate-fleet/` o
 - missing `# Objective`, `## Scope`, or `## Acceptance criteria`
 - under 200 characters
 - no backtick-quoted paths under `## Scope`
+- an empty `## Acceptance criteria` — a heading with nothing under it is no oracle at all
 
 **Warnings — dispatch, but say so:** no `## Context`, `## Non-goals` or `## Verification`; an
 unfilled placeholder (`TBD`, `TODO`, `<like this>`); a single acceptance criterion.
@@ -59,6 +60,11 @@ A rule you can forget to write is not a rule. This is why the brief lint checks 
 whether you remembered to paste boilerplate.
 
 ## Scope is load-bearing
+
+Use `##` for it. Only `#` and `##` are read as section headings, so a nested `### Scope` earlier in
+the brief cannot shadow the real one — but it also will not be read as scope, so do not put paths
+there. Everything under `## Scope` is treated as WRITABLE: list files the worker should read, but
+not write, under `## Context` instead.
 
 The backtick-quoted paths under `## Scope` are exactly what `scope_violation` is computed from. A
 path matches if it equals a declared entry or sits under a declared directory — nothing else. Write

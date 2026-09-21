@@ -27,9 +27,15 @@ const SECTIONS = {
 /** Unfilled template markers that mean the brief was never actually written. */
 const PLACEHOLDERS = [/\bTBD\b/i, /\bTODO\b/, /<[a-z][a-z ._-]{2,}>/i, /\bFIXME\b/];
 
-/** Pull the body of one `## Heading` section. */
+/**
+ * Pull the body of one `## Heading` section.
+ *
+ * Only `#` and `##` are section headings. Matching `###` too would let a
+ * nested `### Scope` earlier in the brief shadow the real `## Scope`, and the
+ * relay would then reconcile the run against the wrong list of paths.
+ */
 function sectionBody(markdown, heading) {
-  const re = new RegExp(`^#{1,3}\\s+${heading}\\b[^\\n]*\\n([\\s\\S]*?)(?=^#{1,3}\\s+|\\s*$(?![\\s\\S]))`, 'im');
+  const re = new RegExp(`^##\\s+${heading}\\b[^\\n]*\\n([\\s\\S]*?)(?=^#{1,2}\\s+|\\s*$(?![\\s\\S]))`, 'im');
   const m = markdown.match(re);
   return m ? m[1] : '';
 }
@@ -81,7 +87,12 @@ function lint(markdown) {
   }
 
   const acceptance = sectionBody(text, 'Acceptance criteria').trim();
-  if (acceptance && acceptance.split('\n').filter((l) => l.trim()).length < 2) {
+  const acceptanceLines = acceptance ? acceptance.split('\n').filter((l) => l.trim()).length : 0;
+  if (acceptanceLines === 0) {
+    // A heading with nothing under it is not acceptance criteria. Without one
+    // there is no oracle, so there is nothing to verify the run against.
+    errors.push('"## Acceptance criteria" is empty — there would be nothing to verify the run against');
+  } else if (acceptanceLines < 2) {
     warnings.push('only one acceptance criterion — most slices need more than one to be checkable');
   }
 

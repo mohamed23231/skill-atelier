@@ -22,7 +22,10 @@ module.exports = {
   probe(help) {
     return {
       edit: /--auto-approve/.test(help) ? 'verified' : 'unknown',
-      readOnly: /--plan\b/.test(help) ? 'verified' : 'unsupported',
+      // build() emits `--auto-approve false --plan`; one without the other
+      // is not an invocation this adapter can make.
+      readOnly: /--plan\b/.test(help) && /--auto-approve/.test(help) ? 'verified'
+        : /--plan\b/.test(help) ? 'unknown' : 'unsupported',
       resumeById: 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',

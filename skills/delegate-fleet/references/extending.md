@@ -32,6 +32,8 @@ module.exports = {
 
   promptDelivery: 'argv',            // 'argv' | 'stdin' | 'file'
   helpArgs: ['--help'],              // where doctor should look; e.g. ['run','--help']
+  evidenceArgs: [['agent', 'list']], // optional: extra probes whose output joins the evidence,
+                                     // for facts --help cannot show (does agent `plan` exist?)
 
   // Build the argv. Explicit and readable — no hidden magic.
   build(req) {
@@ -61,14 +63,24 @@ module.exports = {
 
 1. **Never claim a capability you have not checked.** `unknown` is a perfectly good answer, and the
    framework will refuse to lean on it for anything safety-critical. A wrong `verified` is a bug.
+   Declaring `verified` buys you nothing anyway: it is downgraded to `documented` until `doctor`
+   has run on the machine in question.
 2. **If read-only cannot be enforced by the CLI, declare it `unsupported`.** Prompt wording is not a
-   read-only guarantee. The framework refuses `--read-only` rather than pretend.
-3. **Point `helpArgs` at the right help.** Flags often live on a subcommand (`codex exec --help`,
+   read-only guarantee. The framework refuses `--read-only` rather than pretend. It also checks
+   this mechanically: your read-only argv must contain an argument your edit argv does not. Merely
+   omitting `--yes` and hoping the default is safe will be clamped to `unsupported`.
+3. **Only claim what `build()` reads.** Declaring `modelSelection` while `build()` ignores
+   `req.model` is refused at load time, and a `probe()` that matches a flag `build()` never passes
+   is clamped away. A capability is a promise about the invocation, not about the help text.
+4. **Match the exact token `build()` emits.** If `build()` passes `--sandbox read-only`, probe for
+   the profile, not for `--sandbox`. If the help documents the flag but never names the value, say
+   `unknown` — that is honest, where `unsupported` would be a claim you cannot make either.
+5. **Point `helpArgs` at the right help.** Flags often live on a subcommand (`codex exec --help`,
    `opencode run --help`, `oz agent run --help`). Pointing at the wrong one makes `doctor`
-   wrongly demote a real capability.
-4. **Force off anything that commits.** The worker never owns the commit.
-5. **Never build a shell string.** Return an argv array; the relay spawns without a shell.
-6. **Keep `build()` readable.** Someone must be able to predict the command by reading it.
+   wrongly demote a real capability. Use `evidenceArgs` for anything `--help` cannot show.
+6. **Force off anything that commits.** The worker never owns the commit.
+7. **Never build a shell string.** Return an argv array; the relay spawns without a shell.
+8. **Keep `build()` readable.** Someone must be able to predict the command by reading it.
 
 ## Verify it
 

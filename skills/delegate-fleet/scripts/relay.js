@@ -154,7 +154,21 @@ async function main() {
     }), opts);
   }
 
-  const capCheck = options.validateAgainstCapabilities(opts, view);
+  const capWarnings = [];
+  // Defaults must be folded in BEFORE the capability check, or a model or
+  // effort supplied by .delegate-fleet/config.json reaches the invocation
+  // without ever being checked against what this backend can honour.
+  const effective = options.applyDefaults(opts, view);
+  if (view.staleVerification) {
+    // Not fatal: the merged view already dropped the record, so anything
+    // safety-critical will fail the gate below on its own. Say why.
+    capWarnings.push(
+      `local verification for "${adapter.id}" was recorded for ${view.staleVerification.recordedFor} ` +
+      `but the CLI now resolves to ${view.staleVerification.nowResolvesTo}; that evidence was discarded. ` +
+      `Run: node scripts/fleet.js doctor --backend ${adapter.id}`
+    );
+  }
+  const capCheck = options.validateAgainstCapabilities(effective, view);
   if (capCheck.errors.length) invalid('the request asks for capabilities this worker does not have here', capCheck.errors);
 
   const briefPath = path.resolve(opts.brief);
@@ -163,7 +177,6 @@ async function main() {
   const lint = briefLib.lint(briefText);
   if (!lint.ok) invalid('the brief failed the quality gate before any worker was paid', lint.errors);
 
-  const effective = options.applyDefaults(opts, view);
   const prompt = briefLib.buildPrompt({ briefText, mode: effective.mode, scope: lint.scope });
   const oversize = briefLib.promptTooLarge(prompt);
   if (oversize) invalid(`brief renders to ${oversize} bytes, over the ${briefLib.MAX_PROMPT_BYTES}-byte argv budget; split the slice`);
@@ -182,7 +195,7 @@ async function main() {
   });
   const stdinPayload = delivery === 'stdin' ? prompt : null;
   const command = view.cliPath;
-  const warnings = [...capCheck.warnings, ...lint.warnings];
+  const warnings = [...capWarnings, ...capCheck.warnings, ...lint.warnings];
 
   if (opts.dryRun) {
     const plan = {
@@ -217,10 +230,11 @@ async function main() {
   let scopeReport = null;
   if (observed) {
     diff = repo.diffSnapshots(before, after);
-    // The relay's own artifacts must never read as worker changes.
-    const stateRel = `${environment.STATE_DIR}/`;
-    const changed = repo.changedPaths(diff).filter((p) => !repo.normalize(p).startsWith(stateRel));
-    scopeReport = repo.reconcileScope(changed, lint.scope);
+    // No path is filtered out here. The relay's own artifacts are written
+    // after the post-run snapshot, so they cannot appear in this diff -- and
+    // excluding .delegate-fleet/ wholesale would hide a worker planting an
+    // adapter that the NEXT run loads with require().
+    scopeReport = repo.reconcileScope(repo.changedPaths(diff), lint.scope);
   }
 
   const findings = contract.deriveFindings({ mode: effective.mode, diff, scopeReport });

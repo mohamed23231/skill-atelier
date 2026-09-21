@@ -23,6 +23,9 @@ module.exports = {
     if (req.model) args.push('--model', req.model);
     return { args };
   },
+  // build() invokes `crush run`, so the flags to verify against live on the
+  // subcommand's help, not the top-level one.
+  helpArgs: ['run', '--help'],
   probe(help) {
     return {
       edit: /--yolo/.test(help) ? 'verified' : 'unknown',

@@ -51,6 +51,58 @@ A rewrite around a capability-based core. The previous cost-tier model was remov
 
 ### Fixed
 
+Found by adversarial review of this rewrite, before release:
+
+- **`verified` could be self-asserted.** An adapter declaring a capability as `verified` satisfied
+  the safety gate with no local evidence at all, so `--read-only` dispatched on eight backends
+  without `doctor` ever running. A declared `verified` is now downgraded to `documented` until
+  local evidence exists, so `verified` can only come from `doctor`.
+- **A probe could promote a capability the invocation drops.** `probe()` reads help text, which
+  says which flags *exist*, not which ones the adapter passes. Probe output is now clamped to what
+  `build()` actually reads, which closes the same "parsed then silently discarded" class of defect
+  on `copilot`, `crush`, `kimi`, `warp`, `vibe` and `zcode`.
+- **Read-only that only omitted a write flag.** An adapter that dropped its `--yes` and trusted the
+  CLI's default was accepted as read-only. A read-only invocation must now carry an argument the
+  edit invocation does not, checked mechanically.
+- **Probes that matched a flag rather than the value `build()` emits.** Tightened for `claude`
+  (`acceptEdits`), `qwen` and `qoder` (the write mode), `grok` (`--sandbox read-only`), `cline`
+  (`--plan` *and* `--auto-approve`) and `opencode` (the `plan` agent must exist, now verified via
+  `evidenceArgs`). Where a flag exists but the help never names the value, the state is `unknown`
+  rather than a false `unsupported`.
+- **Verification survived a change of executable.** Evidence was keyed by backend id, so pointing
+  `cli` elsewhere kept applying the old record. Records now carry the path they were taken from and
+  are discarded when it no longer matches; `doctor` also deletes a record when re-verification
+  fails instead of leaving stale evidence behind.
+- **Worker writes under `.delegate-fleet/` were filtered out of scope reconciliation.** A worker
+  could plant `.delegate-fleet/adapters/*.js` with no finding raised, and the next run would
+  `require()` it. Nothing is filtered from the diff any more.
+- **Config defaults bypassed the capability check.** `model` or `effort` from
+  `.delegate-fleet/config.json` was applied after validation and reached the invocation unchecked.
+- **An unobserved repository reported as clean.** When git could not be read, `blocked` was
+  `false` although scope, noop and commit detection were all disabled.
+- **A first commit in a repository with an unborn HEAD was not detected** as a worker commit.
+- **Same-size rewrites of files over 16 MiB were invisible**, because the hash fell back to size
+  and mtime. Files are now hashed in bounded chunks regardless of size, and a submodule is
+  addressed by its own HEAD and status instead of a constant.
+- **A deny marker outranked a real process failure**, so a crash that printed "permission denied"
+  was reported as a refusal. Deny markers now classify a cooperative exit 0 only.
+- **A read-only violation omitted rename endpoints**, naming no paths at all for a pure rename.
+- **A scope of `.` marked every change out of scope.**
+- **A nested `### Scope` shadowed the real `## Scope`**, reconciling the run against the wrong
+  paths. Only `#` and `##` are section headings now.
+- **An empty `## Acceptance criteria` passed the brief lint**, dispatching with no oracle.
+- **A malformed `config.json` was treated as absent**, so a mistyped config silently became
+  defaults. Invalid JSON, a non-object root and a non-object `workers` are all errors now.
+- **`doctor` recorded capabilities from a failed `--help`**, treating crash output as evidence.
+- **`fleet.js --backend` with no value silently widened a targeted run to the whole fleet.**
+- **Captured worker output was capped in UTF-16 code units and decoded per chunk**, so the cap
+  varied by alphabet and any multi-byte character crossing a chunk boundary was corrupted.
+- **An unreadable `.delegate-fleet/adapters/` was treated as absent**, silently ignoring a
+  project's adapter override.
+- **`opencode` was invoked without `--dir`.** It does not take the spawned process cwd as its
+  project root, so it resolved relative paths against its own last-used project — reading and
+  writing a repository the relay was not observing.
+
 Defects carried from 1.0.0, each now covered by a test:
 
 - `fleet.json` `cli` override was ignored; every adapter hardcoded its command name.

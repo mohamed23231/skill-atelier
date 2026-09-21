@@ -12,24 +12,44 @@
  */
 
 const { spawn, spawnSync } = require('node:child_process');
+const { StringDecoder } = require('node:string_decoder');
 
 const OUTPUT_CAP_BYTES = 8 * 1024 * 1024;
 const SIGKILL_GRACE_MS = 5000;
 const IS_WINDOWS = process.platform === 'win32';
 
 /** Bounded, append-only output buffer. Keeps the head and notes the loss. */
+/**
+ * Byte-capped capture of a child stream.
+ *
+ * Buffers are kept as bytes and decoded once, at the end. Decoding each chunk
+ * on arrival corrupts any multi-byte character that straddles a chunk
+ * boundary, and measuring the cap in UTF-16 code units makes a "byte cap" a
+ * different size for every alphabet.
+ */
 function makeSink(cap = OUTPUT_CAP_BYTES) {
-  let text = '';
+  const chunks = [];
+  let bytes = 0;
   let dropped = 0;
   return {
     push(chunk) {
-      const s = chunk.toString();
-      if (text.length >= cap) { dropped += s.length; return; }
-      const room = cap - text.length;
-      text += s.length <= room ? s : s.slice(0, room);
-      if (s.length > room) dropped += s.length - room;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8');
+      if (bytes >= cap) { dropped += buf.length; return; }
+      const room = cap - bytes;
+      if (buf.length <= room) {
+        chunks.push(buf);
+        bytes += buf.length;
+        return;
+      }
+      chunks.push(buf.subarray(0, room));
+      bytes += room;
+      dropped += buf.length - room;
     },
     get value() {
+      // One contiguous decode, so every interior boundary is safe. Only a
+      // character cut by the cap itself can be incomplete, and that sits at
+      // the very end where the truncation notice explains it.
+      const text = new StringDecoder('utf8').write(Buffer.concat(chunks));
       return dropped > 0 ? `${text}\n[relay: ${dropped} further bytes dropped at the ${cap}-byte capture cap]` : text;
     },
     get truncated() { return dropped > 0; },

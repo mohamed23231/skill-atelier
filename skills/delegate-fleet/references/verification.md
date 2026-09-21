@@ -46,5 +46,15 @@ To have a diff reviewed by another model, dispatch a **read-only** run on a **di
 than the one that wrote it, with a brief that points at the diff. Never ask a worker to review its
 own output, and never let a review run have write access.
 
+`verified` is produced by `doctor` and by nothing else. An adapter that declares a capability as
+`verified` is reporting its author's machine, so the merged view downgrades it to `documented`
+until local evidence exists. A verification record is also tied to the executable it was taken
+from: if `cli` now resolves elsewhere, the record is dropped and the run says so.
+
+A probe cannot invent support either. Help text says which flags *exist*, not which ones the
+adapter passes, so probe output is clamped to what `build()` actually reads — and read-only is
+clamped away entirely unless the read-only invocation carries an argument the edit invocation does
+not. Omitting a write flag and trusting the CLI's default is not an enforcement.
+
 Note that `--read-only` is only accepted when that backend's read-only is `verified` on this
 machine. That is the point: a review run that can write is not a review run.

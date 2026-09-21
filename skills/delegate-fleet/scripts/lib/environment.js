@@ -16,7 +16,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { probeCommand } = require('./exec.js');
-const { AVAILABILITY, applyLocalEvidence, CAPABILITY_NAMES } = require('./capabilities.js');
+const { AVAILABILITY, applyLocalEvidence, clampToExpressible, CAPABILITY_NAMES } = require('./capabilities.js');
 
 const STATE_DIR = '.delegate-fleet';
 const CONFIG_FILE = 'config.json';
@@ -60,8 +60,23 @@ function resolveCli(cli, env = process.env) {
 
 function stateDir(repoRoot) { return path.join(repoRoot, STATE_DIR); }
 
+/**
+ * Read a JSON file. Distinguishes "absent" from "malformed": a config the user
+ * meant to apply but mistyped must be an error, not a silent fall-back to
+ * defaults.
+ */
 function readJson(file) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return { present: false, value: null, error: null };
+  }
+  try {
+    return { present: true, value: JSON.parse(text), error: null };
+  } catch (err) {
+    return { present: true, value: null, error: err && err.message ? err.message : String(err) };
+  }
 }
 
 /**
@@ -69,10 +84,20 @@ function readJson(file) {
  * dispatch, and a test proves each one reaches the backend invocation.
  */
 function loadConfig(repoRoot) {
-  const raw = readJson(path.join(stateDir(repoRoot), CONFIG_FILE)) || {};
+  const file = path.join(stateDir(repoRoot), CONFIG_FILE);
+  const read = readJson(file);
   const workers = {};
   const errors = [];
-  for (const [id, cfg] of Object.entries(raw.workers || {})) {
+  if (read.error) return { workers, errors: [`${CONFIG_FILE}: not valid JSON (${read.error})`] };
+  const raw = read.value;
+  if (read.present && (raw === null || typeof raw !== 'object' || Array.isArray(raw))) {
+    return { workers, errors: [`${CONFIG_FILE}: expected a JSON object at the top level`] };
+  }
+  const rawWorkers = raw && raw.workers !== undefined ? raw.workers : {};
+  if (rawWorkers === null || typeof rawWorkers !== 'object' || Array.isArray(rawWorkers)) {
+    return { workers, errors: [`${CONFIG_FILE}: "workers" must be an object keyed by backend id`] };
+  }
+  for (const [id, cfg] of Object.entries(rawWorkers)) {
     if (!cfg || typeof cfg !== 'object') { errors.push(`workers.${id}: expected an object`); continue; }
     const entry = {};
     if (cfg.cli !== undefined) {
@@ -106,8 +131,8 @@ function loadConfig(repoRoot) {
 
 /** Locally recorded capability evidence, written by `fleet.js doctor`. */
 function loadVerification(repoRoot) {
-  const raw = readJson(path.join(stateDir(repoRoot), VERIFICATION_FILE));
-  return raw && typeof raw === 'object' ? raw : { backends: {} };
+  const raw = readJson(path.join(stateDir(repoRoot), VERIFICATION_FILE)).value;
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : { backends: {} };
 }
 
 function saveVerification(repoRoot, report) {
@@ -125,7 +150,12 @@ function inspect(adapter, { config, verification, env } = {}) {
   const cfg = (config && config.workers && config.workers[adapter.id]) || {};
   const cli = cfg.cli || adapter.cli;
   const resolved = resolveCli(cli, env);
-  const local = verification && verification.backends ? verification.backends[adapter.id] : null;
+  const record = verification && verification.backends ? verification.backends[adapter.id] : null;
+  // Evidence is about one executable, not about a backend id. If the config
+  // now points `cli` somewhere else, the old record proves nothing about the
+  // binary that is about to run.
+  const staleFor = record && record.cliPath && resolved && record.cliPath !== resolved ? record.cliPath : null;
+  const local = staleFor ? null : record;
 
   return {
     id: adapter.id,
@@ -137,6 +167,7 @@ function inspect(adapter, { config, verification, env } = {}) {
     declaredCapabilities: { ...adapter.capabilities },
     capabilities: applyLocalEvidence(adapter.capabilities, local && local.capabilities),
     localVerification: local ? { at: local.at, version: local.version, platform: local.platform } : null,
+    staleVerification: staleFor ? { recordedFor: staleFor, nowResolvesTo: resolved } : null,
     defaults: { model: cfg.model || null, effort: cfg.effort || null, timeoutSeconds: cfg.timeoutSeconds || null },
     docs: adapter.docs,
     staticEvidence: adapter.evidence || null,
@@ -163,11 +194,30 @@ function verify(adapter, opts = {}) {
   }
   const version = probeCommand(cliPath, ['--version']);
   const help = probeCommand(cliPath, adapter.helpArgs || ['--help']);
-  const helpText = `${help.output || ''}\n${version.output || ''}`;
+  // Output from a --help that crashed or timed out is not evidence of
+  // anything; treating it as such would record capabilities from noise.
+  if (!help.ok) {
+    return {
+      id: adapter.id, availability: AVAILABILITY.available, capabilities: null,
+      reason: `\`${cli} ${(adapter.helpArgs || ['--help']).join(' ')}\` failed; nothing was verified`,
+    };
+  }
+  // Some capabilities cannot be proven from --help alone -- whether a named
+  // agent or profile exists, for instance. An adapter names the extra probes
+  // it needs, and their output joins the evidence its probe() reads.
+  const extra = [];
+  for (const args of adapter.evidenceArgs || []) {
+    const res = probeCommand(cliPath, args);
+    if (res.ok && res.output) extra.push(res.output);
+  }
+  const helpText = [help.output || '', version.output || '', ...extra].join('\n');
   if (!helpText.trim()) {
     return { id: adapter.id, availability: AVAILABILITY.available, capabilities: null, reason: 'the CLI produced no --help output to verify against' };
   }
-  const observed = adapter.probe(helpText) || {};
+  // A probe reads help text, which says what flags exist -- not what this
+  // adapter passes. Clamp it so a probe can never promote a capability the
+  // invocation would silently drop.
+  const observed = clampToExpressible(adapter.probe(helpText) || {}, adapter);
   const capabilities = {};
   for (const name of CAPABILITY_NAMES) if (observed[name]) capabilities[name] = observed[name];
 

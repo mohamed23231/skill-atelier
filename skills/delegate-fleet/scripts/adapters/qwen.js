@@ -26,7 +26,10 @@ module.exports = {
   },
   probe(help) {
     return {
-      edit: /--approval-mode[\s\S]{0,300}?yolo|--yolo/.test(help) ? 'verified' : 'unknown',
+      // build() emits `--approval-mode yolo`. A bare --yolo elsewhere in the
+      // help is not the flag this adapter passes.
+      edit: /--approval-mode[\s\S]{0,300}?\byolo\b/.test(help) ? 'verified'
+        : /--approval-mode/.test(help) ? 'unknown' : 'unsupported',
       readOnly: /--approval-mode[\s\S]{0,300}?plan/.test(help) ? 'verified' : 'unsupported',
       resumeById: 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',

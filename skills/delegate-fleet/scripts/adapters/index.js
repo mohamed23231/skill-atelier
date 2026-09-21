@@ -16,7 +16,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { CAPABILITY_NAMES, EVIDENCE_STATES } = require('../lib/capabilities.js');
+const {
+  CAPABILITY_NAMES, EVIDENCE_STATES, CAPABILITY_REQUEST_FIELD,
+  expressibleCapabilities, claims,
+} = require('../lib/capabilities.js');
 
 const PROMPT_DELIVERY = ['argv', 'stdin', 'file'];
 
@@ -49,7 +52,8 @@ const BUILT_IN = [
 /** Reject a malformed adapter at load time rather than at dispatch time. */
 function assertShape(a, origin) {
   const where = `adapter "${a && a.id}"${origin ? ` from ${origin}` : ''}`;
-  if (!a || !a.id || !a.cli) throw new Error(`${where}: must define id and cli`);
+  if (!a || typeof a.id !== 'string' || !a.id.trim()) throw new Error(`${where}: must define id as a non-empty string`);
+  if (typeof a.cli !== 'string' || !a.cli.trim()) throw new Error(`${where}: must define cli as a non-empty string`);
   if (typeof a.build !== 'function') throw new Error(`${where}: must define build()`);
   if (typeof a.probe !== 'function') throw new Error(`${where}: must define probe()`);
   if (!a.capabilities || typeof a.capabilities !== 'object') throw new Error(`${where}: must declare capabilities`);
@@ -58,6 +62,15 @@ function assertShape(a, origin) {
     if (!EVIDENCE_STATES.includes(state)) {
       throw new Error(`${where}: capability "${name}" is "${state}"; expected one of ${EVIDENCE_STATES.join('|')}`);
     }
+  }
+  // A capability build() never reads is a flag the relay would accept and then
+  // drop on the floor. Refuse the adapter rather than ship a decorative claim.
+  const expressible = expressibleCapabilities(a);
+  for (const name of CAPABILITY_NAMES) {
+    if (expressible.has(name) || !claims(a.capabilities[name])) continue;
+    throw new Error(
+      `${where}: claims ${name} as "${a.capabilities[name]}" but build() never reads req.${CAPABILITY_REQUEST_FIELD[name]}`
+    );
   }
   const delivery = a.promptDelivery || 'argv';
   if (!PROMPT_DELIVERY.includes(delivery)) {
@@ -85,7 +98,14 @@ function loadLocalAdapters(workspace) {
   const loaded = [];
   const errors = [];
   let names = [];
-  try { names = fs.readdirSync(dir).filter((f) => f.endsWith('.js')); } catch { return { loaded, errors }; }
+  try {
+    names = fs.readdirSync(dir).filter((f) => f.endsWith('.js'));
+  } catch (err) {
+    // No adapters directory is the normal case. Anything else -- a permission
+    // problem, a broken symlink -- would silently drop a project's override.
+    if (!err || err.code !== 'ENOENT') errors.push(`${dir}: ${err && err.message ? err.message : err}`);
+    return { loaded, errors };
+  }
   for (const name of names.sort()) {
     const file = path.join(dir, name);
     try {

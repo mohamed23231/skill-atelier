@@ -63,7 +63,12 @@ function deriveFindings({ mode, diff, scopeReport }) {
     findings.push({
       type: FINDING.READ_ONLY_VIOLATION,
       detail: 'a read-only run changed the working tree',
-      paths: [...diff.created, ...diff.modified, ...diff.deleted],
+      // Renames count at both ends, or the orchestrator is told a file changed
+      // without being told which file it came from.
+      paths: [...new Set([
+        ...diff.created, ...diff.modified, ...diff.deleted,
+        ...diff.renamed.flatMap((r) => [r.from, r.to].filter(Boolean)),
+      ])].sort(),
     });
   }
 
@@ -107,18 +112,21 @@ function deriveStatus({ execResult, mode, diff, denyPatterns }) {
     return { status: STATUS.ABORTED, reason: 'the relay was terminated and forwarded the kill to the worker' };
   }
 
-  const combined = `${execResult.stdout}\n${execResult.stderr}`;
-  for (const pattern of denyPatterns || []) {
-    if (pattern.test(combined)) {
-      return { status: STATUS.IMPLEMENTER_FAILURE, reason: `the worker reported a refusal or auth failure matching ${pattern}` };
-    }
-  }
-
   if (execResult.signal) {
     return { status: STATUS.PROCESS_FAILURE, reason: `the worker was killed by ${execResult.signal}` };
   }
   if (execResult.exitCode !== 0) {
     return { status: STATUS.PROCESS_FAILURE, reason: `the worker exited ${execResult.exitCode}` };
+  }
+
+  // Deny markers classify a COOPERATIVE exit 0 -- a worker that printed
+  // "permission denied" and stopped. A crash is a process failure first; how
+  // it died is more informative than what it happened to print on the way out.
+  const combined = `${execResult.stdout}\n${execResult.stderr}`;
+  for (const pattern of denyPatterns || []) {
+    if (pattern.test(combined)) {
+      return { status: STATUS.IMPLEMENTER_FAILURE, reason: `the worker reported a refusal or auth failure matching ${pattern}` };
+    }
   }
 
   if (mode === 'edit' && diff) {
@@ -138,13 +146,19 @@ function buildResult(parts) {
     repository, artifacts, warnings = [],
   } = parts;
 
+  // A run whose repository could not be observed has not been checked at all:
+  // scope, noop and commit detection were every one of them disabled. Never
+  // let automation read that as a clean result.
+  const unobserved = Boolean(repository) && repository.observed === false;
+
   return {
     schemaVersion: SCHEMA_VERSION,
     status,
     reason: reason ?? null,
-    // A result is safe to accept only when the process succeeded AND no
-    // repository finding is outstanding. This is arithmetic, not judgement.
-    blocked: status !== STATUS.COMPLETED || findings.length > 0,
+    // A result is safe to accept only when the process succeeded, no
+    // repository finding is outstanding, and the repository was actually
+    // observed. This is arithmetic, not judgement.
+    blocked: status !== STATUS.COMPLETED || findings.length > 0 || unobserved,
     findings,
     warnings,
     request: request ?? null,

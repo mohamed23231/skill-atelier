@@ -672,7 +672,7 @@ test('--out-dir is honoured (every option must reach something)', () => {
 test('discover output carries no stray internal fields', () => {
   const repo = H.tmpRepo();
   const res = H.runFleet(['discover', '--workspace', repo, '--json'], { cwd: repo });
-  const allowed = new Set(['id', 'title', 'cli', 'cliPath', 'supported', 'availability', 'declaredCapabilities', 'capabilities', 'localVerification', 'defaults', 'docs', 'staticEvidence']);
+  const allowed = new Set(['id', 'title', 'cli', 'cliPath', 'supported', 'availability', 'declaredCapabilities', 'capabilities', 'localVerification', 'staleVerification', 'defaults', 'docs', 'staticEvidence']);
   for (const b of res.json.backends) {
     for (const k of Object.keys(b)) assert.ok(allowed.has(k), `unexpected field "${k}" in discover output`);
   }
@@ -725,6 +725,250 @@ test('an adapter that delivers the brief by file actually consumes promptFile', 
     if (a.promptDelivery === 'file') assert.match(src, /req\.promptFile/, `${a.id}: promptDelivery "file" but build() never uses req.promptFile`);
     if (!a.promptDelivery || a.promptDelivery === 'argv') assert.match(src, /req\.prompt\b/, `${a.id}: argv delivery but build() never puts the prompt in argv`);
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * Regressions from the PR review of 2026-09-21
+ * ------------------------------------------------------------------ */
+
+test('"verified" never comes from an adapter\'s own declaration', () => {
+  // An adapter file records what its author proved on THEIR machine. Treating
+  // that as local proof would let a declaration walk straight past the
+  // safety gate this framework is built around.
+  for (const a of registry.BUILT_IN) {
+    const merged = capabilities.applyLocalEvidence(a.capabilities, null);
+    for (const name of capabilities.CAPABILITY_NAMES) {
+      assert.notStrictEqual(
+        merged[name], capabilities.EVIDENCE.verified,
+        `${a.id}.${name} reads as locally verified with no doctor record`
+      );
+    }
+  }
+});
+
+test('local evidence still promotes and still demotes', () => {
+  const declared = { ...ALL_CAPS, readOnly: 'documented' };
+  const promoted = capabilities.applyLocalEvidence(declared, { readOnly: 'verified' });
+  assert.strictEqual(promoted.readOnly, 'verified');
+  const demoted = capabilities.applyLocalEvidence(declared, { readOnly: 'unsupported' });
+  assert.strictEqual(demoted.readOnly, 'unsupported');
+});
+
+test('e2e: --read-only is refused when the only evidence is the adapter declaration', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'cursor'); // cursor declares readOnly: verified, and no doctor ran
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'cursor', '--read-only', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.status, 2, 'nothing may be dispatched');
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.match(res.json.reason, /not verified on this machine/);
+});
+
+test('e2e: --allow-unverified is the explicit way past that refusal', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'cursor');
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'cursor', '--read-only', '--allow-unverified', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.json.status, 'completed');
+  assert.ok(res.json.warnings.some((w) => /--allow-unverified/.test(w)), 'the risk must be stated in the result');
+});
+
+test('no probe can promote a capability its build() cannot express', () => {
+  // Help text says which flags EXIST, not which ones this adapter passes.
+  const help = [
+    '--read-only --plan --plan-only --sandbox read-only --model --variant --effort',
+    '--session --resume --conversation --agent plan --auto --auto-approve --yolo',
+    '--permission-mode acceptEdits auto --approval-mode yolo --format json',
+    '--output-format --allow-all-tools --deny-tool --mode plan --always-approve --prompt --dir',
+  ].join('\n');
+  for (const a of registry.BUILT_IN) {
+    const clamped = capabilities.clampToExpressible(a.probe(help) || {}, a);
+    const expressible = capabilities.expressibleCapabilities(a);
+    for (const name of capabilities.CAPABILITY_NAMES) {
+      if (expressible.has(name)) continue;
+      assert.ok(
+        !capabilities.claims(clamped[name]),
+        `${a.id}: probe claims ${name} but build() never reads it`
+      );
+    }
+  }
+});
+
+test('no adapter passes read-only off as merely omitting its write flag', () => {
+  // Relying on a CLI's default permissions is a hope, not an enforcement.
+  const help = '--read-only --plan --sandbox read-only --agent plan --auto-approve --permission-mode plan --approval-mode plan --mode plan --deny-tool';
+  for (const a of registry.BUILT_IN) {
+    const clamped = capabilities.clampToExpressible(a.probe(help) || {}, a);
+    if (!capabilities.claims(clamped.readOnly)) continue;
+    assert.ok(
+      capabilities.enforcesReadOnly(a),
+      `${a.id}: read-only argv adds nothing the edit argv does not already have`
+    );
+  }
+});
+
+test('an adapter claiming a capability its build() ignores is rejected at load time', () => {
+  const bad = {
+    id: 'decorative', cli: 'decorative',
+    capabilities: { ...ALL_CAPS, modelSelection: 'documented', edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported' },
+    build(req) { return { args: [req.prompt] }; },
+    probe() { return {}; },
+  };
+  assert.throws(() => registry.assertShape(bad), /never reads req\.model/);
+});
+
+test('an adapter with a non-string id or cli is rejected at load time', () => {
+  const base = { capabilities: { edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported', modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported' }, build: (req) => ({ args: [req.prompt] }), probe: () => ({}) };
+  assert.throws(() => registry.assertShape({ ...base, id: 7, cli: 'x' }), /id as a non-empty string/);
+  assert.throws(() => registry.assertShape({ ...base, id: 'x', cli: 7 }), /cli as a non-empty string/);
+});
+
+test('e2e: a worker writing into .delegate-fleet/ is reported, not filtered away', () => {
+  // The next run would load that file with require(). It must never be hidden.
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_CREATE: '.delegate-fleet/adapters/evil.js' },
+  });
+  const violation = res.json.findings.find((f) => f.type === 'scope_violation');
+  assert.ok(violation, 'a planted adapter is a scope violation');
+  assert.ok(violation.paths.some((p) => p.includes('adapters/evil.js')), violation.paths.join(','));
+  assert.strictEqual(res.json.blocked, true);
+});
+
+test('e2e: a configured model is capability-checked, not waved through', () => {
+  // v1 applied config defaults after validation, so config could smuggle a
+  // flag the backend cannot honour into the invocation.
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'zcode', { model: 'glm-4.6' }); // zcode cannot select a model
+  H.markVerified(repo, 'zcode', { ...ALL_CAPS, modelSelection: 'unsupported' });
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'zcode', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.match(res.json.reason, /modelSelection/);
+});
+
+test('a first commit in a repository with no HEAD is still a worker commit', () => {
+  const before = { ok: true, entries: new Map(), head: null, stash: null };
+  const after = { ok: true, entries: new Map(), head: 'abc1234', stash: null };
+  assert.strictEqual(repoLib.diffSnapshots(before, after).headChanged, true);
+});
+
+test('a same-size rewrite is detected however large the file is', () => {
+  const dir = H.tmpRepo();
+  const file = path.join(dir, 'big.bin');
+  fs.writeFileSync(file, Buffer.alloc(3 * 1024 * 1024, 0x41));
+  const first = repoLib.hashFile(file);
+  fs.writeFileSync(file, Buffer.alloc(3 * 1024 * 1024, 0x42)); // same size
+  assert.notStrictEqual(repoLib.hashFile(file), first, 'a size-and-mtime shortcut would miss this');
+});
+
+test('a scope of "." is the repository root and contains everything', () => {
+  const r = repoLib.reconcileScope(['src/a.js', 'deep/nested/b.ts'], ['.']);
+  assert.deepStrictEqual(r.outOfScope, []);
+  assert.strictEqual(r.inScope.length, 2);
+});
+
+test('a deny marker never masks a non-zero exit', () => {
+  const out = contract.deriveStatus({
+    execResult: { outcome: 'exit', exitCode: 3, signal: null, stdout: 'permission denied', stderr: '' },
+    mode: 'edit', diff: null, denyPatterns: [/permission denied/i],
+  });
+  assert.strictEqual(out.status, 'process_failure');
+  assert.match(out.reason, /exited 3/);
+});
+
+test('a deny marker still classifies a cooperative exit 0', () => {
+  const out = contract.deriveStatus({
+    execResult: { outcome: 'exit', exitCode: 0, signal: null, stdout: 'permission denied', stderr: '' },
+    mode: 'read-only', diff: null, denyPatterns: [/permission denied/i],
+  });
+  assert.strictEqual(out.status, 'implementer_failure');
+});
+
+test('a read-only violation names both ends of a rename', () => {
+  const diff = {
+    created: [], modified: [], deleted: [], renamed: [{ from: 'old.js', to: 'new.js' }],
+    preExistingModified: [], vanished: [], headChanged: false, stashChanged: false,
+  };
+  const findings = contract.deriveFindings({ mode: 'read-only', diff, scopeReport: { outOfScope: [] } });
+  const violation = findings.find((f) => f.type === 'read_only_violation');
+  assert.deepStrictEqual(violation.paths, ['new.js', 'old.js']);
+});
+
+test('a run whose repository could not be observed is blocked', () => {
+  const res = contract.buildResult({
+    status: contract.STATUS.COMPLETED, findings: [],
+    repository: { observed: false, reason: 'git unavailable' },
+  });
+  assert.strictEqual(res.blocked, true, 'an unchecked run is not a clean run');
+});
+
+test('a nested "### Scope" cannot shadow the real "## Scope"', () => {
+  const md = `# Objective\n\n### Scope\n- \`decoy.js\`\n\n## Scope\n- \`src/real.js\`\n\n## Acceptance criteria\n1. a\n2. b\n`;
+  assert.deepStrictEqual(brief.extractScope(md), ['src/real.js']);
+});
+
+test('an empty "## Acceptance criteria" section is rejected', () => {
+  const md = H.GOOD_BRIEF.replace(/## Acceptance criteria\n1\. The component is renamed\n2\. Every import of it resolves\n/, '## Acceptance criteria\n\n');
+  const lint = brief.lint(md);
+  assert.strictEqual(lint.ok, false);
+  assert.ok(lint.errors.some((e) => /Acceptance criteria" is empty/.test(e)), lint.errors.join('; '));
+});
+
+test('a malformed config.json is an error, never a silent fall-back', () => {
+  const repo = H.tmpRepo();
+  fs.mkdirSync(path.join(repo, '.delegate-fleet'), { recursive: true });
+  fs.writeFileSync(path.join(repo, '.delegate-fleet', 'config.json'), '{ "workers": { ');
+  const cfg = environment.loadConfig(repo);
+  assert.ok(cfg.errors.some((e) => /not valid JSON/.test(e)), cfg.errors.join('; '));
+});
+
+test('a config whose "workers" is not an object is rejected', () => {
+  for (const bad of ['[]', 'null', '3', '"x"']) {
+    const repo = H.tmpRepo();
+    fs.mkdirSync(path.join(repo, '.delegate-fleet'), { recursive: true });
+    fs.writeFileSync(path.join(repo, '.delegate-fleet', 'config.json'), `{ "workers": ${bad} }`);
+    const cfg = environment.loadConfig(repo);
+    assert.ok(cfg.errors.length > 0, `workers: ${bad} was accepted`);
+  }
+});
+
+test('verification recorded for a different executable is discarded', () => {
+  const adapter = registry.getAdapter('claude');
+  const verification = { backends: { claude: { at: 'then', capabilities: ALL_CAPS, cliPath: '/nowhere/old-claude' } } };
+  const view = environment.inspect(adapter, {
+    config: { workers: { claude: { cli: H.STUB } } }, verification, env: process.env,
+  });
+  assert.strictEqual(view.localVerification, null, 'evidence is about a binary, not an id');
+  assert.ok(view.staleVerification, 'and the reader must be told why it was dropped');
+  assert.strictEqual(view.capabilities.readOnly, 'documented');
+});
+
+test('doctor drops stale evidence when re-verification fails', () => {
+  const repo = H.tmpRepo();
+  H.markVerified(repo, 'aider', ALL_CAPS); // aider is not installed in CI
+  H.runFleet(['doctor', '--backend', 'aider', '--workspace', repo], { cwd: repo });
+  const saved = JSON.parse(fs.readFileSync(path.join(repo, '.delegate-fleet', 'verification.json'), 'utf8'));
+  assert.ok(!saved.backends.aider, 'evidence from an older CLI must not authorise a later run');
+});
+
+test('a fleet option with no value is an error, not a silent widening', () => {
+  const repo = H.tmpRepo();
+  const res = H.runFleet(['doctor', '--backend', '--workspace', repo], { cwd: repo });
+  assert.strictEqual(res.status, 2);
+  assert.match(res.stderr, /--backend requires a value/);
+});
+
+test('captured output is capped in bytes and never splits a character', () => {
+  const sink = require('../scripts/lib/exec.js').makeSink(64);
+  const text = 'é'.repeat(100); // two bytes per character
+  const buf = Buffer.from(text, 'utf8');
+  for (let i = 0; i < buf.length; i++) sink.push(buf.subarray(i, i + 1)); // worst case: one byte at a time
+  assert.ok(sink.truncated);
+  assert.ok(!sink.value.includes('�'), 'no character may be corrupted at a chunk boundary');
+  assert.strictEqual(sink.value.split('\n')[0], 'é'.repeat(32), 'the cap counts bytes, not code units');
 });
 
 /* ---------------------------------- runner ---------------------------------- */

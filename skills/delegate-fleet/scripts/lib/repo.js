@@ -18,7 +18,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const HASH_SIZE_LIMIT = 16 * 1024 * 1024;
+// Read in fixed chunks so a huge file costs bounded memory instead of being
+// skipped. A size-and-mtime shortcut would miss a same-size rewrite, which is
+// precisely the edit this module exists to catch.
+const HASH_CHUNK_BYTES = 1024 * 1024;
 
 function git(repoRoot, args) {
   return spawnSync('git', args, {
@@ -36,14 +39,46 @@ function revParse(repoRoot, ref) {
   return res.status === 0 && out ? out : null;
 }
 
-/** sha256 of a worktree file, or a cheap stand-in for very large files. */
+/** sha256 of a file's bytes, read in bounded chunks. */
+function hashContents(abs) {
+  const hash = crypto.createHash('sha256');
+  const buf = Buffer.allocUnsafe(HASH_CHUNK_BYTES);
+  const fd = fs.openSync(abs, 'r');
+  try {
+    let read;
+    while ((read = fs.readSync(fd, buf, 0, HASH_CHUNK_BYTES, null)) > 0) {
+      hash.update(buf.subarray(0, read));
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * A directory entry in `git status` is a submodule (or an untracked folder).
+ * Hashing it as a constant would hide every edit inside it, so ask the nested
+ * repository for its own HEAD and dirty state instead.
+ */
+function hashDirectory(abs) {
+  const head = spawnSync('git', ['-C', abs, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8', timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const inner = spawnSync('git', ['-C', abs, 'status', '--porcelain', '-uall'], {
+    encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (head.status !== 0 && inner.status !== 0) return 'dir';
+  const state = `${(head.stdout || '').trim()}\n${(inner.stdout || '').trim()}`;
+  return `dir:${crypto.createHash('sha256').update(state).digest('hex')}`;
+}
+
+/** A content address for whatever sits at this path. */
 function hashFile(abs) {
   try {
     const st = fs.lstatSync(abs);
     if (st.isSymbolicLink()) return `symlink:${crypto.createHash('sha256').update(fs.readlinkSync(abs)).digest('hex')}`;
-    if (st.isDirectory()) return 'dir';
-    if (st.size > HASH_SIZE_LIMIT) return `large:${st.size}:${st.mtimeMs}`;
-    return crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
+    if (st.isDirectory()) return hashDirectory(abs);
+    return hashContents(abs);
   } catch {
     return null; // absent (deleted) or unreadable
   }
@@ -146,7 +181,8 @@ function diffSnapshots(before, after) {
     if (!after.entries.has(file)) vanished.push(file);
   }
 
-  const headChanged = Boolean(before.head && after.head && before.head !== after.head);
+  // Compared directly, so an unborn HEAD becoming a first commit still counts.
+  const headChanged = before.head !== after.head;
   const stashChanged = before.stash !== after.stash;
 
   return {
@@ -190,7 +226,8 @@ function reconcileScope(paths, scope) {
   const outOfScope = [];
   for (const raw of paths) {
     const p = normalize(raw);
-    const ok = declared.some((d) => p === d || p.startsWith(`${d}/`));
+    // "." is the repository root, which contains every path.
+    const ok = declared.some((d) => d === '.' || p === d || p.startsWith(`${d}/`));
     (ok ? inScope : outOfScope).push(raw);
   }
   return { inScope, outOfScope, declared };

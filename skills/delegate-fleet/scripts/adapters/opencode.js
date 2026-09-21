@@ -23,6 +23,9 @@ module.exports = {
   },
   // OpenCode's run flags are on the `run` subcommand's help, not top-level.
   helpArgs: ['run', '--help'],
+  // `--agent` only proves a selector exists. The `plan` agent that build()
+  // names has to be verified against the agent list itself.
+  evidenceArgs: [['agent', 'list']],
   build(req) {
     const args = ['run', req.prompt, '--format', 'json'];
     // Without --dir, OpenCode ignores the process cwd and works in whatever
@@ -42,7 +45,8 @@ module.exports = {
   probe(help) {
     return {
       edit: /--auto/.test(help) ? 'verified' : 'unknown',
-      readOnly: /--agent/.test(help) ? 'verified' : 'unsupported',
+      readOnly: /--agent/.test(help) && /^\s*plan\b/m.test(help) ? 'verified'
+        : /--agent/.test(help) ? 'unknown' : 'unsupported',
       resumeById: /--session/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: /--variant/.test(help) ? 'verified' : 'unsupported',

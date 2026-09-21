@@ -46,8 +46,10 @@ mechanically derived from a process outcome or from two git snapshots.
 6. **The exit code is never trusted alone.** Several CLIs exit 0 after refusing, after signing out,
    or after silently falling back. Status is derived from the outcome, the output markers, and the
    tree.
-7. **Artifacts cannot pollute the observation.** They are written only after the post-run snapshot
-   and are excluded from repository facts even in a repo that does not ignore `.delegate-fleet/`.
+7. **Artifacts cannot pollute the observation.** They are written only after the post-run snapshot,
+   so they never appear in the diff. Nothing is filtered out of it either: a worker writing into
+   `.delegate-fleet/adapters/` is a `scope_violation` like any other, because the next run would
+   load that file with `require()`.
 
 ## What the relay explicitly does NOT guarantee
 

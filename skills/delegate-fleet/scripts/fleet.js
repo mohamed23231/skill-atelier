@@ -49,16 +49,28 @@ Plus any adapter in <workspace>/.delegate-fleet/adapters/*.js
 
 function parse(argv) {
   const o = { cmd: argv[0] || 'help', workspace: process.cwd(), backend: null, need: [], json: false, verified: false };
+  const missing = [];
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
+    // A missing value must be an error. Defaulting it silently turns
+    // `doctor --backend` into a fleet-wide run, which is not what was asked.
+    const value = () => {
+      const v = argv[i + 1];
+      // Do not consume the next token when it is itself an option, or the
+      // option after this one would be misread as a stray positional.
+      if (v === undefined || v.startsWith('--')) { missing.push(a); return null; }
+      i += 1;
+      return v;
+    };
     if (a === '--json') o.json = true;
     else if (a === '--verified') o.verified = true;
-    else if (a === '--workspace') o.workspace = path.resolve(argv[++i] || '.');
-    else if (a === '--backend') o.backend = argv[++i];
-    else if (a === '--need') o.need = String(argv[++i] || '').split(',').map((s) => s.trim()).filter(Boolean);
+    else if (a === '--workspace') { const v = value(); if (v !== null) o.workspace = path.resolve(v); }
+    else if (a === '--backend') { const v = value(); if (v !== null) o.backend = v; }
+    else if (a === '--need') { const v = value(); if (v !== null) o.need = v.split(',').map((s) => s.trim()).filter(Boolean); }
     else if (a === '--help' || a === '-h') o.cmd = 'help';
     else return { error: `unknown option "${a}"`, ...o };
   }
+  if (missing.length) return { error: `${missing.join(', ')} requires a value`, ...o };
   return o;
 }
 
@@ -123,6 +135,11 @@ function cmdDoctor(o) {
         at: res.at, platform: res.platform, version: res.version,
         cliPath: res.cliPath, capabilities: res.capabilities,
       };
+    } else {
+      // Verification was attempted and did not succeed. Keeping the previous
+      // record would let evidence from an older CLI authorise a run against
+      // whatever is installed now.
+      delete report.backends[adapter.id];
     }
     rows.push({ id: adapter.id, ...res });
   }
