@@ -35,12 +35,13 @@ module.exports = {
       // as taking a <PROFILE> without naming the profiles, so a bare flag
       // match proves nothing: unknown refuses the run without claiming the
       // backend cannot do it.
-      readOnly: /--sandbox[\s\S]{0,300}?\bread-only\b/.test(help) ? 'verified'
+      readOnly: /--sandbox[^\r\n]*\bread-only\b/.test(help) ? 'verified'
         : /--sandbox/.test(help) ? 'unknown' : 'unsupported',
       resumeById: /--resume/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: /--effort/.test(help) ? 'verified' : 'unsupported',
-      structuredOutput: /--output-format/.test(help) ? 'verified' : 'unsupported',
+      structuredOutput: /--output-format[^\r\n]*\bjson\b/.test(help) ? 'verified'
+        : /--output-format/.test(help) ? 'unknown' : 'unsupported',
     };
   },
   denyPatterns: [/not authenticated/i, /user cancelled the execution/i],

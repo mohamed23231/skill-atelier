@@ -27,7 +27,7 @@ module.exports = {
       edit: /--mode[\s\S]{0,200}?yolo/.test(help) ? 'verified' : 'unknown',
       readOnly: /--mode[\s\S]{0,200}?plan/.test(help) ? 'verified' : 'unsupported',
       resumeById: /--resume/.test(help) ? 'verified' : 'unsupported',
-      modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
+      modelSelection: 'unsupported',
       effort: 'unsupported',
       structuredOutput: /--json/.test(help) ? 'verified' : 'unsupported',
     };

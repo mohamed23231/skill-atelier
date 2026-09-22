@@ -15,6 +15,13 @@ const env = process.env;
 const cwd = process.cwd();
 const abs = (p) => (path.isAbsolute(p) ? p : path.join(cwd, p));
 
+if (process.argv.includes('--version')) { process.stdout.write('stub 1.0\n'); process.exit(0); }
+if (process.argv.includes('agent') && process.argv.includes('list')) { process.stdout.write(env.STUB_AGENT_LIST ?? 'plan\nbuild\n'); process.exit(0); }
+if (process.argv.includes('--help')) {
+  process.stdout.write(env.STUB_HELP_TEXT ?? '--sandbox read-only workspace workspace-write\n--mode plan accept-edits yolo\n--permission-mode plan acceptEdits auto\n--approval-mode plan yolo\n--agent plan build\n--auto --auto-approve --plan --dry-run --tools --force --yolo --always-approve\n--model --variant --effort --session --resume --conversation\n--format json --output-format json --no-approve\n');
+  process.exit(0);
+}
+
 // Prove which argv the adapter actually produced.
 if (env.STUB_ECHO_ARGV) {
   fs.writeFileSync(env.STUB_ECHO_ARGV, JSON.stringify({ argv: process.argv.slice(2), cwd }, null, 2));

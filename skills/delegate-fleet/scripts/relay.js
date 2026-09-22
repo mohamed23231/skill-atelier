@@ -159,6 +159,18 @@ async function main() {
   // effort supplied by .delegate-fleet/config.json reaches the invocation
   // without ever being checked against what this backend can honour.
   const effective = options.applyDefaults(opts, view);
+  if (effective.mode === 'read-only') {
+    // verification.json lives in the worker's writable workspace and can be
+    // edited by hand or by a previous worker. Re-probe the installed CLI at
+    // the trust boundary; the saved record alone cannot authorize read-only.
+    const fresh = environment.verify(adapter, { config, env: process.env });
+    const observed = fresh.capabilities?.readOnly || 'unknown';
+    view.capabilities.readOnly = observed === 'unknown' && opts.allowUnverified &&
+      capabilities.claims(adapter.capabilities.readOnly) ? 'documented' : observed;
+    if (view.capabilities.readOnly !== 'verified') {
+      capWarnings.push('saved verification was not accepted as read-only proof; a fresh CLI probe did not verify it');
+    }
+  }
   if (view.staleVerification) {
     // Not fatal: the merged view already dropped the record, so anything
     // safety-critical will fail the gate below on its own. Say why.

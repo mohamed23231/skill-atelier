@@ -69,17 +69,23 @@ function hashContents(abs) {
  * repository for its own HEAD and dirty state instead.
  */
 function hashDirectory(abs) {
-  const head = spawnSync('git', ['-C', abs, 'rev-parse', 'HEAD'], {
+  const root = spawnSync('git', ['-C', abs, 'rev-parse', '--show-toplevel'], {
+    encoding: 'utf8', timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  if (root.error || root.signal) return UNREADABLE;
+  if (root.status !== 0) {
+    return /not a git repository/i.test(root.stderr || '') ? 'dir' : UNREADABLE;
+  }
+  if (fs.realpathSync((root.stdout || '').trim()) !== fs.realpathSync(abs)) return 'dir';
+  const head = spawnSync('git', ['-C', abs, 'rev-parse', '--verify', '--quiet', 'HEAD'], {
     encoding: 'utf8', timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'],
   });
   const inner = spawnSync('git', ['-C', abs, 'status', '--porcelain', '-uall'], {
     encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'],
   });
-  // Not a git repository at all: an ordinary untracked directory.
-  if (head.status !== 0 && inner.status !== 0) return 'dir';
-  // It IS a nested repository, but one of the probes failed -- timed out, or
-  // overran maxBuffer. Partial evidence is worse than none here.
-  if (head.status !== 0 || inner.status !== 0) return UNREADABLE;
+  if (head.error || head.signal || inner.error || inner.signal || inner.status !== 0) return UNREADABLE;
+  // An unborn HEAD is valid when the repository status itself succeeded.
+  if (head.status !== 0 && (head.stderr || '').trim()) return UNREADABLE;
   const state = `${(head.stdout || '').trim()}\n${(inner.stdout || '').trim()}`;
   return `dir:${crypto.createHash('sha256').update(state).digest('hex')}`;
 }
@@ -91,9 +97,30 @@ function hashFile(abs) {
     if (st.isSymbolicLink()) return `symlink:${crypto.createHash('sha256').update(fs.readlinkSync(abs)).digest('hex')}`;
     if (st.isDirectory()) return hashDirectory(abs);
     return hashContents(abs);
-  } catch {
-    return null; // absent (deleted) or unreadable
+  } catch (err) {
+    return err && err.code === 'ENOENT' ? null : UNREADABLE;
   }
+}
+
+/** Observe ignored local adapters because a worker can plant code for the next run. */
+function localAdapterEntries(repoRoot) {
+  const dir = path.join(repoRoot, '.delegate-fleet', 'adapters');
+  const entries = [];
+  function visit(current) {
+    let children;
+    try { children = fs.readdirSync(current, { withFileTypes: true }); }
+    catch (err) {
+      if (err && err.code === 'ENOENT') return;
+      throw err;
+    }
+    for (const child of children) {
+      const absolute = path.join(current, child.name);
+      if (child.isDirectory()) visit(absolute);
+      else entries.push(path.relative(repoRoot, absolute).split(path.sep).join('/'));
+    }
+  }
+  visit(dir);
+  return entries;
 }
 
 /**
@@ -134,7 +161,17 @@ function snapshot(repoRoot) {
     return { ok: false, reason: (res.stderr || 'git status failed').trim(), entries: new Map(), head: null, stash: null };
   }
   const entries = new Map();
-  for (const e of parsePorcelainZ(res.stdout)) {
+  let statusEntries;
+  try {
+    statusEntries = parsePorcelainZ(res.stdout);
+    const seen = new Set(statusEntries.map((entry) => entry.path));
+    for (const file of localAdapterEntries(repoRoot)) {
+      if (!seen.has(file)) statusEntries.push({ code: '??', path: file, renamedFrom: null });
+    }
+  } catch (err) {
+    return { ok: false, reason: `could not inspect local adapters: ${err.message}`, entries: new Map(), head: null, stash: null };
+  }
+  for (const e of statusEntries) {
     const hash = hashFile(path.join(repoRoot, e.path));
     if (hash === UNREADABLE) {
       return {

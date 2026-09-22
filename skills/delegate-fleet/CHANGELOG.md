@@ -5,6 +5,20 @@ All notable changes to the `delegate-fleet` skill.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this skill
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Read-only dispatch and verified-only selection re-probe the installed CLI, so a writable local
+  verification record cannot authorize a safety claim on its own.
+- Capability validation checks representative invocations instead of a request parameter's name,
+  and read-only requires a recognized restriction argument.
+- Ignored project adapter files are included in repository snapshots, and unreadable files or
+  nested repositories block a clean report; nested repositories with an unborn HEAD remain valid.
+- OpenCode checks the actual agent list for `plan`; Grok probes exact option values; adapters
+  without a read-only invocation no longer claim one from help text alone.
+- JSON discovery reports local adapter errors, and malformed probe argument lists are rejected.
+
 ## [2.0.0] - 2026-09-21
 
 A rewrite around a capability-based core. The previous cost-tier model was removed entirely.

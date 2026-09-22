@@ -42,10 +42,10 @@ module.exports = {
     if (req.session) args.push('--session', req.session);
     return { args };
   },
-  probe(help) {
+  probe(help, evidence = {}) {
     return {
       edit: /--auto/.test(help) ? 'verified' : 'unknown',
-      readOnly: /--agent/.test(help) && /^\s*plan\b/m.test(help) ? 'verified'
+      readOnly: /--agent/.test(help) && /^\s*plan\b/m.test((evidence.extra || [])[0] || '') ? 'verified'
         : /--agent/.test(help) ? 'unknown' : 'unsupported',
       resumeById: /--session/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',

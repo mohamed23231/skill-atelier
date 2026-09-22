@@ -222,8 +222,8 @@ function verify(adapter, opts = {}) {
   if (!cliPath) {
     return { id: adapter.id, availability: AVAILABILITY.unavailable, capabilities: null, reason: `${cli} not found on PATH` };
   }
-  const version = probeCommand(cliPath, ['--version']);
-  const help = probeCommand(cliPath, adapter.helpArgs || ['--help']);
+  const version = probeCommand(cliPath, ['--version'], 10_000, env);
+  const help = probeCommand(cliPath, adapter.helpArgs || ['--help'], 10_000, env);
   // Output from a --help that crashed or timed out is not evidence of
   // anything; treating it as such would record capabilities from noise.
   if (!help.ok) {
@@ -237,17 +237,17 @@ function verify(adapter, opts = {}) {
   // it needs, and their output joins the evidence its probe() reads.
   const extra = [];
   for (const args of adapter.evidenceArgs || []) {
-    const res = probeCommand(cliPath, args);
-    if (res.ok && res.output) extra.push(res.output);
+    const res = probeCommand(cliPath, args, 10_000, env);
+    extra.push(res.ok ? (res.output || '') : '');
   }
-  const helpText = [help.output || '', version.output || '', ...extra].join('\n');
+  const helpText = [help.output || '', version.output || ''].join('\n');
   if (!helpText.trim()) {
     return { id: adapter.id, availability: AVAILABILITY.available, capabilities: null, reason: 'the CLI produced no --help output to verify against' };
   }
   // A probe reads help text, which says what flags exist -- not what this
   // adapter passes. Clamp it so a probe can never promote a capability the
   // invocation would silently drop.
-  const observed = clampToExpressible(adapter.probe(helpText) || {}, adapter);
+  const observed = clampToExpressible(adapter.probe(helpText, { extra }) || {}, adapter);
   const capabilities = {};
   for (const name of CAPABILITY_NAMES) if (observed[name]) capabilities[name] = observed[name];
 

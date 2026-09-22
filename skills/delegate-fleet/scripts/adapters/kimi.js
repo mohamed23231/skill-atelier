@@ -25,7 +25,7 @@ module.exports = {
   probe(help) {
     return {
       edit: /--prompt/.test(help) ? 'verified' : 'unknown',
-      readOnly: /--read-only|--plan\b/.test(help) ? 'verified' : 'unsupported',
+      readOnly: 'unsupported',
       resumeById: /--session/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /-m\b|--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',

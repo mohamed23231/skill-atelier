@@ -47,9 +47,9 @@ mechanically derived from a process outcome or from two git snapshots.
    or after silently falling back. Status is derived from the outcome, the output markers, and the
    tree.
 7. **Artifacts cannot pollute the observation.** They are written only after the post-run snapshot,
-   so they never appear in the diff. Nothing is filtered out of it either: a worker writing into
-   `.delegate-fleet/adapters/` is a `scope_violation` like any other, because the next run would
-   load that file with `require()`.
+   so they never appear in the diff. Local adapter files under `.delegate-fleet/adapters/` are
+   inspected explicitly even when git ignores that directory. A worker planting one raises a
+   `scope_violation`, because the next run would load it with `require()`.
 
 ## What the relay explicitly does NOT guarantee
 
@@ -57,8 +57,9 @@ mechanically derived from a process outcome or from two git snapshots.
   the target tree are unacceptable, use a git worktree, a container, or a backend whose read-only is
   an OS sandbox. `codex` is the only supported backend whose read-only is sandbox-enforced rather
   than a withheld tool surface.
-- **Visibility of untracked-and-ignored writes.** Repository facts come from `git status`, so a
-  write to a gitignored path or outside the repository is not observable.
+- **Visibility of other untracked-and-ignored writes.** Repository facts mostly come from `git status`.
+  The local adapters exception above is explicit; other gitignored paths and paths outside the
+  repository are not observable.
 - **That the worker told the truth.** Its final message is evidence, not fact. The diff is fact.
 
 ## Parallelism

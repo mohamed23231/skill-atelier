@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Repository validation now handles bare home paths, common Windows path forms, and fine-grained
+  GitHub tokens. Private rule files are validated before use and cannot skip alternating matches.
 - `scripts/validate-repo.js` no longer carries a denylist of private names. A public repository
   that lists the employer and project names it wants kept out has published them; those rules move
   to an optional, gitignored `.validate-repo-private.json`, documented in `docs/MAINTAINERS.md`.

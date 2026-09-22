@@ -29,11 +29,11 @@ module.exports = {
   probe(help) {
     return {
       edit: /--yolo/.test(help) ? 'verified' : 'unknown',
-      readOnly: /--read-only|plan/.test(help) ? 'verified' : 'unsupported',
-      resumeById: /--session/.test(help) ? 'verified' : 'unsupported',
+      readOnly: 'unsupported',
+      resumeById: 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',
-      structuredOutput: /--json|--format/.test(help) ? 'verified' : 'unsupported',
+      structuredOutput: 'unsupported',
     };
   },
   denyPatterns: [/permission denied/i, /no provider/i],

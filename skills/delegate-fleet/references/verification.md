@@ -46,10 +46,12 @@ To have a diff reviewed by another model, dispatch a **read-only** run on a **di
 than the one that wrote it, with a brief that points at the diff. Never ask a worker to review its
 own output, and never let a review run have write access.
 
-`verified` is produced by `doctor` and by nothing else. An adapter that declares a capability as
+`doctor` records local probe results for discovery. An adapter that declares a capability as
 `verified` is reporting its author's machine, so the merged view downgrades it to `documented`
 until local evidence exists. A verification record is also tied to the executable it was taken
-from: if `cli` now resolves elsewhere, the record is dropped and the run says so.
+from: if `cli` now resolves elsewhere, the record is dropped and the run says so. Because the
+record is stored in the worker's writable workspace, read-only dispatch and `select --verified`
+probe the installed CLI again before relying on its contents. A hand-edited record is not proof.
 
 A probe cannot invent support either. Help text says which flags *exist*, not which ones the
 adapter passes, so probe output is clamped to what `build()` actually reads — and read-only is

@@ -21,11 +21,11 @@ module.exports = {
   probe(help) {
     return {
       edit: /--agent/.test(help) ? 'verified' : 'unknown',
-      readOnly: /--plan-only|--agent/.test(help) ? 'verified' : 'unsupported',
+      readOnly: /--agent[^\r\n]*\bplan\b/.test(help) ? 'verified' : 'unknown',
       resumeById: /--resume/.test(help) ? 'verified' : 'unsupported',
-      modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
+      modelSelection: 'unsupported',
       effort: 'unsupported',
-      structuredOutput: /--output[\s\S]{0,200}?json/i.test(help) ? 'verified' : 'unsupported',
+      structuredOutput: 'unsupported',
     };
   },
   denyPatterns: [/not authenticated/i, /invalid api key/i],

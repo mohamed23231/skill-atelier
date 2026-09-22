@@ -31,11 +31,11 @@ module.exports = {
   probe(help) {
     return {
       edit: /--allow-all-tools/.test(help) ? 'verified' : 'unknown',
-      readOnly: /--deny-tool|--mode[\s\S]{0,200}?plan/.test(help) ? 'verified' : 'unsupported',
+      readOnly: 'unsupported',
       resumeById: /--resume/.test(help) ? 'verified' : 'unsupported',
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',
-      structuredOutput: /--output-format|--json/.test(help) ? 'verified' : 'unsupported',
+      structuredOutput: 'unsupported',
     };
   },
   denyPatterns: [/not authenticated/i, /permission denied/i],

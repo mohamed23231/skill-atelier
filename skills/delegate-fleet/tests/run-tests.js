@@ -338,9 +338,11 @@ test('read-only on a backend that genuinely lacks it is refused outright', () =>
 
 test('--allow-unverified downgrades the read-only refusal to a warning', () => {
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
-  H.useStub(repo, 'aider'); // aider declares readOnly: documented
+  H.useStub(repo, 'grok'); // grok declares readOnly: documented, but this help does not name its profile
   const b = H.writeBrief(repo);
-  const res = H.runRelay(['--backend', 'aider', '--brief', b, '--workspace', repo, '--read-only', '--allow-unverified', '--json'], { cwd: repo });
+  const res = H.runRelay(['--backend', 'grok', '--brief', b, '--workspace', repo, '--read-only', '--allow-unverified', '--json'], {
+    cwd: repo, env: { STUB_HELP_TEXT: '--sandbox <PROFILE>\n' },
+  });
   assert.notStrictEqual(res.json.status, 'invalid_request');
   assert.ok(res.json.warnings.some((w) => /not verified/.test(w)));
 });
@@ -754,21 +756,22 @@ test('local evidence still promotes and still demotes', () => {
   assert.strictEqual(demoted.readOnly, 'unsupported');
 });
 
-test('e2e: --read-only is refused when the only evidence is the adapter declaration', () => {
+test('e2e: a fresh successful probe authorizes read-only without a saved record', () => {
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
   H.useStub(repo, 'cursor'); // cursor declares readOnly: verified, and no doctor ran
   const b = H.writeBrief(repo);
   const res = H.runRelay(['--backend', 'cursor', '--read-only', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
-  assert.strictEqual(res.status, 2, 'nothing may be dispatched');
-  assert.strictEqual(res.json.status, 'invalid_request');
-  assert.match(res.json.reason, /not verified on this machine/);
+  assert.strictEqual(res.json.status, 'completed');
+  assert.strictEqual(res.json.request.mode, 'read-only');
 });
 
 test('e2e: --allow-unverified is the explicit way past that refusal', () => {
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
-  H.useStub(repo, 'cursor');
+  H.useStub(repo, 'grok');
   const b = H.writeBrief(repo);
-  const res = H.runRelay(['--backend', 'cursor', '--read-only', '--allow-unverified', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  const res = H.runRelay(['--backend', 'grok', '--read-only', '--allow-unverified', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_HELP_TEXT: '--sandbox <PROFILE>\n' },
+  });
   assert.strictEqual(res.json.status, 'completed');
   assert.ok(res.json.warnings.some((w) => /--allow-unverified/.test(w)), 'the risk must be stated in the result');
 });
@@ -782,12 +785,12 @@ test('no probe can promote a capability its build() cannot express', () => {
     '--output-format --allow-all-tools --deny-tool --mode plan --always-approve --prompt --dir',
   ].join('\n');
   for (const a of registry.BUILT_IN) {
-    const clamped = capabilities.clampToExpressible(a.probe(help) || {}, a);
+    const raw = a.probe(help) || {};
     const expressible = capabilities.expressibleCapabilities(a);
     for (const name of capabilities.CAPABILITY_NAMES) {
       if (expressible.has(name)) continue;
       assert.ok(
-        !capabilities.claims(clamped[name]),
+        !capabilities.claims(raw[name]),
         `${a.id}: probe claims ${name} but build() never reads it`
       );
     }
@@ -798,8 +801,8 @@ test('no adapter passes read-only off as merely omitting its write flag', () => 
   // Relying on a CLI's default permissions is a hope, not an enforcement.
   const help = '--read-only --plan --sandbox read-only --agent plan --auto-approve --permission-mode plan --approval-mode plan --mode plan --deny-tool';
   for (const a of registry.BUILT_IN) {
-    const clamped = capabilities.clampToExpressible(a.probe(help) || {}, a);
-    if (!capabilities.claims(clamped.readOnly)) continue;
+    const raw = a.probe(help) || {};
+    if (!capabilities.claims(raw.readOnly)) continue;
     assert.ok(
       capabilities.enforcesReadOnly(a),
       `${a.id}: read-only argv adds nothing the edit argv does not already have`
@@ -814,7 +817,7 @@ test('an adapter claiming a capability its build() ignores is rejected at load t
     build(req) { return { args: [req.prompt] }; },
     probe() { return {}; },
   };
-  assert.throws(() => registry.assertShape(bad), /never reads req\.model/);
+  assert.throws(() => registry.assertShape(bad), /does not express it from model/);
 });
 
 test('an adapter with a non-string id or cli is rejected at load time', () => {
@@ -948,7 +951,8 @@ test('verification recorded for a different executable is discarded', () => {
 
 test('doctor drops stale evidence when re-verification fails', () => {
   const repo = H.tmpRepo();
-  H.markVerified(repo, 'aider', ALL_CAPS); // aider is not installed in CI
+  H.markVerified(repo, 'aider', ALL_CAPS);
+  H.useStub(repo, 'aider', { cli: path.join(repo, 'guaranteed-missing-aider') });
   H.runFleet(['doctor', '--backend', 'aider', '--workspace', repo], { cwd: repo });
   const saved = JSON.parse(fs.readFileSync(path.join(repo, '.delegate-fleet', 'verification.json'), 'utf8'));
   assert.ok(!saved.backends.aider, 'evidence from an older CLI must not authorise a later run');
@@ -993,7 +997,7 @@ test('an adapter claiming structured output it never requests is rejected at loa
     build(req) { return { args: ['--output', 'streaming', req.prompt] }; },
     probe() { return {}; },
   };
-  assert.throws(() => registry.assertShape(bad), /no machine-readable format/);
+  assert.throws(() => registry.assertShape(bad), /does not express it/);
 });
 
 test('an adapter claiming read-only it does not enforce is rejected at load time', () => {
@@ -1008,7 +1012,7 @@ test('an adapter claiming read-only it does not enforce is rejected at load time
     build(req) { const a = []; if (req.mode !== 'read-only') a.push('--yes'); a.push(req.prompt); return { args: a }; },
     probe() { return {}; },
   };
-  assert.throws(() => registry.assertShape(bad), /adds nothing its edit argv lacks/);
+  assert.throws(() => registry.assertShape(bad), /does not express it|no recognized restriction/);
 });
 
 test('a verification record that does not identify its executable is unusable', () => {
@@ -1069,6 +1073,112 @@ test('a config file that cannot be read is an error, not an absent file', () => 
   const cfg = environment.loadConfig(repo);
   assert.ok(cfg.errors.length > 0, 'a read failure must not become "use the defaults"');
   assert.match(cfg.errors[0], /could not be read/);
+});
+
+test('a forged verification file cannot authorize read-only dispatch', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--read-only', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_HELP_TEXT: '--permission-mode acceptEdits\n' },
+  });
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.match(res.json.reason, /readOnly/);
+});
+
+test('a forged verification file cannot enter verified-only selection', () => {
+  const repo = H.tmpRepo();
+  H.useStub(repo, 'claude');
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const res = H.runFleet(['select', '--need', 'readOnly', '--verified', '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_HELP_TEXT: '--permission-mode acceptEdits\n' },
+  });
+  assert.ok(!res.json.matches.includes('claude'));
+});
+
+test('opencode read-only requires a successful agent-list probe naming plan', () => {
+  const adapter = registry.getAdapter('opencode');
+  const config = { workers: { opencode: { cli: H.STUB } } };
+  const present = environment.verify(adapter, { config, env: { ...process.env, STUB_AGENT_LIST: 'plan\nbuild\n' } });
+  const missing = environment.verify(adapter, { config, env: { ...process.env, STUB_AGENT_LIST: 'build\n' } });
+  assert.strictEqual(present.capabilities.readOnly, 'verified');
+  assert.strictEqual(missing.capabilities.readOnly, 'unknown');
+});
+
+test('grok does not borrow read-only or JSON values from another option', () => {
+  const adapter = registry.getAdapter('grok');
+  const misleading = '--sandbox <PROFILE>\n--other read-only\n--output-format <FORMAT>\n--other json\n';
+  const states = adapter.probe(misleading);
+  assert.strictEqual(states.readOnly, 'unknown');
+  assert.strictEqual(states.structuredOutput, 'unknown');
+  const direct = adapter.probe('--sandbox read-only\n--output-format json\n');
+  assert.strictEqual(direct.readOnly, 'verified');
+  assert.strictEqual(direct.structuredOutput, 'verified');
+});
+
+test('capability checks work when build destructures its request', () => {
+  const adapter = {
+    build({ prompt, mode, model }) {
+      return { args: ['--prompt', prompt, '--sandbox', mode === 'read-only' ? 'read-only' : 'workspace', '--model', model || 'default'] };
+    },
+  };
+  const expressible = capabilities.expressibleCapabilities(adapter);
+  assert.ok(expressible.has('modelSelection'));
+  assert.ok(expressible.has('readOnly'));
+});
+
+test('an unrelated extra read-only argument is not an enforcement contract', () => {
+  const adapter = { build({ mode }) { return { args: mode === 'read-only' ? ['--verbose'] : [] }; } };
+  assert.strictEqual(capabilities.enforcesReadOnly(adapter), false);
+});
+
+test('an edit claim without a task-bearing invocation is rejected', () => {
+  const adapter = {
+    id: 'empty-edit', cli: 'empty-edit',
+    capabilities: {
+      edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported',
+      modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported',
+    },
+    build() { return { args: ['--verbose'] }; },
+    probe() { return { edit: 'verified' }; },
+  };
+  assert.throws(() => registry.assertShape(adapter), /claims edit.*does not express it/);
+});
+
+test('a planted ignored adapter remains visible to the scope check', () => {
+  const repo = H.tmpRepo({ files: { '.gitignore': '.delegate-fleet/\n', 'src/a.js': 'x\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_CREATE: '.delegate-fleet/adapters/evil.js' },
+  });
+  assert.ok(res.json.findings.some((f) => f.type === 'scope_violation' && f.paths.includes('.delegate-fleet/adapters/evil.js')));
+});
+
+test('a nested repository with an unborn HEAD is a valid snapshot', () => {
+  const repo = H.tmpRepo({ files: { 'a.js': 'x\n' } });
+  const nested = path.join(repo, 'vendor');
+  fs.mkdirSync(nested);
+  spawnSync('git', ['init', '-q'], { cwd: nested });
+  fs.writeFileSync(path.join(nested, 'uncommitted.js'), 'y\n');
+  const hash = repoLib.hashFile(nested);
+  assert.ok(hash.startsWith('dir:'), hash);
+});
+
+test('a malformed helpArgs array is rejected while loading an adapter', () => {
+  const base = registry.getAdapter('aider');
+  assert.throws(() => registry.assertShape({ ...base, helpArgs: 'run --help' }), /helpArgs must be an array/);
+});
+
+test('JSON discovery includes project adapter errors', () => {
+  const repo = H.tmpRepo();
+  const dir = path.join(repo, '.delegate-fleet', 'adapters');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'broken.js'), 'module.exports = {}\n');
+  const res = H.runFleet(['discover', '--workspace', repo, '--json'], { cwd: repo });
+  assert.ok(res.json.adapterErrors.some((e) => e.includes('broken.js')));
 });
 
 /* ---------------------------------- runner ---------------------------------- */

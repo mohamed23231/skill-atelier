@@ -56,6 +56,12 @@ function assertShape(a, origin) {
   if (typeof a.cli !== 'string' || !a.cli.trim()) throw new Error(`${where}: must define cli as a non-empty string`);
   if (typeof a.build !== 'function') throw new Error(`${where}: must define build()`);
   if (typeof a.probe !== 'function') throw new Error(`${where}: must define probe()`);
+  if (a.helpArgs !== undefined && (!Array.isArray(a.helpArgs) || !a.helpArgs.every((x) => typeof x === 'string'))) {
+    throw new Error(`${where}: helpArgs must be an array of strings`);
+  }
+  if (a.evidenceArgs !== undefined && (!Array.isArray(a.evidenceArgs) || !a.evidenceArgs.every((args) => Array.isArray(args) && args.every((x) => typeof x === 'string')))) {
+    throw new Error(`${where}: evidenceArgs must be arrays of strings`);
+  }
   if (!a.capabilities || typeof a.capabilities !== 'object') throw new Error(`${where}: must declare capabilities`);
   for (const name of CAPABILITY_NAMES) {
     const state = a.capabilities[name];
@@ -63,20 +69,20 @@ function assertShape(a, origin) {
       throw new Error(`${where}: capability "${name}" is "${state}"; expected one of ${EVIDENCE_STATES.join('|')}`);
     }
   }
-  // A capability build() never reads is a flag the relay would accept and then
-  // drop on the floor. Refuse the adapter rather than ship a decorative claim.
+  // A capability absent from the built invocation is a request the relay
+  // would accept and then drop on the floor. Refuse decorative claims.
   const expressible = expressibleCapabilities(a);
   for (const name of CAPABILITY_NAMES) {
     if (expressible.has(name) || !claims(a.capabilities[name])) continue;
     throw new Error(
-      `${where}: claims ${name} as "${a.capabilities[name]}" but build() never reads req.${CAPABILITY_REQUEST_FIELD[name]}`
+      `${where}: claims ${name} as "${a.capabilities[name]}" but build() does not express it${CAPABILITY_REQUEST_FIELD[name] ? ` from ${CAPABILITY_REQUEST_FIELD[name]}` : ''}`
     );
   }
   // The two capabilities with no per-run switch still have to be true of the
   // invocation, or `select --need` would hand back a worker that cannot do the
   // job and the relay would pass its argv straight through.
   if (claims(a.capabilities.readOnly) && !enforcesReadOnly(a)) {
-    throw new Error(`${where}: claims readOnly but its read-only argv adds nothing its edit argv lacks`);
+    throw new Error(`${where}: claims readOnly but its read-only argv has no recognized restriction`);
   }
   if (claims(a.capabilities.structuredOutput) && !deliversStructuredOutput(a)) {
     throw new Error(`${where}: claims structuredOutput but build() asks for no machine-readable format`);

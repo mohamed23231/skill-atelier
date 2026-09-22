@@ -177,10 +177,10 @@ function run({ command, args, cwd, env, timeoutSeconds, onStart, stdin }) {
 }
 
 /** Is this CLI on PATH and executable? Used by discovery, never by dispatch. */
-function probeCommand(command, args = ['--version'], timeoutMs = 10_000) {
+function probeCommand(command, args = ['--version'], timeoutMs = 10_000, env = process.env) {
   try {
     const res = spawnSync(command, args, {
-      encoding: 'utf8', timeout: timeoutMs, shell: false,
+      encoding: 'utf8', timeout: timeoutMs, shell: false, env,
       stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 8 * 1024 * 1024,
     });
     if (res.error) {

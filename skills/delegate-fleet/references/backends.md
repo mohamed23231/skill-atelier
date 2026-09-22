@@ -5,7 +5,7 @@ Whether a CLI is installed here is a separate question — run `fleet.js discove
 version really does is a third — run `fleet.js doctor`.
 
 The table below is generated from the adapters themselves, so it cannot drift from the code.
-`verified` means proven against a real CLI during this project's verification runs; `documented`
+`verified` means checked with real CLI probes during this project's verification runs; `documented`
 means sourced from vendor docs or a cross-referenced upstream project but not proven here; `—` means
 the CLI genuinely cannot do it; `unknown` means not established, which is never treated as support.
 
@@ -37,14 +37,14 @@ where the installed CLI really has the flag, and demotes it to `—` where it do
 
 ## What `verified` means in this table
 
-`verified` records that the capability was exercised against a real installation of that CLI on
-macOS (arm64) while the adapter was written, and each adapter's `evidence` field carries the method
-and date. Everything else is marked `documented` or `unknown`.
+`verified` records that the capability was checked using the CLI's verification probes on
+macOS (arm64) while the adapter was written. This is probe evidence, not a runtime capability test.
+Each adapter's `evidence` field carries the method and date. Other capabilities are marked
+`documented`, `unsupported` (shown as `—`), or `unknown`.
 
 None of that is evidence about *your* machine, and the framework does not treat it as such: a
-declared `verified` reads as `documented` until `doctor` has run where you are. Run it, and this
-table stops mattering — your `.delegate-fleet/verification.json` is the authority, for your CLI
-versions.
+declared `verified` reads as `documented` until a local probe runs. `doctor` saves probe results
+for discovery; read-only dispatch and `select --verified` probe again before relying on them.
 
 ## Honest limits worth knowing
 

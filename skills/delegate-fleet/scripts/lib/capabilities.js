@@ -23,11 +23,7 @@ const CAPABILITIES = Object.freeze({
 
 const CAPABILITY_NAMES = Object.freeze(Object.keys(CAPABILITIES));
 
-/**
- * The `req` field an adapter's build() must consult for a capability to be
- * more than a claim. `edit` and `structuredOutput` are shapes of the default
- * invocation rather than a per-run switch, so they have no field here.
- */
+/** Request fields used by per-run capabilities. */
 const CAPABILITY_REQUEST_FIELD = Object.freeze({
   readOnly: 'mode',
   modelSelection: 'model',
@@ -92,18 +88,21 @@ function isVerified(state) {
 /**
  * Which capabilities an adapter's build() can actually express.
  *
- * A capability that build() never reads is a flag the relay would accept and
- * then silently drop -- the exact class of defect that made v1 untrustworthy.
- * Deriving this from the source, rather than trusting a declaration, means a
- * probe cannot promote a capability into existence either.
+ * A capability absent from the built invocation is a request the relay would
+ * accept and then silently drop -- the defect that made v1 untrustworthy.
+ * Probe build() with distinct values rather than matching its source text:
+ * valid adapters may rename or destructure their request parameter.
  */
 function expressibleCapabilities(adapter) {
-  const src = typeof adapter.build === 'function' ? adapter.build.toString() : '';
   const set = new Set();
-  for (const name of CAPABILITY_NAMES) {
-    const field = CAPABILITY_REQUEST_FIELD[name];
-    if (!field) { set.add(name); continue; }
-    if (new RegExp(`req\\s*\\.\\s*${field}\\b`).test(src)) set.add(name);
+  if (deliversEditInvocation(adapter)) set.add('edit');
+  if (deliversStructuredOutput(adapter)) set.add('structuredOutput');
+  if (enforcesReadOnly(adapter)) set.add('readOnly');
+  for (const [name, field] of Object.entries(CAPABILITY_REQUEST_FIELD)) {
+    if (name === 'readOnly') continue;
+    const marker = `delegate-fleet-${name}-probe`;
+    const args = builtArgs(adapter, 'edit', { [field]: marker });
+    if (args && args.some((arg) => arg.includes(marker))) set.add(name);
   }
   return set;
 }
@@ -111,17 +110,28 @@ function expressibleCapabilities(adapter) {
 /** Build a representative request, for checking what the invocation contains. */
 function probeRequest(mode) {
   return {
-    prompt: 'x', mode, model: null, effort: null, session: null,
+    prompt: 'delegate-fleet-task-probe', mode, model: null, effort: null, session: null,
     cwd: '/tmp/delegate-fleet-probe', promptFile: '/tmp/delegate-fleet-probe/brief.md',
   };
 }
 
-function builtArgs(adapter, mode) {
+function builtArgs(adapter, mode, overrides = {}) {
   try {
-    return ((adapter.build(probeRequest(mode)) || {}).args || []).map(String);
+    const args = (adapter.build({ ...probeRequest(mode), ...overrides }) || {}).args;
+    return Array.isArray(args) && args.every((arg) => typeof arg === 'string') ? args : null;
   } catch {
     return null;
   }
+}
+
+/** The default edit invocation must carry the task and cannot request read-only mode. */
+function deliversEditInvocation(adapter) {
+  const request = probeRequest('edit');
+  const args = builtArgs(adapter, 'edit');
+  if (!args || !args.length || hasReadOnlyRestriction(args)) return false;
+  if (adapter.promptDelivery === 'stdin') return true; // relay supplies the task on stdin
+  const marker = adapter.promptDelivery === 'file' ? request.promptFile : request.prompt;
+  return args.some((arg) => arg.includes(marker));
 }
 
 /**
@@ -146,12 +156,25 @@ function deliversStructuredOutput(adapter) {
  * permissions, which is a hope, not an enforcement. A real read-only run
  * carries at least one argument that the edit run does not.
  */
+const READ_ONLY_PAIRS = [
+    ['--sandbox', 'read-only'], ['--mode', 'plan'], ['--agent', 'plan'],
+    ['--permission-mode', 'plan'], ['--approval-mode', 'plan'],
+    ['--auto-approve', 'false'], ['--tools', 'read,grep,glob'],
+    ['--tools', 'read,grep,find,ls'],
+];
+const READ_ONLY_FLAGS = ['--dry-run', '--plan'];
+
+function hasReadOnlyRestriction(args) {
+  const hasPair = (args, flag, value) => args.some((arg, i) => arg === flag && args[i + 1] === value);
+  return READ_ONLY_PAIRS.some(([flag, value]) => hasPair(args, flag, value)) ||
+    READ_ONLY_FLAGS.some((flag) => args.includes(flag));
+}
+
 function enforcesReadOnly(adapter) {
   const readOnlyArgs = builtArgs(adapter, 'read-only');
   const editArgs = builtArgs(adapter, 'edit');
-  if (!readOnlyArgs || !editArgs) return false;
-  const edit = new Set(editArgs);
-  return readOnlyArgs.some((a) => !edit.has(a));
+  if (!readOnlyArgs || !editArgs || hasReadOnlyRestriction(editArgs)) return false;
+  return hasReadOnlyRestriction(readOnlyArgs);
 }
 
 /**
@@ -203,6 +226,7 @@ module.exports = {
   CAPABILITY_REQUEST_FIELD,
   expressibleCapabilities,
   enforcesReadOnly,
+  deliversEditInvocation,
   deliversStructuredOutput,
   clampToExpressible,
   EVIDENCE,

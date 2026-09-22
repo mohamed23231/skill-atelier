@@ -92,7 +92,7 @@ function stateMark(state) {
 
 function cmdDiscover(o) {
   const { views, config, adapterErrors } = loadViews(o.workspace);
-  if (o.json) { console.log(JSON.stringify({ workspace: o.workspace, backends: views, configErrors: config.errors }, null, 2)); return 0; }
+  if (o.json) { console.log(JSON.stringify({ workspace: o.workspace, backends: views, configErrors: config.errors, adapterErrors }, null, 2)); return 0; }
 
   const available = views.filter((v) => v.availability === caps.AVAILABILITY.available);
   const absent = views.filter((v) => v.availability !== caps.AVAILABILITY.available);
@@ -165,7 +165,14 @@ function cmdSelect(o) {
   const unknown = o.need.filter((n) => !caps.CAPABILITY_NAMES.includes(n));
   if (unknown.length) { console.error(`select: unknown capability: ${unknown.join(', ')}. Known: ${caps.CAPABILITY_NAMES.join(', ')}`); return 2; }
 
-  const { views } = loadViews(o.workspace);
+  const { views, config, registry } = loadViews(o.workspace);
+  if (o.verified) {
+    for (const view of views) {
+      if (view.availability !== caps.AVAILABILITY.available) continue;
+      const fresh = environment.verify(registry.get(view.id), { config, env: process.env });
+      for (const name of o.need) view.capabilities[name] = fresh.capabilities?.[name] || 'unknown';
+    }
+  }
   const matches = views.filter((v) => {
     if (v.availability !== caps.AVAILABILITY.available) return false;
     return o.need.every((n) => (o.verified ? caps.isVerified(v.capabilities[n]) : caps.claims(v.capabilities[n])));
