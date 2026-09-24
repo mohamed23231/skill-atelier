@@ -43,8 +43,9 @@ git add -A && git commit   # you, not the worker
 The relay still decides nothing: it runs exactly the commands you named and records exit codes.
 Choosing the gates stays yours, and green checks never replace reading the diff.
 
-When a check fails, retry the **same worker** with the check's `tail` pasted into the brief before
-you escalate or fix it yourself. That loop is where most of the orchestrator's tokens are saved.
+When a check fails, the cheapest fix is the worker's own: `--fix-attempts 2` sends only the failing
+tails back to the **same** worker before the result ever reaches you. If it still fails, write a
+better brief before you escalate to a pricier worker or fix it yourself.
 
 ## A second opinion
 

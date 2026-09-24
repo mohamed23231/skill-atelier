@@ -67,4 +67,5 @@ mechanically derived from a process outcome or from two git snapshots.
 
 Run slices sequentially in one working tree by default. Concurrent runs need **separate workspaces**
 (git worktrees): scope reconciliation is baseline-based, and two writers in one tree make every
-finding unattributable. Concurrency across separate workspaces is tested and safe.
+finding unattributable. `batch.js` does this for you: one detached worktree per slice, with
+dependencies applied through commit objects that move no ref. See [batch.md](batch.md).

@@ -61,14 +61,17 @@ Exactly one, terminal.
 Zero or more, computed **even when the process failed**, because a worker that times out can have
 violated scope first.
 
-| Type | Meaning |
-| --- | --- |
-| `scope_violation` | Paths changed outside the brief's `## Scope` |
-| `unexpected_repository_change` | The worker altered files that were already uncommitted |
-| `worker_commit` | HEAD moved during the run |
-| `worker_stash` | The stash ref moved during the run |
-| `read_only_violation` | A read-only run changed the tree — the backend's claim is broken |
-| `framework_state_modified` | The worker modified framework state under `.delegate-fleet/` (outside `runs/`) |
+| Type | Meaning | What you must do |
+| --- | --- | --- |
+| `scope_violation` | Paths changed outside the brief's `## Scope` | Inspect each path. Never auto-revert |
+| `unexpected_repository_change` | The worker altered files that were already uncommitted | Say so immediately; that work is someone else's |
+| `worker_commit` | HEAD moved during the run | Report it before anything else |
+| `worker_stash` | The stash ref moved during the run | Report it before anything else |
+| `read_only_violation` | A read-only run changed the tree — the backend's claim is broken | Stop trusting that backend's read-only |
+| `framework_state_modified` | The worker modified framework state under `.delegate-fleet/` (outside `runs/`) | Inspect config and adapters before the next run loads them |
+
+With a fix loop, findings accumulate across attempts against the **original** baseline: a violation
+made by attempt 1 and undone by attempt 2 is still reported.
 
 ## worker — what the worker says about itself
 
@@ -83,6 +86,27 @@ of plain output), `adapter` (the adapter's own `parseReport`), or `none`.
 
 All of it is **self-reported**. It never feeds `status`, `findings`, or `blocked`: a worker that
 claims success on an unchanged tree is still `noop`.
+
+## route
+
+`null` for `--backend`. For `--route`, it records `{ name, chosen, candidate, skipped: [{ backend,
+reason }] }`: the class, the backend that ran, its position in the list, and why each earlier
+candidate was passed over (not installed, missing a capability, over its tier limit, out of quota).
+
+## attempts and the fix loop
+
+One entry per worker run: `{ attempt, status, exitCode, durationSeconds, checksFailed, usage, dir }`.
+Without `--fix-attempts` there is exactly one. Attempt 2 onwards keep their logs in
+`<run>/attempt-N/`. The top-level `status`, `worker` and `verification.checks` describe the last
+attempt; `repository` is always cumulative from the original baseline; `worker.usage` is summed
+across attempts (`worker.usageAcrossAttempts: true`).
+
+The loop continues only while the attempt `completed`, no finding is outstanding, and a check still
+fails. An attempt that changes nothing ends the loop and is recorded as `noop`. The overall status
+stays `completed`, because the tree still holds the previous attempt's work.
+
+`worker.quotaExhausted: true` means the failed run's output looked like an account limit, and the
+worker was marked out of quota. See [routing.md](routing.md).
 
 ## verification.checks
 

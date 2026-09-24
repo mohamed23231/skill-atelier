@@ -1,0 +1,1 @@
+Rename the function `calcTotal` in `src/pricing.js` to `computeOrderTotal`, and update every caller and test in the repository. Behaviour must not change, and the old name must no longer be exported. Run `npm test` to confirm.

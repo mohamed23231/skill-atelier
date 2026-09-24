@@ -2368,6 +2368,49 @@ test('fleet report: sums self-reported usage by tier and worker, and counts the 
   assert.strictEqual(H.runFleet(['report', '--since', 'yesterday', '--workspace', repo], { cwd: repo }).status, 2);
 });
 
+/* ------------------------------------------------------------------ *
+ * Benchmark harness: tasks must be meaningful before anyone pays for them
+ * ------------------------------------------------------------------ */
+
+const bench = require('../bench/bench.js');
+
+test('bench: every acceptance test fails on the untouched fixture and passes on the reference solution', () => {
+  for (const task of bench.loadTasks()) {
+    const untouched = fs.mkdtempSync(path.join(os.tmpdir(), `df-bench-${task.id}-`));
+    fs.cpSync(bench.FIXTURE, untouched, { recursive: true });
+    assert.strictEqual(bench.score(untouched, task.accept).accepted, false, `${task.id} would pass by doing nothing`);
+    const solved = fs.mkdtempSync(path.join(os.tmpdir(), `df-bench-${task.id}-ok-`));
+    fs.cpSync(bench.FIXTURE, solved, { recursive: true });
+    fs.cpSync(path.join(path.dirname(task.accept), 'solution'), solved, { recursive: true });
+    const s = bench.score(solved, task.accept);
+    assert.strictEqual(s.accepted, true, `${task.id}'s reference solution must pass (${JSON.stringify(s.tests)})`);
+    for (const d of [untouched, solved]) fs.rmSync(d, { recursive: true, force: true });
+  }
+});
+
+test('bench: spends nothing without --yes, and the fleet arm refuses to run without a config', () => {
+  const script = path.join(H.SKILL, 'bench', 'bench.js');
+  const plan = spawnSync(process.execPath, [script], { encoding: 'utf8' });
+  assert.strictEqual(plan.status, 0);
+  assert.match(plan.stdout, /nothing ran/);
+  assert.match(plan.stdout, /rename\s+solo/);
+  const refused = spawnSync(process.execPath, [script, '--yes', '--arms', 'fleet'], { encoding: 'utf8' });
+  assert.strictEqual(refused.status, 2);
+  assert.match(refused.stderr, /needs --fleet-config/);
+});
+
+test('bench: cost per accepted run ignores unknown costs and never rewards a rejected run', () => {
+  const s = bench.summarize([
+    { arm: 'fleet', accepted: true, orchestratorCostUsd: 0.2, workerCostUsd: 0.05, totalCostUsd: 0.25 },
+    { arm: 'fleet', accepted: false, orchestratorCostUsd: 0.1, workerCostUsd: 0.01, totalCostUsd: 0.11 },
+    { arm: 'solo', accepted: true, orchestratorCostUsd: 0.5, workerCostUsd: 0, totalCostUsd: 0.5 },
+    { arm: 'solo', accepted: true, orchestratorCostUsd: null, workerCostUsd: 0, totalCostUsd: null },
+  ]);
+  assert.strictEqual(s.fleet.costPerAcceptedUsd, 0.36, 'the rejected run still costs money');
+  assert.strictEqual(s.solo.unknownCost, 1);
+  assert.strictEqual(s.solo.accepted, 2);
+});
+
 /* ---------------------------------- runner ---------------------------------- */
 
 (async () => {

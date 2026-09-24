@@ -16,6 +16,15 @@
       "skills": [
         "./skills/architecture-visualizer"
       ]
+    },
+    {
+      "name": "delegate-fleet",
+      "description": "Plan on the orchestrator, delegate implementation to cheaper coding-agent CLIs, loop failing checks back to the worker, and verify every diff before landing.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/delegate-fleet"
+      ]
     }
   ]
 }

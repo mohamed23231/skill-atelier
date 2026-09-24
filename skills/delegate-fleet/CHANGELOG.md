@@ -5,6 +5,46 @@ All notable changes to the `delegate-fleet` skill.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this skill
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-09-24
+
+### Added
+
+- **Fix loop.** `--fix-attempts N` (0–3, or `fixAttempts` in config) re-runs the same worker with
+  only the failing check tails when checks fail on a clean, completed run. It stops at any finding,
+  at an attempt that changes nothing, or at N. Findings accumulate against the original baseline,
+  usage is summed, and each attempt is listed in `result.attempts`.
+- **Routes.** `routes` in config map a task class to ordered candidates that own the flags (model,
+  effort, limits, fixAttempts). `--route <class>` takes the first candidate that is installed,
+  capable, under its tier limit and not out of quota, and records the skipped ones in
+  `result.route`.
+- **Tier budgets.** `limits.runsPer24h` per tier. Routes skip a tier that is over its limit, and
+  naming its worker directly is refused before dispatch.
+- **Quota awareness.** A failed run whose output looks like an account limit marks the worker out of
+  quota for 60 minutes (`.delegate-fleet/quota.json`), and routes skip it. `fleet.js quota` lists,
+  marks and clears.
+- **`batch.js`.** Runs a plan of slices in parallel, each in its own detached worktree, and returns
+  one summary, a patch per slice and a landing order. Dependent slices start from commit objects
+  built with plumbing: no ref moves and no hooks run. It warns when the main checkout changes during
+  a batch. `--cleanup` removes only that batch's worktrees.
+- **`fleet.js report`.** Worker runs, outcomes, tokens and USD per tier and per worker. Unreported
+  usage is counted as unknown, never as zero.
+- **`bench/`.** An A/B benchmark (solo orchestrator vs fleet) on a fixture project, scored with
+  hidden acceptance tests and ranked by cost per accepted run. The contract tests prove that every
+  task fails untouched and passes its reference solution.
+- **`tests/smoke.js`.** An opt-in run of a tiny brief through every installed real CLI. It proves
+  the argv, the permission mode and the output parsing against the real thing.
+- `relay.js --state-root` keeps the ledger in one checkout while slices run in others.
+
+### Changed
+
+- SKILL.md is rewritten around the cost workflow (routes, checks, the fix loop, batch) and trimmed
+  from 261 to about 150 lines. The detail moved to `references/routing.md`, `references/batch.md`
+  and the result contract.
+- The skill description now also triggers on offloading implementation to cheaper models and on
+  parallel slices.
+- Recommended brief size is 15–60 lines.
+- Unknown top-level keys in `config.json` are rejected.
+
 ## [2.2.0] - 2026-09-24
 
 ### Added

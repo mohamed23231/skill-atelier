@@ -78,5 +78,6 @@ config rather than paraphrasing. Put the rule a worker most often breaks at the 
 
 ## Size
 
-40–120 lines. Long enough to be unambiguous, short enough to read in one pass. Longer than that
-means the slice should be split. The relay refuses a brief that renders past 256 KB.
+15–60 lines: a card, not an essay. The orchestrator pays for every line it writes, and a worker
+follows a short, precise brief better than a long one. Long enough to be unambiguous; if it needs
+more than 60 lines, split the slice. The relay refuses a brief that renders past 256 KB.

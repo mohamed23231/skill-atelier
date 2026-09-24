@@ -1,261 +1,146 @@
 ---
 name: delegate-fleet
-description: Dispatches bounded implementation slices to external coding-agent CLIs (such as Claude Code or Codex) and verifies their diffs independently before landing. Use when explicitly asked to delegate work via delegate-fleet, dispatch tasks through the relay, perform capability-based worker selection, inspect installed workers with fleet.js doctor, or run a sub-task through an external agent CLI while keeping planning, review, and git commits on the orchestrator.
+description: Plans on the orchestrator and dispatches bounded implementation slices to cheaper external coding-agent CLIs (Claude Code, Codex, OpenCode, Gemini and more), runs the project's checks, loops failures back to the same worker, and verifies every diff independently before landing. Use when asked to delegate or offload implementation to worker CLIs or cheaper models, to run independent slices in parallel worktrees, to route work by task class or cost tier, or to use delegate-fleet's relay, batch, select, report or doctor commands. Planning, review and git commits stay on the orchestrator.
 license: MIT
 metadata:
-  version: "2.2.0"
+  version: "2.3.0"
 ---
 
 # Delegate Fleet
 
 **One brain. Many workers. You own the decision.**
 
-You are the orchestrator. You analyze, plan, brief, verify, and commit. A worker is replaceable
-execution capacity. The relay is the trust boundary between you, and it reports facts — never
-opinions about whether the work is good.
+You plan, brief, verify and commit. Workers are replaceable, cheaper execution capacity. The relay
+between you reports facts — process outcome, repository changes, check results — never opinions.
+The point is economic: your expensive tokens go to judgement, the workers' cheap tokens go to typing.
 
 ```
-ORCHESTRATOR ── plan ── brief ── select worker by capability
-                                        │
-                                     DISPATCH
-                                        │
-                                     WORKER
-                                        │
-                                       RELAY  ← the trust boundary
-                               ┌─────────┴─────────┐
-                         execution facts     repository facts
-                               └─────────┬─────────┘
-                                  STRUCTURED RESULT
-                                        │
-                               INDEPENDENT VERIFICATION  ← you, not the worker
-                                        │
-                           ACCEPT ─── RETRY ─── ESCALATE
-                              │
-                           COMMIT  ← only ever you
+YOU: plan ─ slice ─ brief ─┬─ relay --route <class> --check … --fix-attempts N   (one slice)
+                           └─ batch.js plan.json                                  (independent slices, parallel worktrees)
+RELAY: worker runs → checks run → failing tails go back to the SAME worker (bounded) → facts
+YOU: read summary + checks → read the diff → accept, retry with a better brief, or do it yourself → commit
 ```
 
-Three separate questions, never conflated:
+## When NOT to use it
 
-| Question | Answer lives in | Command |
-| --- | --- | --- |
-| Is this backend **supported**? | the framework's adapter registry | always yes, on every machine |
-| Is it **available** here? | this machine, at runtime | `fleet.js discover` |
-| What can the **installed version** really do? | recorded local evidence | `fleet.js doctor` |
+- **You have not planned.** If you cannot name the files, the pattern and the acceptance criteria, read
+  the code first. Planning never leaves the orchestrator.
+- **The change is small or read-heavy.** A one-file fix, or a task that is mostly reading code, costs
+  less to do yourself than to brief, dispatch and review.
+- **Exploratory debugging.** Rapid trial and error needs a live loop, not a brief.
+- **Two workers, one working tree.** Findings become unattributable. Use `batch.js`, which gives each
+  slice its own worktree.
 
-### When NOT to use delegate-fleet
-
-- **You have not planned yet.** If you cannot specify the exact files, patterns, and acceptance criteria from memory, do not delegate. Planning belongs on the orchestrator.
-- **Trivial edits.** Small, single-line or single-file fixes take fewer tokens and less time to apply directly in your session than writing a brief and running an external process.
-- **Interactive or exploratory debugging.** Tasks requiring rapid multi-turn dialogue, live browser inspection, or open-ended trial-and-error.
-- **Concurrent runs in the same workspace.** Two workers editing the same working tree make diffs and findings unattributable. Use separate git worktrees (`--workspace`) for concurrent runs.
-- **Strict filesystem sandboxing is required** but the chosen backend only provides withheld tool surfaces.
-
----
-
-## 1. Know your fleet
+## 1. Know the fleet (once per machine)
 
 ```bash
-node <skill>/scripts/fleet.js discover     # supported vs available here
-node <skill>/scripts/fleet.js doctor       # verify what the installed CLIs really support
+node <skill>/scripts/fleet.js discover   # every supported backend, and which are installed here
+node <skill>/scripts/fleet.js doctor     # probe installed CLIs; records what they really support
+node <skill>/scripts/fleet.js init       # starter .delegate-fleet/config.json
 ```
 
-- `discover` inspects the environment at runtime: checks whether the CLI executable is installed on PATH (or configured in `config.json`), without running active probes. It matches the CLI against saved verification records if present and still matching the executable.
-- `doctor` actively executes probe commands (`--help`, `--version`, and optional `evidenceArgs`) against each installed CLI on this machine, recording findings in `.delegate-fleet/verification.json`. It **promotes** a documented claim to `verified` and **demotes** one that turns out to be wrong. Run it once per machine, and again after any CLI upgrade.
+Supported (the framework has an adapter), available (installed here) and verified (probed here) are
+separate facts. A missing CLI is `unavailable`, never unsupported — say so rather than silently
+substituting. Evidence states and probing: [`references/backends.md`](references/backends.md).
 
-### Four evidence states
+## 2. Configure routes — the model classifies, code owns the flags
 
-Every capability claim has an explicit evidence state:
-- `verified`: Proven locally by a probe of the installed CLI on this machine.
-- `documented`: Sourced from vendor documentation or upstream claims; plausible, but not yet proven here.
-- `unsupported`: The CLI genuinely cannot perform this capability.
-- `unknown`: State not established; never treated as supported.
+In `.delegate-fleet/config.json`, tag each worker with a cost `tier` and map task classes to ordered
+candidates. You then name a class; the config decides backend, model and effort.
 
-**`verified` requires a local CLI probe.** `doctor` records probe results for discovery, while
-read-only dispatch and `select --verified` probe again at dispatch before relying on them. An adapter file
-records what its author checked on their machine, so without local evidence its claim reads as
-`documented`. A declaration cannot verify itself. Evidence is tied to one executable identity (path, size, mtime): change a
-backend's `cli` or replace the binary, and the old record is discarded.
-
-A backend that is not installed here is `unavailable`, never unsupported. Say that plainly instead of
-silently substituting a different worker.
-
-## 2. Plan before you delegate
-
-Decide the approach yourself: files, patterns, interfaces, the order of slices. A worker implements
-*your* plan; it does not architect. If you cannot write the file list from memory, go read the code
-first — you have not planned yet.
-
-Slice so each slice is independently verifiable and independently revertable. One slice, one brief,
-one run.
-
-## 3. Select by capability, then by cost
-
-```bash
-node <skill>/scripts/fleet.js select --need edit --max-tier standard
+```json
+{
+  "workers": { "opencode": { "tier": "cheap" }, "codex": { "tier": "standard" }, "claude": { "tier": "premium" } },
+  "routes": {
+    "mechanical": [{ "backend": "opencode", "model": "deepseek/deepseek-chat" }, { "backend": "codex", "effort": "low" }],
+    "moderate":   [{ "backend": "codex", "effort": "medium", "fixAttempts": 2 }]
+  },
+  "limits": { "runsPer24h": { "premium": 3 } }
+}
 ```
 
-Capability is the hard filter. Ask for the behaviour the slice needs — `edit`, `readOnly`,
-`resumeById`, `modelSelection`, `effort`, `structuredOutput`, `turnLimit`, `budgetLimit`. If nothing
-satisfies the need, that route is closed: say so rather than downgrade the requirement silently.
+A route takes its first candidate that is installed, has the capabilities the run needs, is under its
+tier's 24-hour limit, and is not marked out of quota. Workers whose output says they hit a usage
+limit are marked for an hour automatically (`fleet.js quota`). Details:
+[`references/routing.md`](references/routing.md).
 
-Cost only orders the survivors. Tag workers in `.delegate-fleet/config.json` with
-`"tier": "cheap" | "standard" | "premium"` (a tier describes the model you run, not the CLI);
-`select` lists them cheapest first. The point of delegating is that the expensive model plans and
-reviews while cheaper ones spend the tokens:
+- **Mechanical** (renames, wiring, CRUD, tests from a spec) → a `cheap` route.
+- **Moderate** (a contained feature with a pattern to copy) → a `standard` route.
+- **Judgement-heavy** → do not delegate it.
 
-- **Mechanical** slices (wiring, renames, CRUD, tests from a spec): `--max-tier cheap`.
-- **Moderate** slices (a contained feature with a clear pattern to copy): `--max-tier standard`.
-- **Judgement-heavy** slices: do not delegate them; that is the orchestrator's job.
+## 3. Write a bounded brief
 
-### Read-only vs edit runs
-
-- **Edit runs** (`mode: "edit"`, default): Expect code modifications within declared scope. If exit code is 0 but the tree is unchanged, the relay reports `noop` (treated as a silent refusal until the log says otherwise).
-- **Read-only runs** (`--read-only`, `mode: "read-only"`): Enforce analysis-only execution using backend restriction flags (e.g. `--sandbox read-only`, `--agent plan`, `--plan`). If any workspace file is created, modified, deleted, or renamed, the relay records a `read_only_violation` finding and blocks the result.
-- **Why `--read-only` is refused when unverified**: Prompt wording alone does not prevent writes. A review run that modifies code can quietly destroy uncommitted work. The relay refuses `--read-only` unless that backend's read-only enforcement has been verified by a local probe on this machine. `--allow-unverified` explicitly downgrades this refusal to a warning when you choose to accept the risk.
-
-Announce the choice in one line before dispatching, so the user can veto:
-
-> Dispatching slice 2 to `opencode` — mechanical CRUD wiring; needs `edit` only.
-
-## 4. Write a bounded brief
-
-The worker starts with **zero** conversation history. The brief is the entire contract. Required
-sections are `# Objective`, `## Scope`, `## Acceptance criteria`; see
+The worker starts with **zero** history; the brief is the whole contract. Required: `# Objective`,
+`## Scope` (backtick-quoted paths — scope violations are measured against them), `## Acceptance
+criteria`. Keep it a card, not an essay: 15–60 lines. Paste the project rules that apply; workers do
+not read your agent files. The relay injects the safety rules itself. Template:
 [`references/brief-format.md`](references/brief-format.md).
 
-You never write the safety rules — the relay injects them into every run, so they cannot be
-forgotten. The backtick-quoted paths under `## Scope` are what scope violations are measured against,
-so write them precisely.
+## 4. Dispatch
 
-## 5. Dispatch
+One slice:
 
 ```bash
-node <skill>/scripts/relay.js --backend opencode --brief .delegate-fleet/briefs/slice-2.md \
-  --workspace "$PWD" --json > /tmp/slice-2.json
+node <skill>/scripts/relay.js --route mechanical --brief .delegate-fleet/briefs/slice-2.md \
+  --workspace "$PWD" --check "pnpm typecheck" --check "pnpm test -- src/settings" --fix-attempts 2 --json
 ```
 
-Run it in the background for anything slow, tell the user which worker has which slice, and keep
-working. `--dry-run` prints the exact argv first. Details in
-[`references/dispatch.md`](references/dispatch.md).
+- `--check` runs a gate after a completed run, without a shell (use a script for `&&` or pipes). Only a
+  40-line tail reaches you; the full log is an artifact. A failing check blocks the result.
+- `--fix-attempts N` (0–3) sends failing tails back to the **same** worker. It stops at any finding, at
+  an attempt that changes nothing, or at N.
+- `--backend <id>` instead of `--route` names a worker directly. `--dry-run` prints the exact argv.
 
-Pass the project's gates as `--check` so the relay runs them and only a short tail reaches your
-context — the full output goes to an artifact:
+Independent slices, in parallel, each in its own worktree:
 
 ```bash
-node <skill>/scripts/relay.js --backend opencode --brief … --workspace "$PWD" --json \
-  --check "pnpm typecheck" --check "pnpm test -- src/settings"
+node <skill>/scripts/batch.js .delegate-fleet/plan.json
 ```
 
-One command per `--check`, no shell (`&&` and pipes are refused; use a script). Checks run only on a
-`completed` edit run, and a failing check sets `blocked`.
+A slice with `dependsOn` starts from its dependencies' results. You get one table, a `.patch` per
+slice, and the landing order. Nothing lands on its own. Details: [`references/batch.md`](references/batch.md).
 
-### Operational controls
+Announce each dispatch in one line so the user can veto it: *"Slice 2 → route `mechanical`
+(opencode, cheap): CRUD wiring."* Run slow work in the background and keep planning.
 
-- `--timeout <seconds>`: Watchdog timer (default 1200, max 86400). When it fires, the relay terminates the entire process tree. Honoured for all backends.
-- `--max-turns <n>`: Caps the number of agent turns. Honoured by backends with `turnLimit` (`grok`). Rejected before dispatch on backends that lack it.
-- `--max-budget-usd <n>`: Caps spend in USD. Honoured by backends with `budgetLimit` (`claude`). Rejected before dispatch on backends that lack it.
-- `--stream`: Tees worker stdout and stderr chunks in real time to relay stderr while leaving stdout clean for JSON parsing. Honoured for all backends.
-- Per-worker defaults can be set in `.delegate-fleet/config.json` (`timeoutSeconds`, `maxTurns`, `maxBudgetUsd`, `model`, `effort`, `cli`). Command-line flags override defaults.
+## 5. Read the result, not the logs
 
-### Installation and project adapters
+- `status` is what happened to the process. `findings` are what happened to the repository.
+  `blocked` is true when either needs you, when a check failed, or when git could not be observed.
+- `worker.summary` (the worker's final message, capped at 2 KB), `worker.usage` and
+  `verification.checks` are all you usually need. Open `stdout.log` only when a failure is unexplained.
+- Everything under `worker` is self-reported. The diff is the fact.
 
-Install the skill by copying `skills/delegate-fleet/` into `.agents/skills/delegate-fleet` (or your client's skills directory).
+Every status and finding, and what to do about each: [`references/result-contract.md`](references/result-contract.md).
 
-Project-supplied adapters live in `<workspace>/.delegate-fleet/adapters/<id>.js`. The relay and `fleet.js` discover them automatically, validate them with the same `assertShape` rules as built-in adapters, and allow you to add custom backends or override built-in ones without modifying the skill repository.
+## 6. Verify — never delegated
 
-## 6. Read the result — status and findings are different questions
+1. Checks failing after the fix loop → retry with a **better brief** on the same worker, or do it yourself.
+2. Read the diff (`git diff -- <changed paths>`, or `git -C <worktree> diff` for a batch slice).
+   Green checks and `completed` are claims about processes, not about quality.
+3. For a second opinion, dispatch a `--read-only` run to a **different** backend. Never ask a worker
+   to review its own diff.
+4. Land it (`git apply <patch>` for batch slices, in the order given), then commit as yourself.
 
-`status` is what happened to the process. `findings` are what happened to the repository. A run can
-exit 0 and still be blocked.
-
-| status | What it means |
-| --- | --- |
-| `completed` | The process succeeded and changes were made |
-| `noop` | Exit 0 on an edit run, tree unchanged — treat as a silent refusal |
-| `implementer_failure` | Exit 0, but the worker refused or could not authenticate |
-| `process_failure` | Non-zero exit or a fatal signal |
-| `timeout` | The relay watchdog fired; **partial edits are likely** |
-| `aborted` | The relay was killed and forwarded the kill; **partial edits are likely** |
-| `launch_failure` | The worker process could not be started |
-| `backend_unavailable` | Supported by the framework, but its CLI is not installed here |
-| `invalid_request` | Refused before dispatch; nothing ran, nothing was spent |
-
-| finding | What you must do |
-| --- | --- |
-| `scope_violation` | Inspect each path. Never auto-revert |
-| `unexpected_repository_change` | The worker touched work that was already uncommitted. Say so immediately |
-| `worker_commit` | The worker took ownership it does not have. Report before anything else |
-| `worker_stash` | The stash ref moved during the run. Report before anything else |
-| `read_only_violation` | An analysis run wrote. Treat the backend's read-only claim as broken |
-| `framework_state_modified` | The worker modified framework state under `.delegate-fleet/` (outside `runs/`), such as config or adapters |
-
-`blocked` is `true` whenever the status is not `completed`, any finding is present, a `--check`
-failed, or the repository could not be observed (`repository.observed === false`). It is
-arithmetic, not judgement.
-
-**Read `worker` and `verification.checks` in the result, not `stdout.log`.** `worker.summary` is
-the worker's final message (capped at 2 KB), with `worker.sessionId` for `--session` and
-`worker.usage` for tokens and cost. All of it is self-reported: evidence, never fact. Open the raw
-log only when a run failed and the summary does not explain why.
-
-## Dirty-tree protection and honest limits
-
-The relay takes content-addressed snapshots before and after execution:
-- **What it catches**:
-  - Differentiates pre-existing uncommitted changes from worker changes. A file already dirty before dispatch and edited further by the worker is detected (`unexpected_repository_change`).
-  - Detects out-of-scope creations, edits, deletions, and renames (`scope_violation`).
-  - Catches worker git operations (`worker_commit`, `worker_stash`).
-  - Catches writes to framework configuration or planted adapters under `.delegate-fleet/` even in repositories where `.delegate-fleet/` is gitignored (`framework_state_modified`).
-- **Honest limits**:
-  - Gitignored files outside `.delegate-fleet/` are not tracked by git snapshots and cannot be observed.
-  - Filesystem modifications outside the repository workspace are unobserved.
-  - Containment: The relay does not sandbox worker processes. A worker run with `--auto` or `--yolo` has whatever permissions the running user has. Only `codex` has OS-level sandbox enforcement (`--sandbox read-only`); all other backends enforce read-only by withholding tool access. When strict containment is required, use separate git worktrees or container isolation.
-
-## 7. Verify independently — this is never delegated
-
-The worker says "I implemented it." The relay says "here are the facts." **You** decide.
-
-1. Check `verification.checks` first. A failing gate means retry with its tail in the brief; there is
-   no point reading a diff that does not build.
-2. Read the diff yourself (`git diff -- <changed paths>`). `status: completed` and green checks are
-   claims about processes, not about quality.
-3. Run any gate you did not pass as `--check`. Only then commit. The worker never commits; if it did, that is a finding, not a shortcut.
-
-See [`references/verification.md`](references/verification.md).
-
-## 8. Accept, retry, or escalate
-
-Different failures need different decisions — this is why the taxonomy is not collapsed into "failed":
-
-- `noop` → read the log. Usually a brief problem, not a model problem.
-- `timeout` → inspect the tree **before** re-dispatching; partial edits are likely.
-- `scope_violation` → inspect and decide; never blanket-revert.
-- `process_failure` → read the worker's own error in `stderr.log` first.
-- A failed run is retried with a **better brief on the same worker** before escalating. A bad brief
-  fails on every model; escalation without a changed brief buys the same failure.
-
----
+Checklist: [`references/verification.md`](references/verification.md). Spend so far:
+`fleet.js report`.
 
 ## Hard rules
 
-- The orchestrator owns review, acceptance, the commit, and the revert. Always.
-- Never report a run as successful without reading its diff, whatever the exit code said.
-- Never delegate the review of a diff to the worker that produced it.
-- Files outside the brief are a finding, not a bonus. Report them; never quietly revert them.
-- Never destroy pre-existing uncommitted work, and never `git reset`/`checkout` to tidy up a worker.
-- `--read-only` is only honest when the backend's read-only is verified here. Do not paper over it
-  with prompt wording.
-- Paste the project's own rules into the brief. Workers do not read your agent files.
+- You own the review, the acceptance, the commit and any revert. Always.
+- Never report success without reading the diff, whatever the exit code or checks said.
+- Out-of-scope files are a finding, not a bonus. Report them; never quietly revert them.
+- Never destroy pre-existing uncommitted work. Never `git reset` or `checkout` to tidy up after a worker.
+- `--read-only` is honest only when that backend's read-only is verified on this machine.
+- A failed run gets a better brief before a pricier worker. A bad brief fails on every model.
 
 ## Files
 
-- `scripts/relay.js` — dispatch one brief, bounded, and report facts.
-- `scripts/fleet.js` — `discover`, `doctor`, `select`, `init`.
-- `scripts/adapters/` — one small file per backend: how to invoke it, what it can do, on what evidence.
-- `scripts/lib/` — capability model, environment, brief, repository facts, execution, result contract.
-- `references/architecture.md` — the five layers and what each guarantees.
-- `references/brief-format.md` — the brief template and what is linted.
-- `references/result-contract.md` — every field, every status, every finding.
-- `references/backends.md` — the supported backends and their honest limits.
-- `references/verification.md` — the review checklist you run yourself.
-- `references/extending.md` — add a backend in one file, without forking.
+- `scripts/relay.js` — one slice: route, dispatch, checks, fix loop, facts.
+- `scripts/batch.js` — many slices in parallel worktrees, one summary, patches.
+- `scripts/fleet.js` — `discover`, `doctor`, `select`, `init`, `report`, `quota`.
+- `scripts/adapters/` — one file per backend; add your own under `.delegate-fleet/adapters/`
+  ([`references/extending.md`](references/extending.md)).
+- `references/` — architecture, backends, brief format, dispatch, routing, batch, result contract,
+  verification.
+- `bench/` — the A/B benchmark (solo vs fleet); `tests/smoke.js` — opt-in runs against real CLIs.

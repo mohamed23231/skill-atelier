@@ -7,6 +7,9 @@ node <skill>/scripts/relay.js --backend <id> --brief <file.md> --workspace "$PWD
 | Flag | Purpose |
 | --- | --- |
 | `--backend <id>` | Which worker. Must be available here |
+| `--route <class>` | Or: a task class from config `routes`; the first qualifying candidate runs. See [routing.md](routing.md) |
+| `--fix-attempts <n>` | 0–3. Re-run the same worker with the failing check tails. Needs `--check` |
+| `--state-root <dir>` | Where quota marks and run history live (default: the workspace). Used by `batch.js` |
 | `--brief <file>` | Linted before dispatch; a vague brief is refused |
 | `--read-only` | Analysis run. Requires read-only **verified** on this machine |
 | `--model <id>` | Rejected if the backend cannot select a model |
@@ -77,9 +80,11 @@ they can never be mistaken for worker changes.
 }
 ```
 
-Valid keys: `cli`, `model`, `effort`, `timeoutSeconds`, `maxTurns`, `maxBudgetUsd`, `tier`. `tier` is
-`cheap`, `standard` or `premium` and orders `fleet.js select`; it describes the model you configured,
-so it lives here and never in an adapter. Every key is consumed and has an integration test proving it reaches the invocation. **Any other key is a hard
+Valid worker keys: `cli`, `model`, `effort`, `timeoutSeconds`, `maxTurns`, `maxBudgetUsd`, `tier`,
+`fixAttempts`. `tier` is `cheap`, `standard` or `premium` and orders `fleet.js select`; it describes
+the model you configured, so it lives here and never in an adapter. A `fixAttempts` default applies
+only to runs that pass `--check`. Valid top-level keys: `workers`, `routes`, `limits` (see
+[routing.md](routing.md)), and `_readme`. Every key is consumed and has an integration test proving it reaches the invocation. **Any other key is a hard
 error**, because a config field with no consumer is a lie — that was the defining bug of the
 previous version. Explicit flags always beat configured defaults.
 

@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `delegate-fleet` is listed in the Claude Code plugin marketplace (`.claude-plugin/marketplace.json`).
+- README: delegate-fleet 2.3.0 workflow (routes, checks with the fix loop, `batch.js`, `fleet.js
+  report`, the benchmark).
+
 - `skills/delegate-fleet/` 2.0.0: capability-based delegation. Workers are selected by what they can
   do rather than what they cost, with an explicit evidence state per capability and a clean
   separation between *supported by the framework*, *available on this machine*, and *verified for
