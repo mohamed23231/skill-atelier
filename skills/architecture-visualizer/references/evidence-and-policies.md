@@ -14,8 +14,8 @@ Every evidence item is evaluated against the local repository during `validate` 
 
 | State | Definition | Resolution Rule |
 | --- | --- | --- |
-| `verified` | Confirmed accurate against the filesystem. | The target file exists on disk. If a symbol or line range is declared, the symbol is present in the file and lines fall within valid file bounds. |
-| `unresolved` | File or path cannot be found. | Path does not exist relative to `--repo-root` (or absolute path is missing). Generates an `evidence.missing` finding. |
+| `verified` | Confirmed accurate against the filesystem. | The target path exists on disk strictly under `--repo-root`. If a line range is declared, it falls within the file. If a symbol is declared, it appears as a whole identifier (not as part of a longer name) and, when a line range is given, inside that range. |
+| `unresolved` | File or path cannot be found under the repository root. | Path does not exist under `--repo-root` (`evidence.missing`), or it points outside the root: an absolute path elsewhere, a `../` escape, a symlink leading out, or the root itself (`evidence.outside_repo`). |
 | `stale` | Path exists, but contents have drifted. | File exists, but specified symbol is not found or `startLine`/`endLine` indices exceed the file line count or are inverted (`endLine < startLine`). Generates an `evidence.stale` finding. |
 | `asserted` | Non-file evidence recorded as an assertion. | Applied to `assertion` or `command` evidence types that cannot be verified solely by checking static files on disk. |
 | `compatibility` | Synthesized from legacy v1 fields. | Created automatically when normalizing legacy v1 `details.files`, `details.apis`, or `details.tables`. |
@@ -58,11 +58,11 @@ Locators identify the exact target of an evidence record:
   "origin": "author"
 }
 
-// 4. API Endpoint Locator
+// 4. API Endpoint Locator (`path` is the route; add `file` to verify the handler file)
 {
   "id": "ev_checkout_api",
   "type": "api",
-  "locator": { "method": "POST", "path": "/api/v2/checkout" },
+  "locator": { "method": "POST", "path": "/api/v2/checkout", "file": "src/routes/checkout.ts" },
   "origin": "author"
 }
 
@@ -116,6 +116,7 @@ The engine automatically evaluates built-in evidence checks:
 - `evidence.required`: A node marked `status: "VERIFIED"` must link to resolvable evidence in `evidenceIds` or `details`.
 - `evidence.missing`: Referenced evidence could not be found on disk (`EVIDENCE_VERIFICATION.UNRESOLVED`).
 - `evidence.stale`: Referenced evidence contains outdated line bounds or missing symbols (`EVIDENCE_VERIFICATION.STALE`).
+- `evidence.outside_repo`: Referenced evidence points outside the repository root, so it cannot ground a claim about this repository.
 - `evidence.unresolved_reference`: A node lists an ID in `evidenceIds` that does not exist in the top-level `evidence` array.
 
 ---

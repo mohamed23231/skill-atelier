@@ -226,6 +226,74 @@ const cases = [
       assert.strictEqual(typeof ctx.ArchVizGeometry.cubicPointAt, 'function');
     },
   ],
+  [
+    'keeps machine-local absolute paths out of the built HTML and Markdown',
+    () => {
+      const dir = tmpDir();
+      try {
+        fs.mkdirSync(path.join(dir, 'src', 'api'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'src', 'api', 'Api.ts'), 'export const api = 1;\n');
+        const spec = clone(VALID_SPEC);
+        delete spec.meta.grounding;
+        spec.schemaVersion = 2;
+        spec.evidence = [{ id: 'ev_api', type: 'file', locator: { path: 'src/api/Api.ts' } }];
+        spec.nodes[0].evidenceIds = ['ev_api'];
+        const htmlPath = path.join(dir, 'out', 'index.html');
+        const mdPath = path.join(dir, 'out', 'index.md');
+        compileArchitecture(spec, { repoRoot: dir, outputHtml: htmlPath, outputMarkdown: mdPath });
+        const roots = [dir, fs.realpathSync(dir)];
+        [htmlPath, mdPath].forEach((file) => {
+          const text = fs.readFileSync(file, 'utf8');
+          roots.forEach((root) => assert.ok(!text.includes(root), `${path.basename(file)} leaks ${root}`));
+        });
+        assert.ok(fs.readFileSync(htmlPath, 'utf8').includes('"resolvedPath": "src/api/Api.ts"'));
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  ],
+  [
+    'marks an illustrative diagram as illustrative in the built HTML',
+    () => {
+      const illustrative = compileArchitecture(clone(VALID_SPEC));
+      assert.ok(illustrative.html.includes('id="doc-grounding"'));
+      assert.ok(/"grounding": "illustrative"/.test(illustrative.html));
+      assert.ok(illustrative.html.includes("document.getElementById('doc-grounding').hidden = ARCH_SPEC.meta.grounding !== 'illustrative'"));
+    },
+  ],
+  [
+    'rewrites absolute paths written in the spec before publishing them',
+    () => {
+      const dir = tmpDir();
+      try {
+        fs.mkdirSync(path.join(dir, 'src', 'api'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'src', 'api', 'Api.ts'), 'export const api = 1;\n');
+        const spec = clone(VALID_SPEC);
+        delete spec.meta.grounding;
+        spec.schemaVersion = 2;
+        spec.evidence = [
+          { id: 'ev_abs_inside', type: 'file', locator: { path: path.join(dir, 'src', 'api', 'Api.ts') } },
+          { id: 'ev_abs_outside', type: 'file', locator: { path: path.join(os.homedir(), 'private-notes', 'secret.ts') } },
+          { id: 'ev_route', type: 'api', locator: { method: 'GET', path: '/api/orders' } },
+          { id: 'ev_dotdot', type: 'file', locator: { path: '../../elsewhere/private/notes.ts' } },
+        ];
+        spec.nodes[0].evidenceIds = spec.evidence.map((e) => e.id);
+        spec.nodes[0].details.files = [path.join(dir, 'src', 'api', 'Api.ts')];
+        const result = compileArchitecture(spec, { repoRoot: dir });
+        [result.html, result.markdown].forEach((text) => {
+          assert.ok(!text.includes(dir) && !text.includes(fs.realpathSync(dir)), 'repo root leaked');
+          assert.ok(!text.includes(os.homedir()), 'home directory leaked');
+        });
+        assert.ok(result.html.includes('"path": "src/api/Api.ts"'));
+        assert.ok(result.markdown.includes('<outside repository>/secret.ts'));
+        assert.ok(!result.html.includes('elsewhere/private') && !result.markdown.includes('elsewhere/private'), 'a ../ path outside the root leaked');
+        assert.ok(result.markdown.includes('<outside repository>/notes.ts'));
+        assert.ok(result.html.includes('"path": "/api/orders"'), 'API routes are not file paths and stay as written');
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  ],
 ];
 
 module.exports = { name: 'Compiler & Exporter', cases };

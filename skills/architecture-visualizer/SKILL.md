@@ -52,7 +52,7 @@ arch-viz validate <spec.json> --repo-root .
 In release or CI workflows, use `--strict` to ensure all warnings are resolved. Ensure:
 - All labels fit card budgets (node label ≤ 22 chars, tech ≤ 28, edge label ≤ 32).
 - Boundary containment and rank ordering are cycle-free and cleanly routed.
-- Every verified component's files resolve on disk (or set `meta.grounding: "illustrative"` for teaching examples).
+- Every verified component's files resolve on disk strictly under `--repo-root`: absolute paths elsewhere, `../` escapes and symlinks leading out are rejected (or set `meta.grounding: "illustrative"` for teaching examples, which the workbench labels as illustrative).
 - Architectural policies (e.g. `forbidden_dependency`, `layer_direction`, `cycle`) pass cleanly.
 
 ### 5. Expose Questions and Policy Findings

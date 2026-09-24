@@ -11,11 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Repository grounding is confined to the repository root**: evidence and `details.files` paths now have to resolve strictly under `--repo-root`. Absolute paths elsewhere, `../` escapes, symlinks that lead out of the root, and the root itself are `unresolved` and raise the new `evidence.outside_repo` finding and a Gate 13 warning (which fails `--strict`). Previously `/etc/hosts` could verify a node.
+- **No machine-local paths in artifacts**: evaluated evidence records `resolvedPath` (repo-relative) instead of `absolutePath`, and the compiler rewrites absolute paths written in the spec (evidence locators and `details.files`) before embedding them: repo-relative when under the root, the file name alone otherwise. A `../` path that leaves the root is reduced the same way. Built HTML and Markdown no longer carry the author's home directory. `RepoInspector#verifyFiles` returns `insideRepo` and `resolvedPath` in place of `absolutePath`.
+- **Outside-root evidence is reported for every node**: an `INFERRED` or `ASSUMED` node citing a path outside the repository also raises `evidence.outside_repo`. A missing file under a symlink that leads out of the repository is classified as outside too.
+- **API evidence**: `locator.path` on `api` evidence is the route (`/api/orders`), so it is no longer checked as a file. Set `locator.file` to tie an endpoint to its handler file; without it the record stays `compatibility`.
+- **Stricter symbol evidence**: a symbol must appear as a whole identifier, so `create` no longer verifies against `createOrder` or `createΩ` (Unicode identifier characters count), and it must fall inside `startLine`–`endLine` when a range is given.
+- **`scaffold --repo-root <subdir>`**: paths are written relative to the requested root, so `validate --repo-root <subdir>` resolves them, and a changed symlink leading out of that root is scaffolded as `INFERRED`, not `VERIFIED`. Previously they were git-root-relative and failed Gate 13. `--ignore` prefixes are now matched against those root-relative paths.
+
 - **Workbench panels**: inspector visibility is driven solely by `data-open`, panels use `role="dialog"`, closed panels are marked `inert` and `aria-hidden="true"`, and `aria-modal` is set only for open overlay drawers.
 - **Workbench docking & canvas reflow**: docked panels reflow canvas and fit view when `userMovedView` is false; selection on canvas nodes opens inspector via `setDrawerOpen()` with proper responsive reflow and backdrop handling.
 - **Tabs bar**: minimize toggle is placed outside `role="tablist"` navigation, vertical wheel scrolling respects scroll boundaries and deltaMode without locking vertical page scroll, and active view tabs synchronize on URL restoration and view switching.
 - **Shape-aware geometry**: external nodes use matching 14px corner radius (`nodeCornerRadius`) so edge endpoints land accurately on the rendered outline.
 - **Shipped examples**: regenerated from current template.
+
+### Added
+
+- **Illustrative marker**: specs with `meta.grounding: "illustrative"` show an *Illustrative* badge in the workbench filter bar, so example diagrams cannot pass for verified ones.
 
 ---
 

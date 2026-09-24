@@ -179,14 +179,18 @@ const cases = [
       writeFile(dir, 'packages/app/src/styles.ts', 'export default {};\n');
       writeFile(dir, 'packages/other/Ignored.ts', 'export default 1;\n');
 
-      const { spec } = scaffoldFromDiff({ repoRoot: path.join(dir, 'packages/app') });
+      const scopedRoot = path.join(dir, 'packages/app');
+      const { spec } = scaffoldFromDiff({ repoRoot: scopedRoot });
       const files = spec.nodes.map((n) => n.details.files[0]).sort();
-      assert.deepStrictEqual(files, ['packages/app/src/Card.tsx', 'packages/app/src/styles.ts']);
+      assert.deepStrictEqual(files, ['src/Card.tsx', 'src/styles.ts']);
       assert.ok(
         spec.nodes.every((n) => n.status === 'VERIFIED'),
-        'paths must resolve against the git root'
+        'paths must resolve against the requested root'
       );
       assert.strictEqual(spec.edges.length, 1);
+      const result = validateArchitecture(spec, { repoRoot: scopedRoot });
+      assert.ok(result.model.evidence.every((e) => e.verification === 'verified'), 'validate with the same --repo-root must resolve every scaffolded path');
+      assert.strictEqual(result.gate.find((g) => g.id === 13).status, 'PASS');
       fs.rmSync(dir, { recursive: true, force: true });
     },
   ],
@@ -263,6 +267,23 @@ const cases = [
       const { spec } = scaffoldFromDiff({ repoRoot: dir });
       const verifiedPaths = (spec.evidence || []).filter((entry) => entry.verification === 'verified').map((entry) => entry.locator && entry.locator.path);
       assert.ok(!verifiedPaths.includes('features/billing/Old.ts'));
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  ],
+  [
+    'does not mark a changed symlink that leads out of the scaffold root as VERIFIED',
+    () => {
+      const dir = makeRepo();
+      writeFile(dir, 'packages/app/src/Card.ts', 'export default 1;\n');
+      writeFile(dir, 'packages/shared/util.ts', 'export default 2;\n');
+      fs.symlinkSync(path.join(dir, 'packages/shared/util.ts'), path.join(dir, 'packages/app/src/util.ts'));
+      const scopedRoot = path.join(dir, 'packages/app');
+      const { spec } = scaffoldFromDiff({ repoRoot: scopedRoot });
+      const link = spec.nodes.find((n) => n.details.files[0] === 'src/util.ts');
+      assert.strictEqual(link.status, 'INFERRED');
+      assert.ok(!link.evidenceIds);
+      const result = validateArchitecture(spec, { repoRoot: scopedRoot });
+      assert.ok(result.findings.some((f) => f.policyId === 'evidence.outside_repo' && f.nodeIds.includes(link.id)), 'the outbound file is still reported, not verified');
       fs.rmSync(dir, { recursive: true, force: true });
     },
   ],
