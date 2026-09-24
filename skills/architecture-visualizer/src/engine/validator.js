@@ -248,9 +248,28 @@ function collectEvidenceFindings(model, { verifyFilesOnDisk }) {
 
   const findings = [];
   const evidenceById = new Map((model.evidence || []).map((entry) => [entry.id, entry]));
+  const reportedOutside = new Set();
+  const reportOutside = (node, record) => {
+    if (reportedOutside.has(record.id)) return;
+    reportedOutside.add(record.id);
+    findings.push({
+      id: `finding_evidence_outside_repo_${record.id}`,
+      severity: FINDING_SEVERITY.WARN,
+      message: `Evidence "${record.id}" for node "${node.id}" does not point to a path under the repository root.`,
+      nodeIds: [node.id],
+      edgeIds: [],
+      policyId: BUILTIN_POLICY.EVIDENCE_OUTSIDE_REPO,
+      evidenceIds: [record.id],
+    });
+  };
 
   (model.nodes || []).forEach((node) => {
     if (node.status !== 'VERIFIED') {
+      // Evidence outside the repository is wrong whatever the claim's status.
+      (node.evidenceIds || []).forEach((id) => {
+        const record = evidenceById.get(id);
+        if (record && record.outsideRepo) reportOutside(node, record);
+      });
       return;
     }
     if (!nodeHasEvidence(node, evidenceById)) {
@@ -279,15 +298,7 @@ function collectEvidenceFindings(model, { verifyFilesOnDisk }) {
         return;
       }
       if (record.outsideRepo) {
-        findings.push({
-          id: `finding_evidence_outside_repo_${record.id}`,
-          severity: FINDING_SEVERITY.WARN,
-          message: `Evidence "${record.id}" for node "${node.id}" does not point to a path under the repository root.`,
-          nodeIds: [node.id],
-          edgeIds: [],
-          policyId: BUILTIN_POLICY.EVIDENCE_OUTSIDE_REPO,
-          evidenceIds: [record.id],
-        });
+        reportOutside(node, record);
       } else if (record.verification === EVIDENCE_VERIFICATION.UNRESOLVED) {
         findings.push({
           id: `finding_evidence_missing_${record.id}`,
@@ -325,7 +336,8 @@ function appendUnresolvedEvidence(missingFiles, model) {
     (node.evidenceIds || []).forEach((id) => {
       const record = evidenceById.get(id);
       if (!record || record.verification !== EVIDENCE_VERIFICATION.UNRESOLVED) return;
-      const filePath = record.locator && record.locator.path;
+      const locator = record.locator || {};
+      const filePath = record.type === EVIDENCE_TYPE.API ? locator.file : locator.path || locator.document;
       if (!filePath) return;
       const key = `${node.id}:${filePath}`;
       if (seen.has(key)) return;

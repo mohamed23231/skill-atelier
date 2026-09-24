@@ -270,6 +270,23 @@ const cases = [
       fs.rmSync(dir, { recursive: true, force: true });
     },
   ],
+  [
+    'does not mark a changed symlink that leads out of the scaffold root as VERIFIED',
+    () => {
+      const dir = makeRepo();
+      writeFile(dir, 'packages/app/src/Card.ts', 'export default 1;\n');
+      writeFile(dir, 'packages/shared/util.ts', 'export default 2;\n');
+      fs.symlinkSync(path.join(dir, 'packages/shared/util.ts'), path.join(dir, 'packages/app/src/util.ts'));
+      const scopedRoot = path.join(dir, 'packages/app');
+      const { spec } = scaffoldFromDiff({ repoRoot: scopedRoot });
+      const link = spec.nodes.find((n) => n.details.files[0] === 'src/util.ts');
+      assert.strictEqual(link.status, 'INFERRED');
+      assert.ok(!link.evidenceIds);
+      const result = validateArchitecture(spec, { repoRoot: scopedRoot });
+      assert.ok(result.findings.some((f) => f.policyId === 'evidence.outside_repo' && f.nodeIds.includes(link.id)), 'the outbound file is still reported, not verified');
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  ],
 ];
 
 module.exports = { name: 'Diff Scaffold', cases };

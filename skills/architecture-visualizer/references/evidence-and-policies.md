@@ -58,11 +58,11 @@ Locators identify the exact target of an evidence record:
   "origin": "author"
 }
 
-// 4. API Endpoint Locator
+// 4. API Endpoint Locator (`path` is the route; add `file` to verify the handler file)
 {
   "id": "ev_checkout_api",
   "type": "api",
-  "locator": { "method": "POST", "path": "/api/v2/checkout" },
+  "locator": { "method": "POST", "path": "/api/v2/checkout", "file": "src/routes/checkout.ts" },
   "origin": "author"
 }
 

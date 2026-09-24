@@ -261,6 +261,36 @@ const cases = [
       assert.ok(illustrative.html.includes("document.getElementById('doc-grounding').hidden = ARCH_SPEC.meta.grounding !== 'illustrative'"));
     },
   ],
+  [
+    'rewrites absolute paths written in the spec before publishing them',
+    () => {
+      const dir = tmpDir();
+      try {
+        fs.mkdirSync(path.join(dir, 'src', 'api'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'src', 'api', 'Api.ts'), 'export const api = 1;\n');
+        const spec = clone(VALID_SPEC);
+        delete spec.meta.grounding;
+        spec.schemaVersion = 2;
+        spec.evidence = [
+          { id: 'ev_abs_inside', type: 'file', locator: { path: path.join(dir, 'src', 'api', 'Api.ts') } },
+          { id: 'ev_abs_outside', type: 'file', locator: { path: path.join(os.homedir(), 'private-notes', 'secret.ts') } },
+          { id: 'ev_route', type: 'api', locator: { method: 'GET', path: '/api/orders' } },
+        ];
+        spec.nodes[0].evidenceIds = spec.evidence.map((e) => e.id);
+        spec.nodes[0].details.files = [path.join(dir, 'src', 'api', 'Api.ts')];
+        const result = compileArchitecture(spec, { repoRoot: dir });
+        [result.html, result.markdown].forEach((text) => {
+          assert.ok(!text.includes(dir) && !text.includes(fs.realpathSync(dir)), 'repo root leaked');
+          assert.ok(!text.includes(os.homedir()), 'home directory leaked');
+        });
+        assert.ok(result.html.includes('"path": "src/api/Api.ts"'));
+        assert.ok(result.markdown.includes('<outside repository>/secret.ts'));
+        assert.ok(result.html.includes('"path": "/api/orders"'), 'API routes are not file paths and stay as written');
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  ],
 ];
 
 module.exports = { name: 'Compiler & Exporter', cases };

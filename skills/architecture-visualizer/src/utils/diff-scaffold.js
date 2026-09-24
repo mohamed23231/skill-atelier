@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { resolveRepoPath } = require('./repo-inspector.js');
 
 const LABEL_CHARS = 22;
 const TECH_CHARS = 28;
@@ -305,7 +306,9 @@ function scaffoldFromDiff(options = {}) {
     usedIds.add(id);
 
     const code = changes.get(file);
-    const exists = fs.existsSync(path.join(repoRoot, file));
+    // Same containment rule as validate: an outbound symlink is not evidence.
+    const resolved = resolveRepoPath(repoRoot, file);
+    const exists = Boolean(resolved && resolved.inside && resolved.exists);
 
     const node = {
       id,

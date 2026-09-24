@@ -39,6 +39,20 @@ function realPathOr(target) {
   }
 }
 
+// Real path of the nearest existing ancestor, with the missing tail re-appended,
+// so a not-yet-created file under an outbound symlink still resolves outside.
+function realPathOfNearest(target) {
+  let current = target;
+  const tail = [];
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return target;
+    tail.unshift(path.basename(current));
+    current = parent;
+  }
+  return path.join(realPathOr(current), ...tail);
+}
+
 // True only for a path strictly below root: the root itself grounds nothing.
 function isWithin(root, target) {
   const relative = path.relative(root, target);
@@ -60,8 +74,8 @@ function resolveRepoPath(repoRoot, targetPath) {
   // For a path that exists, where it really lives decides: a symlink out of the
   // repo is outside, an alias of the repo root (e.g. /var vs /private/var) is not.
   const realRoot = realPathOr(root);
-  const realCandidate = exists ? realPathOr(candidate) : candidate;
-  const inside = exists ? isWithin(realRoot, realCandidate) : lexicallyInside;
+  const realCandidate = realPathOfNearest(candidate);
+  const inside = isWithin(realRoot, realCandidate);
   if (!inside) {
     return { absolutePath: candidate, relativePath: null, inside: false };
   }
@@ -73,9 +87,23 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const IDENTIFIER_CHAR = '\\p{ID_Continue}$\\u200C\\u200D';
+
 function containsSymbol(content, symbol) {
-  const pattern = new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegExp(symbol)}($|[^A-Za-z0-9_$])`);
+  const pattern = new RegExp(`(^|[^${IDENTIFIER_CHAR}])${escapeRegExp(symbol)}($|[^${IDENTIFIER_CHAR}])`, 'u');
   return pattern.test(content);
+}
+
+/**
+ * The form of a locator path that is safe to publish in an artifact: paths
+ * under the root become repo-relative, other absolute paths keep only their
+ * file name, so no machine-local directory leaks. Relative paths are kept.
+ */
+function displayRepoPath(repoRoot, targetPath) {
+  if (typeof targetPath !== 'string' || !path.isAbsolute(targetPath)) return targetPath;
+  const resolved = resolveRepoPath(repoRoot, targetPath);
+  if (resolved && resolved.inside) return resolved.relativePath;
+  return `<outside repository>/${path.basename(targetPath)}`;
 }
 
 function countLines(content) {
@@ -118,16 +146,18 @@ class RepoInspector {
       return result;
     }
 
+    // An API locator's `path` is the route (`/api/orders`), not a file, so only
+    // an explicit `file` is checked against the repository.
+    const fileField = result.type === EVIDENCE_TYPE.API ? 'file' : 'path';
     if (result.type === EVIDENCE_TYPE.API || result.type === EVIDENCE_TYPE.TABLE) {
-      const filePath = result.locator.path;
-      if (!filePath) {
+      if (!result.locator[fileField]) {
         result.verification = EVIDENCE_VERIFICATION.COMPATIBILITY;
         result.exists = false;
         return result;
       }
     }
 
-    const relativePath = result.locator.path || result.locator.document;
+    const relativePath = result.locator[fileField] || result.locator.document;
     if (!relativePath) {
       result.verification = EVIDENCE_VERIFICATION.UNRESOLVED;
       result.exists = false;
@@ -285,6 +315,7 @@ class RepoInspector {
 module.exports = {
   RepoInspector,
   resolveRepoPath,
+  displayRepoPath,
   EVIDENCE_TYPE,
   EVIDENCE_VERIFICATION,
   EVIDENCE_ORIGIN,

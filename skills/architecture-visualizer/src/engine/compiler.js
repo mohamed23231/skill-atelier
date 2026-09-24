@@ -3,6 +3,34 @@ const path = require('node:path');
 const { validateArchitecture } = require('./validator.js');
 const { computeLayout } = require('./layout.js');
 const { exportToMermaid } = require('../utils/mermaid-exporter.js');
+const { displayRepoPath } = require('../utils/repo-inspector.js');
+
+const FILE_LOCATOR_KEYS = ['path', 'file', 'document'];
+
+/**
+ * Returns a copy of a spec or model whose file paths are safe to publish: an
+ * absolute path is made repo-relative, or reduced to its file name when it is
+ * outside the repository. API routes (`locator.path` on api evidence) are kept.
+ */
+function publishablePaths(source, repoRoot) {
+  const copy = JSON.parse(JSON.stringify(source));
+  (copy.evidence || []).forEach((record) => {
+    if (!record || !record.locator || typeof record.locator !== 'object') return;
+    FILE_LOCATOR_KEYS.forEach((key) => {
+      if (key === 'path' && record.type === 'api') return;
+      if (key in record.locator) record.locator[key] = displayRepoPath(repoRoot, record.locator[key]);
+    });
+  });
+  (copy.nodes || []).forEach((node) => {
+    if (!node || !node.details || !Array.isArray(node.details.files)) return;
+    node.details.files = node.details.files.map((entry) => {
+      if (typeof entry === 'string') return displayRepoPath(repoRoot, entry);
+      if (entry && typeof entry === 'object') return { ...entry, path: displayRepoPath(repoRoot, entry.path) };
+      return entry;
+    });
+  });
+  return copy;
+}
 
 /**
  * Compiles an architecture spec into a self-contained interactive HTML file
@@ -26,13 +54,22 @@ function compileArchitecture(spec, options = {}) {
     throw new Error(`Architecture validation failed:\n- ${validation.errors.join('\n- ')}`);
   }
 
-  const layout = computeLayout(spec, options.layoutOverrides);
-  const mermaid = exportToMermaid(spec, { direction: layout.config.direction });
-  const markdown = generateMarkdownReport(spec, validation, mermaid);
+  const repoRoot = options.repoRoot || process.cwd();
+  const publishedSpec = publishablePaths(spec, repoRoot);
+  const publishedValidation = {
+    ...validation,
+    model: validation.model ? publishablePaths(validation.model, repoRoot) : validation.model,
+    review: validation.review
+      ? { ...validation.review, evidenceManifest: publishablePaths({ evidence: validation.review.evidenceManifest || [] }, repoRoot).evidence }
+      : validation.review,
+  };
+  const layout = computeLayout(publishedSpec, options.layoutOverrides);
+  const mermaid = exportToMermaid(publishedSpec, { direction: layout.config.direction });
+  const markdown = generateMarkdownReport(publishedSpec, publishedValidation, mermaid);
   const payload = {
-    ...(validation.model || spec),
+    ...(publishedValidation.model || publishedSpec),
     findings: validation.findings || [],
-    review: validation.review || null,
+    review: publishedValidation.review || null,
   };
 
   const templatePath = path.join(__dirname, 'template.html');
