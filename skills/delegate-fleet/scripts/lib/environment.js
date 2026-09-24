@@ -145,10 +145,20 @@ function loadConfig(repoRoot) {
       if (!Number.isInteger(n) || n <= 0) errors.push(`workers.${id}.timeoutSeconds: expected a positive integer`);
       else entry.timeoutSeconds = n;
     }
+    if (cfg.maxTurns !== undefined) {
+      const n = Number(cfg.maxTurns);
+      if (!Number.isInteger(n) || n <= 0) errors.push(`workers.${id}.maxTurns: expected a positive integer`);
+      else entry.maxTurns = n;
+    }
+    if (cfg.maxBudgetUsd !== undefined) {
+      const n = Number(cfg.maxBudgetUsd);
+      if (!Number.isFinite(n) || n <= 0) errors.push(`workers.${id}.maxBudgetUsd: expected a positive number`);
+      else entry.maxBudgetUsd = n;
+    }
     // Any other key is a field with no consumer: reject it rather than let it
     // look meaningful. This is the class of bug that made v1 untrustworthy.
     for (const key of Object.keys(cfg)) {
-      if (!['cli', 'model', 'effort', 'timeoutSeconds'].includes(key)) {
+      if (!['cli', 'model', 'effort', 'timeoutSeconds', 'maxTurns', 'maxBudgetUsd'].includes(key)) {
         errors.push(`workers.${id}.${key}: unknown option; this field would be silently ignored`);
       }
     }
@@ -159,8 +169,24 @@ function loadConfig(repoRoot) {
 
 /** Locally recorded capability evidence, written by `fleet.js doctor`. */
 function loadVerification(repoRoot) {
-  const raw = readJson(path.join(stateDir(repoRoot), VERIFICATION_FILE)).value;
-  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : { backends: {} };
+  const file = path.join(stateDir(repoRoot), VERIFICATION_FILE);
+  const read = readJson(file);
+  if (!read.present) return { backends: {} };
+  if (read.error) {
+    return {
+      backends: {},
+      warning: `the verification record (${VERIFICATION_FILE}) could not be read (${read.error}); nothing is verified as a result`,
+    };
+  }
+  const raw = read.value;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      backends: {},
+      warning: `the verification record (${VERIFICATION_FILE}) could not be read (expected a JSON object); nothing is verified as a result`,
+    };
+  }
+  const backends = raw && typeof raw.backends === 'object' && !Array.isArray(raw.backends) ? raw.backends : {};
+  return { ...raw, backends };
 }
 
 function saveVerification(repoRoot, report) {
@@ -198,7 +224,13 @@ function inspect(adapter, { config, verification, env } = {}) {
     capabilities: applyLocalEvidence(adapter.capabilities, local && local.capabilities),
     localVerification: local ? { at: local.at, version: local.version, platform: local.platform } : null,
     staleVerification: staleFor ? { recordedFor: staleFor, nowResolvesTo: resolved } : null,
-    defaults: { model: cfg.model || null, effort: cfg.effort || null, timeoutSeconds: cfg.timeoutSeconds || null },
+    defaults: {
+      model: cfg.model || null,
+      effort: cfg.effort || null,
+      timeoutSeconds: cfg.timeoutSeconds || null,
+      maxTurns: cfg.maxTurns ?? null,
+      maxBudgetUsd: cfg.maxBudgetUsd ?? null,
+    },
     docs: adapter.docs,
     staticEvidence: adapter.evidence || null,
   };
@@ -241,13 +273,24 @@ function verify(adapter, opts = {}) {
     extra.push(res.ok ? (res.output || '') : '');
   }
   const helpText = [help.output || '', version.output || ''].join('\n');
-  if (!helpText.trim()) {
+  const hasEvidence = Boolean(helpText.trim() || extra.some((e) => e && e.trim()));
+  if (!hasEvidence) {
     return { id: adapter.id, availability: AVAILABILITY.available, capabilities: null, reason: 'the CLI produced no --help output to verify against' };
   }
   // A probe reads help text, which says what flags exist -- not what this
   // adapter passes. Clamp it so a probe can never promote a capability the
   // invocation would silently drop.
-  const observed = clampToExpressible(adapter.probe(helpText, { extra }) || {}, adapter);
+  let observed;
+  try {
+    observed = clampToExpressible(adapter.probe(helpText, { extra }) || {}, adapter);
+  } catch (err) {
+    return {
+      id: adapter.id,
+      availability: AVAILABILITY.available,
+      capabilities: null,
+      reason: `probe failed: ${err && err.message ? err.message : err}`,
+    };
+  }
   const capabilities = {};
   for (const name of CAPABILITY_NAMES) if (observed[name]) capabilities[name] = observed[name];
 

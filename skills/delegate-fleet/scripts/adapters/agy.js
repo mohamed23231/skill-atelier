@@ -13,6 +13,8 @@ module.exports = {
     modelSelection: 'verified',
     effort: 'verified',
     structuredOutput: 'verified',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified in agy --help
+    budgetLimit: 'unsupported',
   },
   build(req) {
     const args = ['--print', req.prompt, '--output-format', 'json'];
@@ -31,7 +33,9 @@ module.exports = {
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: /--effort/.test(help) ? 'verified' : 'unsupported',
       structuredOutput: /--output-format/.test(help) ? 'verified' : 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
-  denyPatterns: [/auto-denied/i, /not signed in/i, /permission denied/i],
+  denyPatterns: [/auto[- ]?denied/i, /not signed in/i, /permission denied/i, /not logged in/i, /please sign in/i],
 };

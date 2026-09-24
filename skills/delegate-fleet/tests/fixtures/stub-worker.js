@@ -15,11 +15,13 @@ const env = process.env;
 const cwd = process.cwd();
 const abs = (p) => (path.isAbsolute(p) ? p : path.join(cwd, p));
 
-if (process.argv.includes('--version')) { process.stdout.write('stub 1.0\n'); process.exit(0); }
-if (process.argv.includes('agent') && process.argv.includes('list')) { process.stdout.write(env.STUB_AGENT_LIST ?? 'plan\nbuild\n'); process.exit(0); }
+const exitCode = Number(env.STUB_EXIT || 0);
+
+if (process.argv.includes('--version')) { process.stdout.write('stub 1.0\n'); process.exit(exitCode); }
+if (process.argv[2] === 'agent' && process.argv[3] === 'list') { process.stdout.write(env.STUB_AGENT_LIST ?? 'plan\nbuild\n'); process.exit(exitCode); }
 if (process.argv.includes('--help')) {
   process.stdout.write(env.STUB_HELP_TEXT ?? '--sandbox read-only workspace workspace-write\n--mode plan accept-edits yolo\n--permission-mode plan acceptEdits auto\n--approval-mode plan yolo\n--agent plan build\n--auto --auto-approve --plan --dry-run --tools --force --yolo --always-approve\n--model --variant --effort --session --resume --conversation\n--format json --output-format json --no-approve\n');
-  process.exit(0);
+  process.exit(exitCode);
 }
 
 // Prove which argv the adapter actually produced.
@@ -66,7 +68,6 @@ if (env.STUB_SPAWN_CHILD) {
   if (env.STUB_CHILD_PIDFILE) fs.writeFileSync(env.STUB_CHILD_PIDFILE, String(child.pid));
 }
 
-const exitCode = Number(env.STUB_EXIT || 0);
 const sleepMs = Number(env.STUB_SLEEP || 0);
 if (sleepMs > 0) setTimeout(() => process.exit(exitCode), sleepMs);
 else if (!env.STUB_ECHO_STDIN) process.exit(exitCode);

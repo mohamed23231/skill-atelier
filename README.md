@@ -48,15 +48,21 @@ Run these from a checkout of this repository. The commands are real, not illustr
 git clone https://github.com/mohamed23231/skill-atelier.git
 cd skill-atelier
 
-# 1. Install the skill into the cross-client skills directory for this project
+# 1. Install skills into the cross-client skills directory for this project
 mkdir -p .agents/skills
 cp -R skills/architecture-visualizer .agents/skills/architecture-visualizer
+cp -R skills/delegate-fleet .agents/skills/delegate-fleet
 
-# 2. Or install it for every project you work on
+# 2. Or install for every project you work on
 mkdir -p ~/.agents/skills
 cp -R skills/architecture-visualizer ~/.agents/skills/architecture-visualizer
+cp -R skills/delegate-fleet ~/.agents/skills/delegate-fleet
 
-# 3. Or skip the agent and use the CLI directly
+# 3. Discover and verify available worker CLIs for delegation
+node skills/delegate-fleet/scripts/fleet.js discover
+node skills/delegate-fleet/scripts/fleet.js doctor
+
+# 4. Or inspect architecture directly with the CLI
 node skills/architecture-visualizer/bin/arch-viz.js inspect .
 ```
 
@@ -133,6 +139,35 @@ node skills/architecture-visualizer/bin/arch-viz.js init [output.json]
 The generated HTML is a single file with no CDN and no network access. It opens offline and can be attached
 to a pull request or a message.
 
+## The `delegate-fleet` skill
+
+`delegate-fleet` lets the orchestrator delegate bounded implementation slices to separate
+coding-agent CLI processes, watching the process and independently verifying the diff before landing it:
+
+```bash
+# Discover supported backends and what is available on this machine
+node skills/delegate-fleet/scripts/fleet.js discover
+
+# Probe installed CLIs to record verified capabilities
+node skills/delegate-fleet/scripts/fleet.js doctor
+
+# Select a worker matching required capabilities
+node skills/delegate-fleet/scripts/fleet.js select --need edit,readOnly --verified
+
+# Dispatch a bounded brief through the relay
+node skills/delegate-fleet/scripts/relay.js --backend opencode --brief .delegate-fleet/briefs/slice-1.md --workspace "$PWD" --json
+```
+
+### When NOT to use it
+
+- **You have not planned yet.** If you cannot specify the exact files, interfaces, and acceptance criteria from memory, do not delegate. Planning belongs on the orchestrator.
+- **Trivial edits.** Small, single-file fixes take less time and fewer tokens to do directly in session.
+- **Interactive or exploratory debugging.** Rapid back-and-forth iteration is better handled in the main session.
+- **Concurrent workers in the same working tree.** Workers editing the same tree make diffs and findings unattributable. Run slices sequentially, or dispatch to separate git worktrees (`--workspace`).
+- **Hard filesystem isolation is required.** A worker running with write permissions has normal user filesystem access. Use worktrees, containers, or an OS-sandboxed backend (`codex`) when containment is required.
+
+See [skills/delegate-fleet/SKILL.md](skills/delegate-fleet/SKILL.md) and its [reference guides](skills/delegate-fleet/references/architecture.md).
+
 ## How a change is verified
 
 `architecture-visualizer` does not draw first. It inspects the repository, then models the system:
@@ -179,6 +214,7 @@ scripts/
   test-all.js                runs every skill's test suite
 skills/
   architecture-visualizer/   the flagship skill
+  delegate-fleet/            capability-based delegation skill
 .github/                     issue and PR templates, CI, release workflow
 .claude-plugin/              optional Claude Code plugin marketplace entry
 ```

@@ -16,9 +16,17 @@ const { claims, isVerified, isSafetyCritical } = require('./capabilities.js');
 
 const MAX_TIMEOUT_SECONDS = 24 * 60 * 60;
 const DEFAULT_TIMEOUT_SECONDS = 1200;
+const MAX_TURNS = 10_000;
+const MAX_BUDGET_USD = 100_000;
 
-const FLAGS_WITH_VALUES = new Set(['--backend', '--brief', '--model', '--effort', '--session', '--timeout', '--workspace', '--out-dir']);
-const BOOLEAN_FLAGS = new Set(['--read-only', '--dry-run', '--json', '--help', '-h', '--version', '--allow-unverified']);
+const FLAGS_WITH_VALUES = new Set([
+  '--backend', '--brief', '--model', '--effort', '--session', '--timeout',
+  '--workspace', '--out-dir', '--max-turns', '--max-budget-usd',
+]);
+const BOOLEAN_FLAGS = new Set([
+  '--read-only', '--dry-run', '--json', '--help', '-h', '--version', '--allow-unverified',
+  '--stream',
+]);
 
 /** Strictly a positive, finite, whole number of seconds. */
 function parseTimeout(raw) {
@@ -39,10 +47,49 @@ function parseTimeout(raw) {
   return { value: n };
 }
 
+/** Strictly a positive, finite, whole number of turns. */
+function parseMaxTurns(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') {
+    return { error: '--max-turns requires a positive integer' };
+  }
+  const text = String(raw).trim();
+  if (!/^\d+$/.test(text)) {
+    return { error: `--max-turns must be a positive integer, got "${text}"` };
+  }
+  const n = Number(text);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+    return { error: `--max-turns must be a positive integer, got "${text}"` };
+  }
+  if (n > MAX_TURNS) {
+    return { error: `--max-turns must be at most ${MAX_TURNS}, got ${n}` };
+  }
+  return { value: n };
+}
+
+/** Strictly a positive, finite number in USD (decimals accepted). */
+function parseMaxBudgetUsd(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') {
+    return { error: '--max-budget-usd requires a positive number' };
+  }
+  const text = String(raw).trim();
+  if (!/^(\d+(\.\d+)?|\.\d+)$/.test(text)) {
+    return { error: `--max-budget-usd must be a positive number, got "${text}"` };
+  }
+  const n = Number(text);
+  if (!Number.isFinite(n) || n <= 0) {
+    return { error: `--max-budget-usd must be a positive number, got "${text}"` };
+  }
+  if (n > MAX_BUDGET_USD) {
+    return { error: `--max-budget-usd must be at most ${MAX_BUDGET_USD}, got ${n}` };
+  }
+  return { value: n };
+}
+
 function parseArgs(argv) {
   const opts = {
     backend: null, brief: null, model: null, effort: null, session: null,
-    timeoutSeconds: null, workspace: process.cwd(), outDir: null,
+    timeoutSeconds: null, maxTurns: null, maxBudgetUsd: null,
+    workspace: process.cwd(), outDir: null, stream: false,
     readOnly: false, dryRun: false, json: false, help: false, version: false,
     allowUnverified: false,
   };
@@ -68,6 +115,16 @@ function parseArgs(argv) {
           if (t.error) errors.push(t.error); else opts.timeoutSeconds = t.value;
           break;
         }
+        case '--max-turns': {
+          const t = parseMaxTurns(value);
+          if (t.error) errors.push(t.error); else opts.maxTurns = t.value;
+          break;
+        }
+        case '--max-budget-usd': {
+          const b = parseMaxBudgetUsd(value);
+          if (b.error) errors.push(b.error); else opts.maxBudgetUsd = b.value;
+          break;
+        }
         default: break;
       }
       continue;
@@ -77,6 +134,7 @@ function parseArgs(argv) {
       if (arg === '--read-only') opts.readOnly = true;
       else if (arg === '--dry-run') opts.dryRun = true;
       else if (arg === '--json') opts.json = true;
+      else if (arg === '--stream') opts.stream = true;
       else if (arg === '--version') opts.version = true;
       else if (arg === '--allow-unverified') opts.allowUnverified = true;
       else opts.help = true;
@@ -129,6 +187,8 @@ function validateAgainstCapabilities(opts, view) {
   if (opts.model) need('modelSelection', '--model was passed');
   if (opts.effort) need('effort', '--effort was passed');
   if (opts.session) need('resumeById', '--session was passed');
+  if (opts.maxTurns) need('turnLimit', '--max-turns was passed');
+  if (opts.maxBudgetUsd) need('budgetLimit', '--max-budget-usd was passed');
 
   return { errors, warnings };
 }
@@ -141,10 +201,16 @@ function applyDefaults(opts, view) {
   if (merged.timeoutSeconds == null) {
     merged.timeoutSeconds = view.defaults.timeoutSeconds || DEFAULT_TIMEOUT_SECONDS;
   }
+  if (merged.maxTurns == null && view.defaults.maxTurns != null) {
+    merged.maxTurns = view.defaults.maxTurns;
+  }
+  if (merged.maxBudgetUsd == null && view.defaults.maxBudgetUsd != null) {
+    merged.maxBudgetUsd = view.defaults.maxBudgetUsd;
+  }
   return merged;
 }
 
 module.exports = {
-  parseArgs, parseTimeout, validateAgainstCapabilities, applyDefaults,
-  DEFAULT_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS,
+  parseArgs, parseTimeout, parseMaxTurns, parseMaxBudgetUsd, validateAgainstCapabilities, applyDefaults,
+  DEFAULT_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS, MAX_TURNS, MAX_BUDGET_USD,
 };

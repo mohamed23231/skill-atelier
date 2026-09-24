@@ -16,6 +16,8 @@ module.exports = {
     modelSelection: 'unknown',
     effort: 'unsupported',
     structuredOutput: 'unknown',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified on this machine
+    budgetLimit: 'unsupported',
   },
   build(req) {
     const args = ['run', req.prompt];
@@ -34,6 +36,8 @@ module.exports = {
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',
       structuredOutput: 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/permission denied/i, /no provider/i],

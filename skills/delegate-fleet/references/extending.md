@@ -20,7 +20,7 @@ module.exports = {
   docs: 'https://…',
 
   // What it can do, and on what evidence. Never claim what you have not checked.
-  //   verified | documented | unsupported | unknown
+  // All 8 capabilities must be declared: verified | documented | unsupported | unknown
   capabilities: {
     edit: 'documented',
     readOnly: 'unknown',
@@ -28,6 +28,8 @@ module.exports = {
     modelSelection: 'documented',
     effort: 'unsupported',
     structuredOutput: 'unknown',
+    turnLimit: 'unsupported',
+    budgetLimit: 'unsupported',
   },
 
   promptDelivery: 'argv',            // 'argv' | 'stdin' | 'file'
@@ -37,7 +39,7 @@ module.exports = {
 
   // Build the argv. Explicit and readable — no hidden magic.
   build(req) {
-    // req: { prompt, mode:'edit'|'read-only', model, effort, session, cwd, promptFile }
+    // req: { prompt, mode:'edit'|'read-only', model, effort, session, maxTurns, maxBudgetUsd, cwd, promptFile }
     const args = ['run'];
     if (req.mode === 'read-only') args.push('--plan');
     else args.push('--yes');

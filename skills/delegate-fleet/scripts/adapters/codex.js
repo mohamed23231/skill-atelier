@@ -17,6 +17,8 @@ module.exports = {
     modelSelection: 'verified',
     effort: 'verified',
     structuredOutput: 'verified',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified in codex exec --help
+    budgetLimit: 'unsupported',
   },
   readOnlyEnforcement: 'sandbox',
   // Codex's flags live on the `exec` subcommand, not on top-level --help.
@@ -40,6 +42,8 @@ module.exports = {
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: /--config|<key=value>/.test(help) ? 'verified' : 'unsupported',
       structuredOutput: /--json/.test(help) ? 'verified' : 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/unauthorized/i, /not signed in/i, /sandbox.*denied/i],

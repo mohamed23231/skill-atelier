@@ -12,9 +12,12 @@ node <skill>/scripts/relay.js --backend <id> --brief <file.md> --workspace "$PWD
 | `--model <id>` | Rejected if the backend cannot select a model |
 | `--effort <level>` | Rejected if the backend has no effort control |
 | `--session <id>` | Rejected if the backend cannot resume by id |
-| `--timeout <s>` | Positive integer, default 1200, max 86400 |
+| `--max-turns <n>` | Turn cap. Honoured by backends with `turnLimit` (`grok`); rejected if unsupported |
+| `--max-budget-usd <n>` | Spend cap in USD. Honoured by backends with `budgetLimit` (`claude`); rejected if unsupported |
+| `--timeout <s>` | Watchdog timer, positive integer, default 1200, max 86400. Honoured for all backends |
 | `--workspace <dir>` | The repository the worker runs in. Pass it explicitly |
-| `--out-dir <dir>` | Artifacts location. Default `<workspace>/.delegate-fleet/runs/<stamp>` |
+| `--out-dir <dir>` | Artifacts location. Default `<workspace>/.delegate-fleet/runs/<stamp>-<backend>-<slug>-<pid>` |
+| `--stream` | Tee worker stdout and stderr to relay stderr as they arrive (stdout remains pure JSON) |
 | `--dry-run` | Print the exact argv and lint result; dispatch nothing |
 | `--json` | Print only the result JSON |
 | `--allow-unverified` | Accept a safety-critical capability that is only documented |
@@ -41,10 +44,13 @@ Tell the user which worker has which slice, then keep planning. Do not block the
 
 ## Artifacts
 
-Each run gets its own directory, so runs never overwrite each other:
+During execution, live stdout and stderr stream into a private temporary directory outside the
+workspace (`<tmpdir>/delegate-fleet-live-*/`), preventing in-progress log writes from polluting
+repository snapshots. Once the run completes and the post-run snapshot is recorded, the logs are
+copied into the run's private artifact directory:
 
 ```
-.delegate-fleet/runs/<stamp>-<backend>-<slug>/
+.delegate-fleet/runs/<stamp>-<backend>-<slug>-<pid>/
   result.json    the full contract
   stdout.log     everything the worker printed
   stderr.log     the worker's own errors — read this first on a failure
@@ -68,7 +74,7 @@ they can never be mistaken for worker changes.
 }
 ```
 
-Exactly four keys are valid: `cli`, `model`, `effort`, `timeoutSeconds`. Every one is consumed at
+Valid keys: `cli`, `model`, `effort`, `timeoutSeconds`, `maxTurns`, `maxBudgetUsd`. Every one is consumed at
 dispatch and has an integration test proving it reaches the invocation. **Any other key is a hard
 error**, because a config field with no consumer is a lie — that was the defining bug of the
 previous version. Explicit flags always beat configured defaults.

@@ -17,6 +17,8 @@ module.exports = {
   capabilities: {
     edit: 'documented', readOnly: 'documented', resumeById: 'documented',
     modelSelection: 'documented', effort: 'documented', structuredOutput: 'documented',
+    turnLimit: 'documented', // `--max-turns <N>` Maximum number of agent turns
+    budgetLimit: 'unsupported', // budgetLimit could not be verified in grok --help
   },
   build(req) {
     const args = ['--output-format', 'json', '--no-alt-screen', '--no-auto-update'];
@@ -25,6 +27,7 @@ module.exports = {
     if (req.model) args.push('--model', req.model);
     if (req.effort) args.push('--effort', req.effort);
     if (req.session) args.push('--resume', req.session);
+    if (req.maxTurns) args.push('--max-turns', String(req.maxTurns));
     args.push('--prompt-file', req.promptFile);
     return { args };
   },
@@ -42,6 +45,8 @@ module.exports = {
       effort: /--effort/.test(help) ? 'verified' : 'unsupported',
       structuredOutput: /--output-format[^\r\n]*\bjson\b/.test(help) ? 'verified'
         : /--output-format/.test(help) ? 'unknown' : 'unsupported',
+      turnLimit: /--max-turns/.test(help) ? 'verified' : 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/not authenticated/i, /user cancelled the execution/i],

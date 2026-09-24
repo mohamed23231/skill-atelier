@@ -119,7 +119,18 @@ function cmdDiscover(o) {
 }
 
 function cmdDoctor(o) {
-  const { config, verification, registry } = loadViews(o.workspace);
+  const { config, verification, registry, adapterErrors } = loadViews(o.workspace);
+  if (config.errors.length || (adapterErrors && adapterErrors.length)) {
+    const errs = [...config.errors, ...(adapterErrors || [])];
+    if (o.json) {
+      console.log(JSON.stringify({ error: 'broken configuration or adapter', errors: errs }, null, 2));
+    } else {
+      console.error('doctor: refusing to run with broken configuration or adapters:');
+      for (const e of errs) console.error(`  - ${e}`);
+    }
+    return 2;
+  }
+
   const all = [...registry.values()];
   const targets = o.backend ? all.filter((a) => a.id === o.backend) : all;
   if (o.backend && targets.length === 0) { console.error(`unknown backend "${o.backend}"`); return 2; }
@@ -129,7 +140,17 @@ function cmdDoctor(o) {
   const rows = [];
 
   for (const adapter of targets) {
-    const res = environment.verify(adapter, { config, env: process.env });
+    let res;
+    try {
+      res = environment.verify(adapter, { config, env: process.env });
+    } catch (err) {
+      res = {
+        id: adapter.id,
+        availability: caps.AVAILABILITY.available,
+        capabilities: null,
+        reason: `probe failed: ${err && err.message ? err.message : err}`,
+      };
+    }
     if (res.capabilities) {
       report.backends[adapter.id] = {
         at: res.at, platform: res.platform, version: res.version,
@@ -165,11 +186,26 @@ function cmdSelect(o) {
   const unknown = o.need.filter((n) => !caps.CAPABILITY_NAMES.includes(n));
   if (unknown.length) { console.error(`select: unknown capability: ${unknown.join(', ')}. Known: ${caps.CAPABILITY_NAMES.join(', ')}`); return 2; }
 
-  const { views, config, registry } = loadViews(o.workspace);
+  const { views, config, registry, adapterErrors } = loadViews(o.workspace);
+  if (config.errors.length || (adapterErrors && adapterErrors.length)) {
+    const errs = [...config.errors, ...(adapterErrors || [])];
+    if (o.json) {
+      console.log(JSON.stringify({ error: 'broken configuration or adapter', errors: errs }, null, 2));
+    } else {
+      console.error('select: refusing to run with broken configuration or adapters:');
+      for (const e of errs) console.error(`  - ${e}`);
+    }
+    return 2;
+  }
   if (o.verified) {
     for (const view of views) {
       if (view.availability !== caps.AVAILABILITY.available) continue;
-      const fresh = environment.verify(registry.get(view.id), { config, env: process.env });
+      let fresh;
+      try {
+        fresh = environment.verify(registry.get(view.id), { config, env: process.env });
+      } catch {
+        fresh = { capabilities: null };
+      }
       for (const name of o.need) view.capabilities[name] = fresh.capabilities?.[name] || 'unknown';
     }
   }
@@ -202,7 +238,7 @@ function cmdInit(o) {
   for (const k of Object.keys(workers)) if (workers[k].model === null) delete workers[k].model;
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify({
-    _readme: 'Optional per-worker defaults. Valid keys: cli, model, effort, timeoutSeconds. Any other key is rejected, because a field with no consumer is a lie.',
+    _readme: 'Optional per-worker defaults. Valid keys: cli, model, effort, timeoutSeconds, maxTurns, maxBudgetUsd. Any other key is rejected, because a field with no consumer is a lie.',
     workers,
   }, null, 2)}\n`);
   console.log(`wrote ${file}`);

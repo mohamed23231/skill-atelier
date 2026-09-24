@@ -9,6 +9,8 @@ module.exports = {
   capabilities: {
     edit: 'documented', readOnly: 'documented', resumeById: 'documented',
     modelSelection: 'documented', effort: 'unsupported', structuredOutput: 'documented',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified on this machine
+    budgetLimit: 'unsupported',
   },
   build(req) {
     const args = ['--output-format', 'stream-json', '--permission-mode', req.mode === 'read-only' ? 'plan' : 'auto'];
@@ -27,6 +29,8 @@ module.exports = {
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',
       structuredOutput: /--output-format/.test(help) ? 'verified' : 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/not authenticated/i],

@@ -11,6 +11,8 @@ module.exports = {
     // `--output streaming` is a human-readable stream, not a machine-readable
     // result, so there is no structured output to claim.
     modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified on this machine
+    budgetLimit: 'unsupported',
   },
   build(req) {
     const args = ['--output', 'streaming', '--agent', req.mode === 'read-only' ? 'plan' : 'default', '--trust'];
@@ -26,6 +28,8 @@ module.exports = {
       modelSelection: 'unsupported',
       effort: 'unsupported',
       structuredOutput: 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/not authenticated/i, /invalid api key/i],

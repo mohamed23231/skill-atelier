@@ -16,7 +16,13 @@
 
 const SCHEMA_VERSION = 2;
 
-/** Process outcomes. */
+/**
+ * Process outcomes.
+ *
+ * The relay is synchronous by design; running it in the background is the
+ * orchestrator's job. There is deliberately no daemon mode, poller, or
+ * "running" status.
+ */
 const STATUS = Object.freeze({
   INVALID_REQUEST: 'invalid_request',           // rejected before dispatch; nothing ran
   BACKEND_UNAVAILABLE: 'backend_unavailable',   // CLI absent here; nothing ran
@@ -36,6 +42,7 @@ const FINDING = Object.freeze({
   WORKER_COMMIT: 'worker_commit',
   WORKER_STASH: 'worker_stash',
   READ_ONLY_VIOLATION: 'read_only_violation',
+  FRAMEWORK_STATE_MODIFIED: 'framework_state_modified',
 });
 
 /** Statuses where nothing was dispatched, so no repository facts exist. */
@@ -59,16 +66,32 @@ function deriveFindings({ mode, diff, scopeReport }) {
     });
   }
 
+  const allChanged = [...new Set([
+    ...diff.created, ...diff.modified, ...diff.deleted,
+    ...diff.renamed.flatMap((r) => [r.from, r.to].filter(Boolean)),
+  ])].sort();
+
+  const frameworkPaths = allChanged.filter((p) => {
+    const norm = p.replace(/\\/g, '/');
+    return (norm === '.delegate-fleet' || norm.startsWith('.delegate-fleet/')) &&
+           !(norm === '.delegate-fleet/runs' || norm.startsWith('.delegate-fleet/runs/'));
+  });
+
+  if (frameworkPaths.length > 0) {
+    findings.push({
+      type: FINDING.FRAMEWORK_STATE_MODIFIED,
+      detail: `${frameworkPaths.length} framework state path(s) under .delegate-fleet/ were modified`,
+      paths: frameworkPaths,
+    });
+  }
+
   if (mode === 'read-only' && (diff.created.length || diff.modified.length || diff.deleted.length || diff.renamed.length)) {
     findings.push({
       type: FINDING.READ_ONLY_VIOLATION,
       detail: 'a read-only run changed the working tree',
       // Renames count at both ends, or the orchestrator is told a file changed
       // without being told which file it came from.
-      paths: [...new Set([
-        ...diff.created, ...diff.modified, ...diff.deleted,
-        ...diff.renamed.flatMap((r) => [r.from, r.to].filter(Boolean)),
-      ])].sort(),
+      paths: allChanged,
     });
   }
 
@@ -122,15 +145,30 @@ function deriveStatus({ execResult, mode, diff, denyPatterns }) {
   // Deny markers classify a COOPERATIVE exit 0 -- a worker that printed
   // "permission denied" and stopped. A crash is a process failure first; how
   // it died is more informative than what it happened to print on the way out.
+  const moved = diff ? (diff.created.length || diff.modified.length || diff.deleted.length || diff.renamed.length) : 0;
   const combined = `${execResult.stdout}\n${execResult.stderr}`;
+  let matchedPattern = null;
   for (const pattern of denyPatterns || []) {
     if (pattern.test(combined)) {
-      return { status: STATUS.IMPLEMENTER_FAILURE, reason: `the worker reported a refusal or auth failure matching ${pattern}` };
+      matchedPattern = pattern;
+      break;
     }
   }
 
+  if (matchedPattern) {
+    if (moved > 0) {
+      // The worker matched a deny pattern but actually made changes to the repository.
+      // Real changes are the stronger evidence: keep completed, record match as warning.
+      return {
+        status: STATUS.COMPLETED,
+        reason: null,
+        warning: `worker output matched deny pattern ${matchedPattern}, but repository changes were observed`,
+      };
+    }
+    return { status: STATUS.IMPLEMENTER_FAILURE, reason: `the worker reported a refusal or auth failure matching ${matchedPattern}` };
+  }
+
   if (mode === 'edit' && diff) {
-    const moved = diff.created.length || diff.modified.length || diff.deleted.length || diff.renamed.length;
     if (!moved) {
       return { status: STATUS.NOOP, reason: 'the worker exited 0 but changed nothing; treat as a silent refusal until the log says otherwise' };
     }

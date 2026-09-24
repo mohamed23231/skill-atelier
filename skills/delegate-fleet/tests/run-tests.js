@@ -17,8 +17,10 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const os = require('node:os');
 
 const H = require('./harness.js');
+const execLib = require('../scripts/lib/exec.js');
 const capabilities = require('../scripts/lib/capabilities.js');
 const brief = require('../scripts/lib/brief.js');
 const repoLib = require('../scripts/lib/repo.js');
@@ -29,7 +31,7 @@ const environment = require('../scripts/lib/environment.js');
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
-const ALL_CAPS = { edit: 'verified', readOnly: 'verified', resumeById: 'verified', modelSelection: 'verified', effort: 'verified', structuredOutput: 'verified' };
+const ALL_CAPS = { edit: 'verified', readOnly: 'verified', resumeById: 'verified', modelSelection: 'verified', effort: 'verified', structuredOutput: 'verified', turnLimit: 'verified', budgetLimit: 'verified' };
 
 /* ------------------------------------------------------------------ *
  * Options: nothing decorative, nothing silently dropped
@@ -45,6 +47,41 @@ test('timeout rejects NaN, Infinity, negative, zero, float and empty', () => {
 test('timeout rejects values beyond the maximum', () => {
   assert.ok(options.parseTimeout(String(options.MAX_TIMEOUT_SECONDS + 1)).error);
   assert.strictEqual(options.parseTimeout(String(options.MAX_TIMEOUT_SECONDS)).value, options.MAX_TIMEOUT_SECONDS);
+});
+
+test('max-turns rejects NaN, Infinity, negative, zero, float, empty, and over MAX_TURNS', () => {
+  for (const bad of ['abc', 'NaN', 'Infinity', '-1', '-5', '0', '1.5', '1e3', '', String(options.MAX_TURNS + 1)]) {
+    assert.ok(options.parseMaxTurns(bad).error, `"${bad}" must be rejected`);
+  }
+  assert.strictEqual(options.parseMaxTurns('10').value, 10);
+  assert.strictEqual(options.parseMaxTurns(String(options.MAX_TURNS)).value, options.MAX_TURNS);
+});
+
+test('max-budget-usd rejects NaN, Infinity, negative, zero, empty, and over MAX_BUDGET_USD, but accepts decimals', () => {
+  for (const bad of ['abc', 'NaN', 'Infinity', '-1', '-5', '0', '', String(options.MAX_BUDGET_USD + 1)]) {
+    assert.ok(options.parseMaxBudgetUsd(bad).error, `"${bad}" must be rejected`);
+  }
+  assert.strictEqual(options.parseMaxBudgetUsd('10').value, 10);
+  assert.strictEqual(options.parseMaxBudgetUsd('10.50').value, 10.5);
+  assert.strictEqual(options.parseMaxBudgetUsd('.75').value, 0.75);
+  assert.strictEqual(options.parseMaxBudgetUsd(String(options.MAX_BUDGET_USD)).value, options.MAX_BUDGET_USD);
+});
+
+test('malformed --max-turns and --max-budget-usd are rejected before dispatch', () => {
+  const repo = H.tmpRepo();
+  H.useStub(repo, 'claude');
+  const b = H.writeBrief(repo);
+  for (const bad of ['0', '-1', 'abc', '']) {
+    const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--max-budget-usd', bad, '--json'], { cwd: repo });
+    assert.strictEqual(res.json.status, 'invalid_request', `bad budget "${bad}" must be invalid_request`);
+    assert.strictEqual(res.status, 2);
+  }
+  H.useStub(repo, 'grok');
+  for (const bad of ['0', '-1', 'abc', '']) {
+    const res = H.runRelay(['--backend', 'grok', '--brief', b, '--workspace', repo, '--max-turns', bad, '--json'], { cwd: repo });
+    assert.strictEqual(res.json.status, 'invalid_request', `bad turns "${bad}" must be invalid_request`);
+    assert.strictEqual(res.status, 2);
+  }
 });
 
 test('unknown options and stray positionals are rejected, never ignored', () => {
@@ -416,6 +453,73 @@ test('config effort and timeout defaults are applied', () => {
   assert.strictEqual(res.json.effective.timeoutSeconds, 42);
 });
 
+test('config maxTurns and maxBudgetUsd defaults reach the backend invocation and explicit flags override them', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'grok', { maxTurns: 50 });
+  H.useStub(repo, 'claude', { maxBudgetUsd: 12.5 });
+  const b = H.writeBrief(repo);
+
+  const resGrok = H.runRelay(['--backend', 'grok', '--brief', b, '--workspace', repo, '--dry-run'], { cwd: repo });
+  assert.ok(resGrok.json.args.includes('--max-turns') && resGrok.json.args.includes('50'));
+  assert.strictEqual(resGrok.json.effective.maxTurns, 50);
+
+  const resGrokExplicit = H.runRelay(['--backend', 'grok', '--brief', b, '--workspace', repo, '--max-turns', '99', '--dry-run'], { cwd: repo });
+  assert.ok(resGrokExplicit.json.args.includes('99'));
+  assert.ok(!resGrokExplicit.json.args.includes('50'));
+  assert.strictEqual(resGrokExplicit.json.effective.maxTurns, 99);
+
+  const resClaude = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--dry-run'], { cwd: repo });
+  assert.ok(resClaude.json.args.includes('--max-budget-usd') && resClaude.json.args.includes('12.5'));
+  assert.strictEqual(resClaude.json.effective.maxBudgetUsd, 12.5);
+
+  const resClaudeExplicit = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--max-budget-usd', '3.14', '--dry-run'], { cwd: repo });
+  assert.ok(resClaudeExplicit.json.args.includes('3.14'));
+  assert.ok(!resClaudeExplicit.json.args.includes('12.5'));
+  assert.strictEqual(resClaudeExplicit.json.effective.maxBudgetUsd, 3.14);
+});
+
+test('--max-turns reaches the invocation on grok and is rejected on a backend that lacks it', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'grok');
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'grok', '--brief', b, '--workspace', repo, '--max-turns', '15', '--dry-run'], { cwd: repo });
+  assert.ok(res.json.args.includes('--max-turns') && res.json.args.includes('15'));
+  assert.strictEqual(res.json.effective.maxTurns, 15);
+
+  H.useStub(repo, 'claude');
+  const resClaude = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--max-turns', '15', '--json'], { cwd: repo });
+  assert.strictEqual(resClaude.json.status, 'invalid_request');
+  assert.match(resClaude.json.reason, /turnLimit/);
+  assert.strictEqual(resClaude.status, 2);
+
+  H.useStub(repo, 'codex');
+  const resCodex = H.runRelay(['--backend', 'codex', '--brief', b, '--workspace', repo, '--max-turns', '15', '--json'], { cwd: repo });
+  assert.strictEqual(resCodex.json.status, 'invalid_request');
+  assert.match(resCodex.json.reason, /turnLimit/);
+  assert.strictEqual(resCodex.status, 2);
+});
+
+test('--max-budget-usd reaches the invocation on claude and is rejected on a backend that lacks it', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--max-budget-usd', '25.5', '--dry-run'], { cwd: repo });
+  assert.ok(res.json.args.includes('--max-budget-usd') && res.json.args.includes('25.5'));
+  assert.strictEqual(res.json.effective.maxBudgetUsd, 25.5);
+
+  H.useStub(repo, 'grok');
+  const resGrok = H.runRelay(['--backend', 'grok', '--brief', b, '--workspace', repo, '--max-budget-usd', '25.5', '--json'], { cwd: repo });
+  assert.strictEqual(resGrok.json.status, 'invalid_request');
+  assert.match(resGrok.json.reason, /budgetLimit/);
+  assert.strictEqual(resGrok.status, 2);
+
+  H.useStub(repo, 'codex');
+  const resCodex = H.runRelay(['--backend', 'codex', '--brief', b, '--workspace', repo, '--max-budget-usd', '25.5', '--json'], { cwd: repo });
+  assert.strictEqual(resCodex.json.status, 'invalid_request');
+  assert.match(resCodex.json.reason, /budgetLimit/);
+  assert.strictEqual(resCodex.status, 2);
+});
+
 test('a config field with no consumer is rejected rather than silently ignored', () => {
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
   const dir = path.join(repo, '.delegate-fleet');
@@ -602,6 +706,75 @@ test('e2e: concurrent runs in separate workspaces do not interfere', async () =>
   }
 });
 
+test('streaming callbacks fire during execution and a throwing callback does not break the run', async () => {
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  const res = await execLib.run({
+    command: process.execPath,
+    args: ['-e', 'process.stdout.write("out-chunk-1\\n"); process.stderr.write("err-chunk-1\\n");'],
+    cwd: os.tmpdir(),
+    timeoutSeconds: 5,
+    onStdout: (c) => {
+      stdoutChunks.push(c.toString());
+      throw new Error('deliberate onStdout throw');
+    },
+    onStderr: (c) => {
+      stderrChunks.push(c.toString());
+      throw new Error('deliberate onStderr throw');
+    },
+  });
+  assert.strictEqual(res.outcome, 'exited');
+  assert.strictEqual(res.exitCode, 0);
+  assert.ok(stdoutChunks.some((c) => c.includes('out-chunk-1')));
+  assert.ok(stderrChunks.some((c) => c.includes('err-chunk-1')));
+  assert.ok(res.stdout.includes('out-chunk-1'));
+  assert.ok(res.stderr.includes('err-chunk-1'));
+});
+
+test('--stream tees worker output to relay stderr while stdout remains pure JSON', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--stream', '--json'], {
+    cwd: repo,
+    env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: 'live progress token' },
+  });
+  assert.ok(res.json);
+  assert.strictEqual(res.json.status, 'completed');
+  assert.ok(res.stderr.includes('live progress token'), 'relay stderr must contain streamed worker output');
+});
+
+test('the live log lands outside the workspace: zero repository changes in a repo without .gitignore', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } }); // No .gitignore
+  H.useStub(repo, 'claude');
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo,
+    env: { STUB_PRINT: 'active worker logging' },
+  });
+  assert.strictEqual(res.json.repository.changed.created.length, 0);
+  assert.strictEqual(res.json.repository.changed.modified.length, 0);
+  assert.strictEqual(res.json.repository.changed.deleted.length, 0);
+  assert.strictEqual(res.json.repository.changed.renamed.length, 0);
+  assert.strictEqual(res.json.status, 'noop');
+  assert.ok(fs.existsSync(res.json.artifacts.stdout));
+  assert.match(fs.readFileSync(res.json.artifacts.stdout, 'utf8'), /active worker logging/);
+});
+
+test('non-json mode prints banner line before dispatch', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--timeout', '42'], {
+    cwd: repo,
+    env: { STUB_MODIFY: 'src/a.js' },
+  });
+  assert.match(res.stdout, /\[relay\] dispatching claude .*mode edit · timeout 42s · live log: .*stdout\.log/);
+});
+
 /* ------------------------------------------------------------------ *
  * Third-party adapters
  * ------------------------------------------------------------------ */
@@ -613,7 +786,7 @@ test('a project-supplied adapter is loaded, validated, and usable', () => {
   fs.writeFileSync(path.join(dir, 'mycli.js'), `
     module.exports = {
       id: 'mycli', cli: ${JSON.stringify(H.STUB)}, title: 'My CLI', docs: '',
-      capabilities: { edit:'verified', readOnly:'unsupported', resumeById:'unsupported', modelSelection:'verified', effort:'unsupported', structuredOutput:'unsupported' },
+      capabilities: { edit:'verified', readOnly:'unsupported', resumeById:'unsupported', modelSelection:'verified', effort:'unsupported', structuredOutput:'unsupported', turnLimit:'unsupported', budgetLimit:'unsupported' },
       build(req){ const a=['--go']; if(req.model) a.push('--model', req.model); a.push(req.prompt); return { args:a }; },
       probe(){ return {}; },
     };`);
@@ -707,7 +880,7 @@ test('the backends reference table matches the adapters exactly', () => {
     capabilities.CAPABILITY_NAMES.forEach((name, i) => {
       assert.strictEqual(cells[3 + i], mark[a.capabilities[name]], `${a.id}.${name}: docs disagree with the adapter`);
     });
-    assert.strictEqual(cells[9], a.promptDelivery || 'argv', `${a.id}: documented prompt delivery is stale`);
+    assert.strictEqual(cells[3 + capabilities.CAPABILITY_NAMES.length], a.promptDelivery || 'argv', `${a.id}: documented prompt delivery is stale`);
   }
 });
 
@@ -718,6 +891,8 @@ test('no adapter claims a capability its build() cannot express', () => {
     if (capabilities.claims(a.capabilities.effort)) assert.match(src, /req\.effort/, `${a.id} claims effort but build() ignores req.effort`);
     if (capabilities.claims(a.capabilities.resumeById)) assert.match(src, /req\.session/, `${a.id} claims resumeById but build() ignores req.session`);
     if (capabilities.claims(a.capabilities.readOnly)) assert.match(src, /req\.mode/, `${a.id} claims readOnly but build() ignores req.mode`);
+    if (capabilities.claims(a.capabilities.turnLimit)) assert.match(src, /req\.maxTurns/, `${a.id} claims turnLimit but build() ignores req.maxTurns`);
+    if (capabilities.claims(a.capabilities.budgetLimit)) assert.match(src, /req\.maxBudgetUsd/, `${a.id} claims budgetLimit but build() ignores req.maxBudgetUsd`);
   }
 });
 
@@ -783,6 +958,7 @@ test('no probe can promote a capability its build() cannot express', () => {
     '--session --resume --conversation --agent plan --auto --auto-approve --yolo',
     '--permission-mode acceptEdits auto --approval-mode yolo --format json',
     '--output-format --allow-all-tools --deny-tool --mode plan --always-approve --prompt --dir',
+    '--max-turns --max-budget-usd',
   ].join('\n');
   for (const a of registry.BUILT_IN) {
     const raw = a.probe(help) || {};
@@ -813,15 +989,41 @@ test('no adapter passes read-only off as merely omitting its write flag', () => 
 test('an adapter claiming a capability its build() ignores is rejected at load time', () => {
   const bad = {
     id: 'decorative', cli: 'decorative',
-    capabilities: { ...ALL_CAPS, modelSelection: 'documented', edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported' },
+    capabilities: { ...ALL_CAPS, modelSelection: 'documented', edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported', turnLimit: 'unsupported', budgetLimit: 'unsupported' },
     build(req) { return { args: [req.prompt] }; },
     probe() { return {}; },
   };
   assert.throws(() => registry.assertShape(bad), /does not express it from model/);
 });
 
+test('an adapter claiming turnLimit or budgetLimit without build() expressing it is rejected at load time', () => {
+  const badTurn = {
+    id: 'fake-turn', cli: 'fake',
+    capabilities: {
+      edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported',
+      modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported',
+      turnLimit: 'documented', budgetLimit: 'unsupported',
+    },
+    build(req) { return { args: [req.prompt] }; },
+    probe() { return {}; },
+  };
+  assert.throws(() => registry.assertShape(badTurn), /does not express it from maxTurns/);
+
+  const badBudget = {
+    id: 'fake-budget', cli: 'fake',
+    capabilities: {
+      edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported',
+      modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported',
+      turnLimit: 'unsupported', budgetLimit: 'documented',
+    },
+    build(req) { return { args: [req.prompt] }; },
+    probe() { return {}; },
+  };
+  assert.throws(() => registry.assertShape(badBudget), /does not express it from maxBudgetUsd/);
+});
+
 test('an adapter with a non-string id or cli is rejected at load time', () => {
-  const base = { capabilities: { edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported', modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported' }, build: (req) => ({ args: [req.prompt] }), probe: () => ({}) };
+  const base = { capabilities: { edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported', modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported', turnLimit: 'unsupported', budgetLimit: 'unsupported' }, build: (req) => ({ args: [req.prompt] }), probe: () => ({}) };
   assert.throws(() => registry.assertShape({ ...base, id: 7, cli: 'x' }), /id as a non-empty string/);
   assert.throws(() => registry.assertShape({ ...base, id: 'x', cli: 7 }), /cli as a non-empty string/);
 });
@@ -993,6 +1195,7 @@ test('an adapter claiming structured output it never requests is rejected at loa
     capabilities: {
       edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported',
       modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'documented',
+      turnLimit: 'unsupported', budgetLimit: 'unsupported',
     },
     build(req) { return { args: ['--output', 'streaming', req.prompt] }; },
     probe() { return {}; },
@@ -1006,6 +1209,7 @@ test('an adapter claiming read-only it does not enforce is rejected at load time
     capabilities: {
       edit: 'documented', readOnly: 'documented', resumeById: 'unsupported',
       modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported',
+      turnLimit: 'unsupported', budgetLimit: 'unsupported',
     },
     // Omits --yes in read-only mode and trusts the CLI's default. That is a
     // hope, not an enforcement.
@@ -1139,6 +1343,7 @@ test('an edit claim without a task-bearing invocation is rejected', () => {
     capabilities: {
       edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported',
       modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported',
+      turnLimit: 'unsupported', budgetLimit: 'unsupported',
     },
     build() { return { args: ['--verbose'] }; },
     probe() { return { edit: 'verified' }; },
@@ -1179,6 +1384,358 @@ test('JSON discovery includes project adapter errors', () => {
   fs.writeFileSync(path.join(dir, 'broken.js'), 'module.exports = {}\n');
   const res = H.runFleet(['discover', '--workspace', repo, '--json'], { cwd: repo });
   assert.ok(res.json.adapterErrors.some((e) => e.includes('broken.js')));
+});
+
+/* ------------------------------------------------------------------ *
+ * Regression suite: framework state protection, operational limits, and adapter resilience
+ * ------------------------------------------------------------------ */
+
+test('e2e: worker writing .delegate-fleet/config.json in an ignored repository is still reported and blocked', () => {
+  const repo = H.tmpRepo({ files: { '.gitignore': '.delegate-fleet/\n', 'src/a.js': 'x\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_CREATE: '.delegate-fleet/config.json' },
+  });
+  const modified = res.json.repository.changed.created.concat(res.json.repository.changed.modified);
+  assert.ok(modified.includes('.delegate-fleet/config.json'), 'config.json creation must be reported even when gitignored');
+  assert.ok(res.json.findings.some((f) => f.type === 'framework_state_modified' && f.paths.includes('.delegate-fleet/config.json')));
+  assert.strictEqual(res.json.blocked, true);
+});
+
+test('e2e: planting an adapter under .delegate-fleet/adapters/ with broad scope reports framework_state_modified and blocks', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const broadBrief = H.GOOD_BRIEF.replace('`src/a.js`', '`.`');
+  const b = H.writeBrief(repo, broadBrief);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_CREATE: '.delegate-fleet/adapters/evil.js' },
+  });
+  const f = res.json.findings.find((x) => x.type === 'framework_state_modified');
+  assert.ok(f, 'expected framework_state_modified finding despite broad scope');
+  assert.ok(f.paths.includes('.delegate-fleet/adapters/evil.js'));
+  assert.strictEqual(res.json.blocked, true);
+});
+
+test('e2e: relay run artifacts under .delegate-fleet/runs/ are not attributed to the worker', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const runBDir = path.join(repo, '.delegate-fleet', 'runs', '2026-run-b');
+  fs.mkdirSync(runBDir, { recursive: true });
+  fs.writeFileSync(path.join(runBDir, 'stdout.log'), 'run b log\n');
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_MODIFY: 'src/a.js' },
+  });
+  const allChanged = repoLib.changedPaths(res.json.repository.changed);
+  assert.ok(!allChanged.some((p) => p.startsWith('.delegate-fleet/runs')), 'run artifacts must never be attributed to worker');
+  assert.strictEqual(res.json.blocked, false);
+});
+
+test('malformed verification.json raises relay warning and falls back safely', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo);
+  const vf = path.join(repo, '.delegate-fleet', 'verification.json');
+  fs.mkdirSync(path.dirname(vf), { recursive: true });
+  fs.writeFileSync(vf, '{ invalid json');
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_MODIFY: 'src/a.js' },
+  });
+  assert.ok(res.json.warnings.some((w) => /verification\.json.*could not be read.*nothing is verified/i.test(w)),
+    `expected verification warning in ${JSON.stringify(res.json.warnings)}`);
+});
+
+test('deny pattern match with observed changes keeps status completed and warns', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo,
+    env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: 'Error: permission denied when touching /etc/shadow' },
+  });
+  assert.strictEqual(res.json.status, 'completed');
+  assert.strictEqual(res.json.blocked, false);
+  assert.ok(res.json.warnings.some((w) => /matched deny pattern.*repository changes were observed/i.test(w)));
+});
+
+test('e2e: in-scope worker file create, delete, and rename succeeds without findings', () => {
+  const repo = H.tmpRepo({ files: { 'src/old.js': 'old\n', 'src/delete-me.js': 'del\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const scopeBrief = H.GOOD_BRIEF.replace('`src/a.js`', '`src/`');
+  const b = H.writeBrief(repo, scopeBrief);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo,
+    env: {
+      STUB_CREATE: 'src/created.js',
+      STUB_DELETE: 'src/delete-me.js',
+      STUB_RENAME: 'src/old.js:src/new.js',
+    },
+  });
+  assert.ok(res.json.repository.changed.created.includes('src/created.js'));
+  assert.ok(res.json.repository.changed.deleted.includes('src/delete-me.js'));
+  assert.ok(res.json.repository.changed.renamed.some((r) => r.from === 'src/old.js' && r.to === 'src/new.js'));
+  assert.strictEqual(res.json.findings.length, 0);
+  assert.strictEqual(res.json.blocked, false);
+});
+
+test('e2e: worker timeout reports timeout status with partial edits visible', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'orig\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--timeout', '1', '--json'], {
+    cwd: repo,
+    env: { STUB_MODIFY: 'src/a.js', STUB_SLEEP: '3000' },
+  });
+  assert.strictEqual(res.json.status, 'timeout');
+  assert.deepStrictEqual(res.json.repository.changed.modified, ['src/a.js']);
+  assert.strictEqual(res.json.blocked, true);
+});
+
+test('missing CLI reports backend_unavailable and dispatches nothing', () => {
+  const repo = H.tmpRepo();
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'copilot', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo,
+    env: { PATH: '' },
+  });
+  assert.strictEqual(res.json.status, 'backend_unavailable');
+  assert.strictEqual(res.status, 2);
+  assert.ok(!fs.existsSync(path.join(repo, '.delegate-fleet', 'runs')));
+});
+
+test('stale verification discards evidence, raises warning, and refuses read-only', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'grok');
+  const dir = path.join(repo, '.delegate-fleet');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'verification.json'), JSON.stringify({
+    backends: {
+      grok: {
+        at: new Date().toISOString(), platform: process.platform, version: 'old',
+        cliPath: H.STUB, cli: { path: H.STUB, size: 999999, mtimeMs: 123456 },
+        capabilities: ALL_CAPS,
+      },
+    },
+  }));
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'grok', '--brief', b, '--workspace', repo, '--read-only', '--json'], {
+    cwd: repo,
+    env: { STUB_HELP_TEXT: '--sandbox <PROFILE>\n' },
+  });
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.ok(res.json.warnings.some((w) => /local verification for "grok".*discarded/i.test(w)));
+});
+
+test('e2e: malformed non-JSON worker output does not crash relay or corrupt result', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+    cwd: repo,
+    env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: '<<<not json>>>\n{unclosed' },
+  });
+  assert.strictEqual(res.json.status, 'completed');
+  assert.strictEqual(res.json.blocked, false);
+  assert.deepStrictEqual(res.json.repository.changed.modified, ['src/a.js']);
+});
+
+test('recorded unsupported readOnly beats allow-unverified when probe is inconclusive', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  H.markVerified(repo, 'claude', { ...ALL_CAPS, readOnly: 'unsupported' });
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--read-only', '--allow-unverified', '--json'], {
+    cwd: repo,
+    env: { STUB_HELP_TEXT: '--other\n' },
+  });
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.match(res.json.reason, /readOnly/);
+});
+
+test('e2e: a FIFO planted under .delegate-fleet fails the snapshot closed', () => {
+  if (process.platform === 'win32') return;
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo);
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const fifoPath = path.join(repo, '.delegate-fleet', 'adapters', 'fifo.pipe');
+  fs.mkdirSync(path.dirname(fifoPath), { recursive: true });
+  spawnSync('mkfifo', [fifoPath]);
+  try {
+    const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], {
+      cwd: repo,
+      env: { STUB_MODIFY: 'src/a.js' },
+    });
+    assert.strictEqual(res.json.repository.observed, false);
+    assert.strictEqual(res.json.blocked, true);
+  } finally {
+    try { fs.unlinkSync(fifoPath); } catch {}
+  }
+});
+
+test('symlinked directory under .delegate-fleet is not traversed', () => {
+  const repo = H.tmpRepo();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'df-outside-'));
+  fs.writeFileSync(path.join(outside, 'secret.txt'), 'secret\n');
+  const symlinkTarget = path.join(repo, '.delegate-fleet', 'adapters', 'linked-dir');
+  fs.mkdirSync(path.dirname(symlinkTarget), { recursive: true });
+  try {
+    fs.symlinkSync(outside, symlinkTarget, 'dir');
+  } catch {
+    return;
+  }
+  const entries = repoLib.localFrameworkStateEntries(repo);
+  assert.ok(entries.includes('.delegate-fleet/adapters/linked-dir'));
+  assert.ok(!entries.some((e) => e.includes('secret.txt')));
+  fs.rmSync(outside, { recursive: true, force: true });
+});
+
+test('assertShape rejects empty helpArgs and empty inner evidenceArgs', () => {
+  const base = registry.getAdapter('aider');
+  assert.throws(() => registry.assertShape({ ...base, helpArgs: [] }), /helpArgs must be a non-empty array of strings/);
+  assert.throws(() => registry.assertShape({ ...base, evidenceArgs: [[]] }), /evidenceArgs must be arrays of non-empty arrays of strings/);
+});
+
+test('adapter probe throwing does not crash doctor or select', () => {
+  const repo = H.tmpRepo();
+  H.useStub(repo);
+  const dir = path.join(repo, '.delegate-fleet', 'adapters');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'exploding.js'), `
+    module.exports = {
+      id: 'exploding', cli: '${H.STUB}',
+      capabilities: { edit: 'documented', readOnly: 'unsupported', resumeById: 'unsupported', modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'unsupported', turnLimit: 'unsupported', budgetLimit: 'unsupported' },
+      build(req) { return { args: ['--print', req.prompt] }; },
+      probe() { throw new Error('boom'); },
+    };
+  `);
+  const docRes = H.runFleet(['doctor', '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(docRes.status, 0);
+  const expRow = docRes.json.rows.find((r) => r.id === 'exploding');
+  assert.ok(expRow);
+  assert.strictEqual(expRow.capabilities, null);
+
+  const selRes = H.runFleet(['select', '--need', 'edit', '--verified', '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(selRes.status, 0);
+  assert.ok(!selRes.json.matches.includes('exploding'));
+});
+
+test('doctor and select refuse with exit 2 on broken config or adapter errors', () => {
+  const repo = H.tmpRepo();
+  const dir = path.join(repo, '.delegate-fleet');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'config.json'), '{ "workers": "not-an-object" }');
+  const docRes = H.runFleet(['doctor', '--workspace', repo], { cwd: repo });
+  assert.strictEqual(docRes.status, 2);
+  const selRes = H.runFleet(['select', '--need', 'edit', '--workspace', repo], { cwd: repo });
+  assert.strictEqual(selRes.status, 2);
+});
+
+test('brief that is a directory returns invalid_request', () => {
+  const repo = H.tmpRepo();
+  H.useStub(repo);
+  const briefDir = path.join(repo, 'brief-dir');
+  fs.mkdirSync(briefDir);
+  const res = H.runRelay(['--backend', 'claude', '--brief', briefDir, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.status, 2);
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.ok(res.json.reason.includes('could not read brief'));
+});
+
+test('promptDelivery file cleans up temp directory during dry-run', () => {
+  const repo = H.tmpRepo();
+  H.useStub(repo, 'grok');
+  H.markVerified(repo, 'grok', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const tmpBefore = fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('delegate-fleet-'));
+  const res = H.runRelay(['--backend', 'grok', '--brief', b, '--workspace', repo, '--dry-run'], { cwd: repo });
+  assert.strictEqual(res.status, 0);
+  const tmpAfter = fs.readdirSync(os.tmpdir()).filter((d) => d.startsWith('delegate-fleet-'));
+  assert.deepStrictEqual(tmpBefore, tmpAfter, 'temp directories must be cleaned up after dry-run');
+});
+
+test('non-empty extra evidenceArgs prevents discarding evidence', () => {
+  const adapter = registry.getAdapter('opencode');
+  const config = { workers: { opencode: { cli: H.STUB } } };
+  const res = environment.verify(adapter, { config, env: { ...process.env, STUB_HELP_TEXT: ' ', STUB_AGENT_LIST: 'plan\nbuild\n' } });
+  assert.ok(res.capabilities);
+  assert.strictEqual(res.capabilities.readOnly, 'unsupported');
+  assert.strictEqual(res.reason, null);
+});
+
+test('backend.capabilitiesVerifiedLocally is true in the result when the relay\'s own fresh probe verified read-only with no saved doctor record', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--read-only', '--json'], { cwd: repo });
+  assert.strictEqual(res.json.status, 'completed');
+  assert.strictEqual(res.json.backend.capabilitiesVerifiedLocally, true);
+});
+
+test('stub worker probe honours STUB_EXIT', () => {
+  const res = spawnSync(process.execPath, [H.STUB, '--help'], { env: { ...process.env, STUB_EXIT: '42' } });
+  assert.strictEqual(res.status, 42);
+  const resList = spawnSync(process.execPath, [H.STUB, 'agent', 'list'], { env: { ...process.env, STUB_EXIT: '43' } });
+  assert.strictEqual(resList.status, 43);
+});
+
+test('doctor records capabilities from an evidenceArgs probe even when --help and --version print nothing', () => {
+  const repo = H.tmpRepo();
+  const stubScript = path.join(repo, 'silent-cli.js');
+  fs.writeFileSync(stubScript, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.includes('--version') || args.includes('--help')) {
+  process.exit(0);
+}
+if (args[0] === 'agent' && args[1] === 'list') {
+  process.stdout.write('plan\\nbuild\\n');
+  process.exit(0);
+}
+process.exit(0);
+`);
+  fs.chmodSync(stubScript, 0o755);
+
+  const adapter = {
+    id: 'silent-worker',
+    cli: stubScript,
+    capabilities: {
+      edit: 'documented',
+      readOnly: 'documented',
+      resumeById: 'unsupported',
+      modelSelection: 'unsupported',
+      effort: 'unsupported',
+      structuredOutput: 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
+    },
+    helpArgs: ['--help'],
+    evidenceArgs: [['agent', 'list']],
+    build(req) {
+      const args = ['run', req.prompt];
+      if (req.mode === 'read-only') args.push('--plan');
+      return { args };
+    },
+    probe(help, evidence = {}) {
+      const hasPlan = (evidence.extra || []).some((e) => /plan/.test(e));
+      return {
+        readOnly: hasPlan ? 'verified' : 'unsupported',
+      };
+    },
+  };
+
+  const res = environment.verify(adapter);
+  assert.strictEqual(res.availability, 'available');
+  assert.ok(res.capabilities, 'capabilities must be recorded despite empty help and version');
+  assert.strictEqual(res.capabilities.readOnly, 'verified');
+  assert.strictEqual(res.reason, null);
 });
 
 /* ---------------------------------- runner ---------------------------------- */

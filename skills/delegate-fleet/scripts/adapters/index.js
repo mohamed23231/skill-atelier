@@ -56,11 +56,17 @@ function assertShape(a, origin) {
   if (typeof a.cli !== 'string' || !a.cli.trim()) throw new Error(`${where}: must define cli as a non-empty string`);
   if (typeof a.build !== 'function') throw new Error(`${where}: must define build()`);
   if (typeof a.probe !== 'function') throw new Error(`${where}: must define probe()`);
-  if (a.helpArgs !== undefined && (!Array.isArray(a.helpArgs) || !a.helpArgs.every((x) => typeof x === 'string'))) {
-    throw new Error(`${where}: helpArgs must be an array of strings`);
+  if (a.helpArgs !== undefined) {
+    if (!Array.isArray(a.helpArgs)) throw new Error(`${where}: helpArgs must be an array of strings`);
+    if (a.helpArgs.length === 0 || !a.helpArgs.every((x) => typeof x === 'string' && x.length > 0)) {
+      throw new Error(`${where}: helpArgs must be a non-empty array of strings`);
+    }
   }
-  if (a.evidenceArgs !== undefined && (!Array.isArray(a.evidenceArgs) || !a.evidenceArgs.every((args) => Array.isArray(args) && args.every((x) => typeof x === 'string')))) {
-    throw new Error(`${where}: evidenceArgs must be arrays of strings`);
+  if (a.evidenceArgs !== undefined) {
+    if (!Array.isArray(a.evidenceArgs)) throw new Error(`${where}: evidenceArgs must be an array of argument arrays`);
+    if (!a.evidenceArgs.every((args) => Array.isArray(args) && args.length > 0 && args.every((x) => typeof x === 'string' && x.length > 0))) {
+      throw new Error(`${where}: evidenceArgs must be arrays of non-empty arrays of strings`);
+    }
   }
   if (!a.capabilities || typeof a.capabilities !== 'object') throw new Error(`${where}: must declare capabilities`);
   for (const name of CAPABILITY_NAMES) {

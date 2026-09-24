@@ -30,7 +30,7 @@ const repo = require('./lib/repo.js');
 const exec = require('./lib/exec.js');
 const contract = require('./lib/contract.js');
 
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 
 const HELP = `
 delegate-fleet relay ${VERSION}
@@ -48,10 +48,13 @@ Run shape
   --model <id>          Model for this run. Rejected if the backend cannot select one.
   --effort <level>      Reasoning effort. Rejected if the backend has no such control.
   --session <id>        Resume a prior run by id. Rejected if the backend cannot.
+  --max-turns <n>       Turn cap. Rejected if the backend cannot cap turns.
+  --max-budget-usd <n>  Spend cap in USD. Rejected if the backend cannot cap budget.
   --timeout <seconds>   Watchdog, positive integer, default ${options.DEFAULT_TIMEOUT_SECONDS}, max ${options.MAX_TIMEOUT_SECONDS}.
   --workspace <dir>     Repository the worker runs in (default: cwd).
 
 Output
+  --stream              Tee worker stdout and stderr to relay stderr as they arrive.
   --out-dir <dir>       Where run artifacts go (default: <workspace>/.delegate-fleet/runs/<stamp>).
   --dry-run             Print the exact argv and the lint result. Dispatch nothing.
   --json                Print only the result JSON.
@@ -117,13 +120,17 @@ async function main() {
   const request = {
     backend: opts.backend, brief: opts.brief, mode: opts.mode,
     model: opts.model, effort: opts.effort, session: opts.session,
+    maxTurns: opts.maxTurns, maxBudgetUsd: opts.maxBudgetUsd,
     workspace: opts.workspace, readOnly: opts.readOnly,
   };
+
+  const capWarnings = [];
 
   const invalid = (reason, extra = []) => fail(contract.preDispatchResult({
     status: contract.STATUS.INVALID_REQUEST,
     reason: [reason, ...extra].join('; '),
     request, backend: null,
+    warnings: capWarnings,
   }), opts);
 
   if (argErrors.length) invalid('invalid arguments', argErrors);
@@ -143,6 +150,9 @@ async function main() {
   const config = environment.loadConfig(opts.workspace);
   if (config.errors.length) invalid('invalid .delegate-fleet/config.json', config.errors);
   const verification = environment.loadVerification(opts.workspace);
+  if (verification.warning) {
+    capWarnings.push(verification.warning);
+  }
   const view = environment.inspect(adapter, { repoRoot: opts.workspace, config, verification, env: process.env });
 
   // Supported everywhere; available only where the CLI actually is.
@@ -151,14 +161,14 @@ async function main() {
       status: contract.STATUS.BACKEND_UNAVAILABLE,
       reason: `"${adapter.id}" is supported by this framework but its CLI ("${view.cli}") is not installed on this machine`,
       request, backend: { id: adapter.id, cli: view.cli, cliPath: null },
+      warnings: capWarnings,
     }), opts);
   }
-
-  const capWarnings = [];
   // Defaults must be folded in BEFORE the capability check, or a model or
   // effort supplied by .delegate-fleet/config.json reaches the invocation
   // without ever being checked against what this backend can honour.
   const effective = options.applyDefaults(opts, view);
+  let freshVerifiedReadOnly = false;
   if (effective.mode === 'read-only') {
     // verification.json lives in the worker's writable workspace and can be
     // edited by hand or by a previous worker. Re-probe the installed CLI at
@@ -166,8 +176,10 @@ async function main() {
     const fresh = environment.verify(adapter, { config, env: process.env });
     const observed = fresh.capabilities?.readOnly || 'unknown';
     view.capabilities.readOnly = observed === 'unknown' && opts.allowUnverified &&
-      capabilities.claims(adapter.capabilities.readOnly) ? 'documented' : observed;
-    if (view.capabilities.readOnly !== 'verified') {
+      capabilities.claims(view.capabilities.readOnly) ? 'documented' : observed;
+    if (view.capabilities.readOnly === 'verified') {
+      freshVerifiedReadOnly = true;
+    } else {
       capWarnings.push('saved verification was not accepted as read-only proof; a fresh CLI probe did not verify it');
     }
   }
@@ -185,7 +197,12 @@ async function main() {
 
   const briefPath = path.resolve(opts.brief);
   if (!fs.existsSync(briefPath)) invalid(`brief not found: ${briefPath}`);
-  const briefText = fs.readFileSync(briefPath, 'utf8');
+  let briefText;
+  try {
+    briefText = fs.readFileSync(briefPath, 'utf8');
+  } catch (err) {
+    invalid(`could not read brief at "${briefPath}"`, [err.message]);
+  }
   const lint = briefLib.lint(briefText);
   if (!lint.ok) invalid('the brief failed the quality gate before any worker was paid', lint.errors);
 
@@ -200,9 +217,18 @@ async function main() {
     promptFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'delegate-fleet-')), 'brief.md');
     fs.writeFileSync(promptFile, prompt, { mode: 0o600 });
   }
+  const cleanupPromptFile = () => {
+    if (promptFile) {
+      // Remove only the private temp dir this relay created; never touch the repo.
+      try { fs.rmSync(path.dirname(promptFile), { recursive: true, force: true }); } catch { /* best effort */ }
+      promptFile = null;
+    }
+  };
+
   const built = adapter.build({
     prompt, mode: effective.mode, model: effective.model,
     effort: effective.effort, session: effective.session,
+    maxTurns: effective.maxTurns, maxBudgetUsd: effective.maxBudgetUsd,
     cwd: effective.workspace, promptFile,
   });
   const stdinPayload = delivery === 'stdin' ? prompt : null;
@@ -210,13 +236,18 @@ async function main() {
   const warnings = [...capWarnings, ...capCheck.warnings, ...lint.warnings];
 
   if (opts.dryRun) {
+    cleanupPromptFile();
     const plan = {
       dryRun: true, backend: adapter.id, cli: view.cli, cliPath: view.cliPath,
       mode: effective.mode, command, args: built.args,
       promptDelivery: delivery,
       capabilities: view.capabilities, declaredCapabilities: view.declaredCapabilities,
       localVerification: view.localVerification,
-      effective: { model: effective.model, effort: effective.effort, session: effective.session, timeoutSeconds: effective.timeoutSeconds },
+      effective: {
+        model: effective.model, effort: effective.effort, session: effective.session,
+        timeoutSeconds: effective.timeoutSeconds,
+        maxTurns: effective.maxTurns, maxBudgetUsd: effective.maxBudgetUsd,
+      },
       brief: { path: briefPath, scope: lint.scope, warnings: lint.warnings },
       warnings,
     };
@@ -225,17 +256,45 @@ async function main() {
   }
 
   // ---- dispatch -----------------------------------------------------------
-  const before = repo.snapshot(effective.workspace);
-  const execResult = await exec.run({
-    command, args: built.args, cwd: effective.workspace,
-    env: process.env, timeoutSeconds: effective.timeoutSeconds,
-    stdin: stdinPayload,
-  });
-  const after = repo.snapshot(effective.workspace);
-  if (promptFile) {
-    // Remove only the private temp dir this relay created; never touch the repo.
-    try { fs.rmSync(path.dirname(promptFile), { recursive: true, force: true }); } catch { /* best effort */ }
+  // Note: The relay is synchronous by design; running it in the background is
+  // the orchestrator's job. There is deliberately no daemon mode, poller, or
+  // "running" status.
+  const liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'delegate-fleet-live-'));
+  const liveStdout = path.join(liveDir, 'stdout.log');
+  const liveStderr = path.join(liveDir, 'stderr.log');
+  fs.writeFileSync(liveStdout, '');
+  fs.writeFileSync(liveStderr, '');
+
+  if (!opts.json) {
+    console.log(`[relay] dispatching ${adapter.id} (${view.cliPath}) · mode ${effective.mode} · timeout ${effective.timeoutSeconds}s · live log: ${liveStdout}`);
   }
+
+  const onStdout = (chunk) => {
+    try { fs.appendFileSync(liveStdout, chunk); } catch { /* best effort */ }
+    if (opts.stream) {
+      try { process.stderr.write(chunk); } catch { /* best effort */ }
+    }
+  };
+  const onStderr = (chunk) => {
+    try { fs.appendFileSync(liveStderr, chunk); } catch { /* best effort */ }
+    if (opts.stream) {
+      try { process.stderr.write(chunk); } catch { /* best effort */ }
+    }
+  };
+
+  const before = repo.snapshot(effective.workspace);
+  let execResult;
+  try {
+    execResult = await exec.run({
+      command, args: built.args, cwd: effective.workspace,
+      env: process.env, timeoutSeconds: effective.timeoutSeconds,
+      stdin: stdinPayload,
+      onStdout, onStderr,
+    });
+  } finally {
+    cleanupPromptFile();
+  }
+  const after = repo.snapshot(effective.workspace);
 
   const observed = before.ok && after.ok;
   let diff = null;
@@ -250,9 +309,10 @@ async function main() {
   }
 
   const findings = contract.deriveFindings({ mode: effective.mode, diff, scopeReport });
-  const { status, reason } = contract.deriveStatus({
+  const { status, reason, warning: statusWarning } = contract.deriveStatus({
     execResult, mode: effective.mode, diff, denyPatterns: adapter.denyPatterns,
   });
+  if (statusWarning) warnings.push(statusWarning);
 
   if (!observed) {
     warnings.push(`repository facts unavailable (${before.reason || after.reason}); scope, noop and commit detection are all disabled for this run`);
@@ -265,8 +325,17 @@ async function main() {
   // pid keeps two concurrent runs of the same brief from sharing a directory.
   const outDir = effective.outDir || path.join(effective.workspace, environment.STATE_DIR, 'runs', `${stamp}-${adapter.id}-${slug}-${process.pid}`);
   fs.mkdirSync(outDir, { recursive: true });
-  fs.writeFileSync(path.join(outDir, 'stdout.log'), execResult.stdout);
-  fs.writeFileSync(path.join(outDir, 'stderr.log'), execResult.stderr);
+  try {
+    fs.copyFileSync(liveStdout, path.join(outDir, 'stdout.log'));
+    fs.copyFileSync(liveStderr, path.join(outDir, 'stderr.log'));
+  } catch { /* best effort */ }
+  if (execResult.truncated || !fs.existsSync(path.join(outDir, 'stdout.log'))) {
+    fs.writeFileSync(path.join(outDir, 'stdout.log'), execResult.stdout);
+  }
+  if (execResult.truncated || !fs.existsSync(path.join(outDir, 'stderr.log'))) {
+    fs.writeFileSync(path.join(outDir, 'stderr.log'), execResult.stderr);
+  }
+  try { fs.rmSync(liveDir, { recursive: true, force: true }); } catch { /* best effort */ }
   fs.writeFileSync(path.join(outDir, 'command.json'), `${JSON.stringify({ command, args: built.args, cwd: effective.workspace }, null, 2)}\n`);
 
   const result = contract.buildResult({
@@ -274,12 +343,13 @@ async function main() {
     request: {
       ...request, mode: effective.mode, model: effective.model,
       effort: effective.effort, session: effective.session,
+      maxTurns: effective.maxTurns, maxBudgetUsd: effective.maxBudgetUsd,
       timeoutSeconds: effective.timeoutSeconds, briefPath,
     },
     backend: {
       id: adapter.id, cli: view.cli, cliPath: view.cliPath,
       capabilities: view.capabilities,
-      capabilitiesVerifiedLocally: Boolean(view.localVerification),
+      capabilitiesVerifiedLocally: Boolean(view.localVerification) || freshVerifiedReadOnly,
     },
     execution: {
       exitCode: execResult.exitCode, signal: execResult.signal,

@@ -63,6 +63,7 @@ violated scope first.
 | `worker_commit` | HEAD moved during the run |
 | `worker_stash` | The stash ref moved during the run |
 | `read_only_violation` | A read-only run changed the tree — the backend's claim is broken |
+| `framework_state_modified` | The worker modified framework state under `.delegate-fleet/` (outside `runs/`) |
 
 ## blocked
 

@@ -9,28 +9,28 @@ The table below is generated from the adapters themselves, so it cannot drift fr
 means sourced from vendor docs or a cross-referenced upstream project but not proven here; `—` means
 the CLI genuinely cannot do it; `unknown` means not established, which is never treated as support.
 
-| Backend | CLI | edit | readOnly | resumeById | modelSelection | effort | structuredOutput | Brief via |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `claude` | `claude` | verified | verified | verified | verified | verified | verified | argv |
-| `codex` | `codex` | verified | verified | verified | verified | verified | verified | argv |
-| `cursor` | `cursor-agent` | verified | verified | verified | verified | — | verified | argv |
-| `opencode` | `opencode` | verified | verified | verified | verified | verified | verified | argv |
-| `gemini` | `gemini` | verified | verified | — | verified | — | verified | argv |
-| `agy` | `agy` | verified | verified | verified | verified | verified | verified | argv |
-| `copilot` | `copilot` | documented | unknown | unknown | documented | unknown | unknown | argv |
-| `aider` | `aider` | documented | documented | — | documented | — | — | argv |
-| `crush` | `crush` | documented | unknown | unknown | unknown | — | unknown | argv |
-| `qwen` | `qwen` | documented | documented | — | documented | — | documented | argv |
-| `grok` | `grok` | documented | documented | documented | documented | documented | documented | file |
-| `kimi` | `kimi` | documented | — | documented | documented | — | documented | argv |
-| `zcode` | `zcode` | documented | documented | documented | — | — | documented | file |
-| `cline` | `cline` | documented | documented | — | documented | — | documented | stdin |
-| `pi` | `pi` | documented | documented | documented | documented | — | documented | stdin |
-| `omp` | `omp` | documented | documented | documented | documented | documented | documented | stdin |
-| `vibe` | `vibe` | documented | documented | documented | — | — | — | argv |
-| `warp` | `oz` | documented | — | documented | documented | — | documented | argv |
-| `commandcode` | `cmd` | documented | documented | documented | documented | documented | documented | stdin |
-| `qoder` | `qodercli` | documented | documented | documented | documented | — | documented | argv |
+| Backend | CLI | edit | readOnly | resumeById | modelSelection | effort | structuredOutput | turnLimit | budgetLimit | Brief via |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `claude` | `claude` | verified | verified | verified | verified | verified | verified | — | verified | argv |
+| `codex` | `codex` | verified | verified | verified | verified | verified | verified | — | — | argv |
+| `cursor` | `cursor-agent` | verified | verified | verified | verified | — | verified | — | — | argv |
+| `opencode` | `opencode` | verified | verified | verified | verified | verified | verified | — | — | argv |
+| `gemini` | `gemini` | verified | verified | — | verified | — | verified | — | — | argv |
+| `agy` | `agy` | verified | verified | verified | verified | verified | verified | — | — | argv |
+| `copilot` | `copilot` | documented | unknown | unknown | documented | unknown | unknown | — | — | argv |
+| `aider` | `aider` | documented | documented | — | documented | — | — | — | — | argv |
+| `crush` | `crush` | documented | unknown | unknown | unknown | — | unknown | — | — | argv |
+| `qwen` | `qwen` | documented | documented | — | documented | — | documented | — | — | argv |
+| `grok` | `grok` | documented | documented | documented | documented | documented | documented | documented | — | file |
+| `kimi` | `kimi` | documented | — | documented | documented | — | documented | — | — | argv |
+| `zcode` | `zcode` | documented | documented | documented | — | — | documented | — | — | file |
+| `cline` | `cline` | documented | documented | — | documented | — | documented | — | — | stdin |
+| `pi` | `pi` | documented | documented | documented | documented | — | documented | — | — | stdin |
+| `omp` | `omp` | documented | documented | documented | documented | documented | documented | — | — | stdin |
+| `vibe` | `vibe` | documented | documented | documented | — | — | — | — | — | argv |
+| `warp` | `oz` | documented | — | documented | documented | — | documented | — | — | argv |
+| `commandcode` | `cmd` | documented | documented | documented | documented | documented | documented | — | — | stdin |
+| `qoder` | `qodercli` | documented | documented | documented | documented | — | documented | — | — | argv |
 
 Run `doctor` and these become facts about *your* machine: it promotes `documented` to `verified`
 where the installed CLI really has the flag, and demotes it to `—` where it does not.

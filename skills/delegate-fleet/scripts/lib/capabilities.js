@@ -19,6 +19,8 @@ const CAPABILITIES = Object.freeze({
   modelSelection: 'Choose the model for this run.',
   effort: 'Choose a reasoning-effort level for this run.',
   structuredOutput: 'Emit a machine-readable final result.',
+  turnLimit: 'Cap the maximum number of agent turns for this run.',
+  budgetLimit: 'Cap the maximum spend in USD for this run.',
 });
 
 const CAPABILITY_NAMES = Object.freeze(Object.keys(CAPABILITIES));
@@ -29,6 +31,8 @@ const CAPABILITY_REQUEST_FIELD = Object.freeze({
   modelSelection: 'model',
   effort: 'effort',
   resumeById: 'session',
+  turnLimit: 'maxTurns',
+  budgetLimit: 'maxBudgetUsd',
 });
 
 /**
@@ -111,6 +115,7 @@ function expressibleCapabilities(adapter) {
 function probeRequest(mode) {
   return {
     prompt: 'delegate-fleet-task-probe', mode, model: null, effort: null, session: null,
+    maxTurns: null, maxBudgetUsd: null,
     cwd: '/tmp/delegate-fleet-probe', promptFile: '/tmp/delegate-fleet-probe/brief.md',
   };
 }

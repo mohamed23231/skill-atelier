@@ -96,31 +96,82 @@ function hashFile(abs) {
     const st = fs.lstatSync(abs);
     if (st.isSymbolicLink()) return `symlink:${crypto.createHash('sha256').update(fs.readlinkSync(abs)).digest('hex')}`;
     if (st.isDirectory()) return hashDirectory(abs);
-    return hashContents(abs);
+    if (st.isFile()) return hashContents(abs);
+    return UNREADABLE;
   } catch (err) {
     return err && err.code === 'ENOENT' ? null : UNREADABLE;
   }
 }
 
-/** Observe ignored local adapters because a worker can plant code for the next run. */
-function localAdapterEntries(repoRoot) {
-  const dir = path.join(repoRoot, '.delegate-fleet', 'adapters');
+function isRelayRunArtifact(filePath) {
+  const norm = filePath.split(path.sep).join('/');
+  return norm === '.delegate-fleet/runs' || norm.startsWith('.delegate-fleet/runs/');
+}
+
+/**
+ * Observe ignored framework state under `.delegate-fleet/` because a worker can plant
+ * adapters, rewrite config.json to redirect the next dispatch's executable/model/timeout,
+ * or forge verification.json to bypass capability checks.
+ *
+ * `.delegate-fleet/runs/` holds relay-authored artifacts written after each run,
+ * so it is excluded from force-observation to prevent attributing relay output to workers
+ * or polluting repository state.
+ */
+function localFrameworkStateEntries(repoRoot) {
+  const rootDir = path.join(repoRoot, '.delegate-fleet');
+  let st;
+  try {
+    st = fs.lstatSync(rootDir);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return [];
+    throw err;
+  }
+  // If .delegate-fleet itself is a symlink, do not traverse: record the symlink itself.
+  if (st.isSymbolicLink()) {
+    return ['.delegate-fleet'];
+  }
+  if (!st.isDirectory()) {
+    throw new Error(`.delegate-fleet is not a directory`);
+  }
+
   const entries = [];
   function visit(current) {
     let children;
-    try { children = fs.readdirSync(current, { withFileTypes: true }); }
-    catch (err) {
+    try {
+      children = fs.readdirSync(current, { withFileTypes: true });
+    } catch (err) {
       if (err && err.code === 'ENOENT') return;
       throw err;
     }
     for (const child of children) {
       const absolute = path.join(current, child.name);
-      if (child.isDirectory()) visit(absolute);
-      else entries.push(path.relative(repoRoot, absolute).split(path.sep).join('/'));
+      const rel = path.relative(repoRoot, absolute).split(path.sep).join('/');
+
+      // .delegate-fleet/runs/ holds relay-authored artifacts; exclude it from observation.
+      if (isRelayRunArtifact(rel)) {
+        continue;
+      }
+
+      if (child.isSymbolicLink()) {
+        // Do not traverse symlinked directories outside or inside repo; record the symlink itself.
+        entries.push(rel);
+      } else if (child.isDirectory()) {
+        visit(absolute);
+      } else if (child.isFile()) {
+        entries.push(rel);
+      } else {
+        // A FIFO, socket, or device node planted here fails the snapshot CLOSED
+        // (repository not observed, which already forces blocked).
+        throw new Error(`unsupported file type at "${rel}": only regular files and symlinks may be recorded`);
+      }
     }
   }
-  visit(dir);
+  visit(rootDir);
   return entries;
+}
+
+function localAdapterEntries(repoRoot) {
+  return localFrameworkStateEntries(repoRoot).filter((p) => p.startsWith('.delegate-fleet/adapters/'));
 }
 
 /**
@@ -163,13 +214,14 @@ function snapshot(repoRoot) {
   const entries = new Map();
   let statusEntries;
   try {
-    statusEntries = parsePorcelainZ(res.stdout);
+    // Treat .delegate-fleet/runs/** as relay-authored and never attribute it to the worker.
+    statusEntries = parsePorcelainZ(res.stdout).filter((entry) => !isRelayRunArtifact(entry.path));
     const seen = new Set(statusEntries.map((entry) => entry.path));
-    for (const file of localAdapterEntries(repoRoot)) {
+    for (const file of localFrameworkStateEntries(repoRoot)) {
       if (!seen.has(file)) statusEntries.push({ code: '??', path: file, renamedFrom: null });
     }
   } catch (err) {
-    return { ok: false, reason: `could not inspect local adapters: ${err.message}`, entries: new Map(), head: null, stash: null };
+    return { ok: false, reason: `could not inspect local framework state: ${err.message}`, entries: new Map(), head: null, stash: null };
   }
   for (const e of statusEntries) {
     const hash = hashFile(path.join(repoRoot, e.path));
@@ -296,4 +348,6 @@ module.exports = {
   classify,
   normalize,
   hashFile,
+  localFrameworkStateEntries,
+  localAdapterEntries,
 };

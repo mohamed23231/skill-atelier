@@ -15,6 +15,8 @@ module.exports = {
   capabilities: {
     edit: 'documented', readOnly: 'documented', resumeById: 'documented',
     modelSelection: 'unsupported', effort: 'unsupported', structuredOutput: 'documented',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified on this machine
+    budgetLimit: 'unsupported',
   },
   build(req) {
     const args = ['--json', '--no-color', '--mode', req.mode === 'read-only' ? 'plan' : 'yolo'];
@@ -30,6 +32,8 @@ module.exports = {
       modelSelection: 'unsupported',
       effort: 'unsupported',
       structuredOutput: /--json/.test(help) ? 'verified' : 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/oauth response is not valid json/i, /unauthorized/i],

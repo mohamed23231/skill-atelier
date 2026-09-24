@@ -83,7 +83,7 @@ function killTree(child, signal) {
  * Resolves (never rejects) with:
  *   outcome  'exited' | 'timeout' | 'aborted' | 'launch_failure'
  */
-function run({ command, args, cwd, env, timeoutSeconds, onStart, stdin }) {
+function run({ command, args, cwd, env, timeoutSeconds, onStart, stdin, onStdout, onStderr }) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const stdout = makeSink();
@@ -158,8 +158,18 @@ function run({ command, args, cwd, env, timeoutSeconds, onStart, stdin }) {
     }, timeoutSeconds * 1000);
     watchdog.unref();
 
-    child.stdout.on('data', (d) => stdout.push(d));
-    child.stderr.on('data', (d) => stderr.push(d));
+    child.stdout.on('data', (d) => {
+      stdout.push(d);
+      if (typeof onStdout === 'function') {
+        try { onStdout(d); } catch { /* a throwing callback must not kill the run */ }
+      }
+    });
+    child.stderr.on('data', (d) => {
+      stderr.push(d);
+      if (typeof onStderr === 'function') {
+        try { onStderr(d); } catch { /* a throwing callback must not kill the run */ }
+      }
+    });
     child.stdout.on('error', () => {});
     child.stderr.on('error', () => {});
 

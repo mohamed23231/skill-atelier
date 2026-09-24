@@ -20,6 +20,8 @@ module.exports = {
     modelSelection: 'documented',
     effort: 'unsupported',
     structuredOutput: 'unsupported',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified on this machine
+    budgetLimit: 'unsupported',
   },
   build(req) {
     const args = ['--yes-always', '--no-auto-commits', '--no-dirty-commits'];
@@ -36,6 +38,8 @@ module.exports = {
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',
       structuredOutput: 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/api key.*not.*set/i, /authentication.*fail/i],

@@ -162,7 +162,7 @@ function loadPrivateRules() {
       continue;
     }
     try {
-      const flags = (entry.flags || 'i').replace(/[gy]/g, '');
+      const flags = (entry.flags === undefined ? 'i' : entry.flags).replace(/[gy]/g, '');
       rules.push({ re: new RegExp(entry.pattern, flags), label: entry.label || 'private identifier' });
     } catch (err) {
       fail(`.validate-repo-private.json: ${entry.pattern} is not a valid regular expression (${err.message})`);

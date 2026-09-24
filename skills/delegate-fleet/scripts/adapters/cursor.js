@@ -15,6 +15,8 @@ module.exports = {
     // not as its own flag. Declaring an `--effort` flag here would be a lie.
     effort: 'unsupported',
     structuredOutput: 'verified',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified in cursor-agent --help
+    budgetLimit: 'unsupported',
   },
   build(req) {
     const args = ['-p', req.prompt, '--output-format', 'json'];
@@ -32,6 +34,8 @@ module.exports = {
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: 'unsupported',
       structuredOutput: /--output-format/.test(help) ? 'verified' : 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/not authenticated/i, /permission denied/i],

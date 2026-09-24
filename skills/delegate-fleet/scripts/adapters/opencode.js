@@ -20,6 +20,8 @@ module.exports = {
     modelSelection: 'verified',
     effort: 'verified',
     structuredOutput: 'verified',
+    turnLimit: 'unsupported', // turnLimit and budgetLimit could not be verified in opencode run --help
+    budgetLimit: 'unsupported',
   },
   // OpenCode's run flags are on the `run` subcommand's help, not top-level.
   helpArgs: ['run', '--help'],
@@ -51,6 +53,8 @@ module.exports = {
       modelSelection: /--model/.test(help) ? 'verified' : 'unsupported',
       effort: /--variant/.test(help) ? 'verified' : 'unsupported',
       structuredOutput: /--format/.test(help) ? 'verified' : 'unsupported',
+      turnLimit: 'unsupported',
+      budgetLimit: 'unsupported',
     };
   },
   denyPatterns: [/permission denied/i, /no provider configured/i],

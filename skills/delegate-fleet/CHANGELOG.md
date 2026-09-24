@@ -5,19 +5,51 @@ All notable changes to the `delegate-fleet` skill.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this skill
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.1.0] - 2026-09-22
+
+### Added
+
+- **Operational controls.** `--max-turns` and `--max-budget-usd` options with first-class `turnLimit`
+  and `budgetLimit` capabilities, supported on `grok` and `claude` respectively.
+- **Worker configuration defaults.** Per-worker defaults for `maxTurns` and `maxBudgetUsd` in
+  `.delegate-fleet/config.json`, validated at load time and overridable via CLI flags.
+- **Live streaming.** `--stream` tees worker stdout and stderr chunks in real time to relay stderr
+  while keeping stdout pure JSON for automation pipelines.
+- **Safe live progress logging.** Live logs write to a private temporary directory outside the
+  workspace during execution (`delegate-fleet-live-`), copying to run artifacts only after the
+  post-run snapshot to eliminate snapshot pollution.
+- **Pre-dispatch banner.** Non-`--json` invocations report backend ID, resolved executable path,
+  mode, timeout, and the live log location before dispatching.
+- **`framework_state_modified` finding.** Detects worker modifications or creations under
+  `.delegate-fleet/` (outside `runs/`), such as config mutations or planted adapters, even in
+  repositories where `.delegate-fleet/` is gitignored.
+
+### Changed
+
+- **Trigger precision.** Skill description rewritten to focus on bounded delegation and independent
+  diff verification, removing vendor rosters and generic keywords that caused false activations.
+- **Open-source test suite.** Renamed internal defect/task test titles across the contract test
+  suite to describe the exact behaviour proven.
+- **Complete result taxonomy documentation.** Documented all nine process statuses (including
+  `launch_failure` and `aborted`) and all six repository findings (including `worker_stash` and
+  `framework_state_modified`) across `SKILL.md` and reference guides.
 
 ### Fixed
 
-- Read-only dispatch and verified-only selection re-probe the installed CLI, so a writable local
-  verification record cannot authorize a safety claim on its own.
-- Capability validation checks representative invocations instead of a request parameter's name,
-  and read-only requires a recognized restriction argument.
-- Ignored project adapter files are included in repository snapshots, and unreadable files or
-  nested repositories block a clean report; nested repositories with an unborn HEAD remain valid.
-- OpenCode checks the actual agent list for `plan`; Grok probes exact option values; adapters
-  without a read-only invocation no longer claim one from help text alone.
-- JSON discovery reports local adapter errors, and malformed probe argument lists are rejected.
+- **Read-only authorization at trust boundary.** Read-only dispatch and verified-only selection
+  re-probe the installed CLI, preventing hand-edited or stale `verification.json` files from
+  authorizing read-only runs.
+- **Fresh probe reflection.** `backend.capabilitiesVerifiedLocally` reports `true` in result JSON
+  when the relay's fresh probe verified read-only without requiring a pre-existing `doctor` record.
+- **Evidence preservation.** Probes with empty `--help` and `--version` output preserve evidence
+  when `evidenceArgs` probes return non-empty output.
+- **Dirty-tree & framework snapshot resilience.** Planted FIFOs fail closed, symlinked directories
+  under `.delegate-fleet/` are not traversed, and unreadable files or submodules poison the
+  snapshot rather than reporting a false clean status.
+- **Recorded unsupported precedence.** A recorded `unsupported` read-only status cannot be bypassed
+  by `--allow-unverified` when a fresh probe is inconclusive.
+- **Adapter validation.** OpenCode validates `plan` agent availability via `evidenceArgs`, Grok
+  probes exact option values, and adapters declaring capabilities must express them in `build()`.
 
 ## [2.0.0] - 2026-09-21
 
