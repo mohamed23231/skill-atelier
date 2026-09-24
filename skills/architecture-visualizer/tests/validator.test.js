@@ -860,6 +860,22 @@ const cases = [
       }
     },
   ],
+  [
+    'lists every node that cites the same outside-root evidence',
+    () => {
+      const box = groundingSandbox();
+      try {
+        const spec = groundedSpec([{ id: 'ev_shared', type: 'file', locator: { path: '../outside.js' } }]);
+        spec.nodes[1].evidenceIds = ['ev_shared'];
+        const res = validateArchitecture(spec, { repoRoot: box.repo });
+        const outside = res.findings.filter((f) => f.policyId === 'evidence.outside_repo');
+        assert.strictEqual(outside.length, 1);
+        assert.deepStrictEqual(outside[0].nodeIds.sort(), [spec.nodes[0].id, spec.nodes[1].id].sort());
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
 ];
 
 module.exports = { name: 'Validator', cases };

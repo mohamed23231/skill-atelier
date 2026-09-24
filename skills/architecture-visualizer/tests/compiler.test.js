@@ -275,6 +275,7 @@ const cases = [
           { id: 'ev_abs_inside', type: 'file', locator: { path: path.join(dir, 'src', 'api', 'Api.ts') } },
           { id: 'ev_abs_outside', type: 'file', locator: { path: path.join(os.homedir(), 'private-notes', 'secret.ts') } },
           { id: 'ev_route', type: 'api', locator: { method: 'GET', path: '/api/orders' } },
+          { id: 'ev_dotdot', type: 'file', locator: { path: '../../home/someone/private/notes.ts' } },
         ];
         spec.nodes[0].evidenceIds = spec.evidence.map((e) => e.id);
         spec.nodes[0].details.files = [path.join(dir, 'src', 'api', 'Api.ts')];
@@ -285,6 +286,8 @@ const cases = [
         });
         assert.ok(result.html.includes('"path": "src/api/Api.ts"'));
         assert.ok(result.markdown.includes('<outside repository>/secret.ts'));
+        assert.ok(!result.html.includes('home/someone') && !result.markdown.includes('home/someone'), 'a ../ path outside the root leaked');
+        assert.ok(result.markdown.includes('<outside repository>/notes.ts'));
         assert.ok(result.html.includes('"path": "/api/orders"'), 'API routes are not file paths and stay as written');
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });

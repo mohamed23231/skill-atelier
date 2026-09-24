@@ -95,14 +95,15 @@ function containsSymbol(content, symbol) {
 }
 
 /**
- * The form of a locator path that is safe to publish in an artifact: paths
- * under the root become repo-relative, other absolute paths keep only their
- * file name, so no machine-local directory leaks. Relative paths are kept.
+ * The form of a locator path that is safe to publish in an artifact: an
+ * absolute path under the root becomes repo-relative, and any path that
+ * resolves outside the root (absolute or `../`) keeps only its file name, so no
+ * machine-local directory leaks. Relative paths inside the root are kept.
  */
 function displayRepoPath(repoRoot, targetPath) {
-  if (typeof targetPath !== 'string' || !path.isAbsolute(targetPath)) return targetPath;
+  if (typeof targetPath !== 'string' || targetPath === '') return targetPath;
   const resolved = resolveRepoPath(repoRoot, targetPath);
-  if (resolved && resolved.inside) return resolved.relativePath;
+  if (resolved && resolved.inside) return path.isAbsolute(targetPath) ? resolved.relativePath : targetPath;
   return `<outside repository>/${path.basename(targetPath)}`;
 }
 

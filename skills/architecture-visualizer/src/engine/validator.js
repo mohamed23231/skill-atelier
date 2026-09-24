@@ -248,11 +248,14 @@ function collectEvidenceFindings(model, { verifyFilesOnDisk }) {
 
   const findings = [];
   const evidenceById = new Map((model.evidence || []).map((entry) => [entry.id, entry]));
-  const reportedOutside = new Set();
+  const reportedOutside = new Map();
   const reportOutside = (node, record) => {
-    if (reportedOutside.has(record.id)) return;
-    reportedOutside.add(record.id);
-    findings.push({
+    const existing = reportedOutside.get(record.id);
+    if (existing) {
+      if (!existing.nodeIds.includes(node.id)) existing.nodeIds.push(node.id);
+      return;
+    }
+    const finding = {
       id: `finding_evidence_outside_repo_${record.id}`,
       severity: FINDING_SEVERITY.WARN,
       message: `Evidence "${record.id}" for node "${node.id}" does not point to a path under the repository root.`,
@@ -260,7 +263,9 @@ function collectEvidenceFindings(model, { verifyFilesOnDisk }) {
       edgeIds: [],
       policyId: BUILTIN_POLICY.EVIDENCE_OUTSIDE_REPO,
       evidenceIds: [record.id],
-    });
+    };
+    reportedOutside.set(record.id, finding);
+    findings.push(finding);
   };
 
   (model.nodes || []).forEach((node) => {
