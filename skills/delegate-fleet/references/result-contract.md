@@ -27,7 +27,12 @@ with `--json`. The two axes are independent on purpose.
     "head": { "before": "abc…", "after": "abc…", "changed": false },
     "stashChanged": false
   },
-  "verification": { "performedByRelay": false, "requiredFromOrchestrator": true, "checks": [] },
+  "worker": { "selfReported": true, "source": "structured", "summary": "Renamed … Changed: src/b.js",
+              "summaryTruncated": false, "sessionId": "…",
+              "usage": { "inputTokens": 1200, "outputTokens": 300, "cacheReadTokens": 5000, "costUsd": 0.0123 } },
+  "verification": { "performedByRelay": true, "requiredFromOrchestrator": true,
+                    "checks": [{ "command": "pnpm test", "outcome": "exited", "exitCode": 0, "passed": true,
+                                 "durationSeconds": 12, "tail": "…last 40 lines…", "log": ".../check-1.log" }] },
   "acceptance":   { "decidedBy": "orchestrator", "accepted": null, "committedBy": null },
   "artifacts": { "dir": "...", "stdout": "...", "stderr": "...", "result": "..." }
 }
@@ -65,9 +70,30 @@ violated scope first.
 | `read_only_violation` | A read-only run changed the tree — the backend's claim is broken |
 | `framework_state_modified` | The worker modified framework state under `.delegate-fleet/` (outside `runs/`) |
 
+## worker — what the worker says about itself
+
+Parsed from the worker's stdout so the orchestrator never has to read the raw log to learn what
+happened. `source` is `structured` (a JSON result or JSON-lines stream), `text-tail` (the last 2 KB
+of plain output), `adapter` (the adapter's own `parseReport`), or `none`.
+
+- `summary` — the worker's final message, capped at 2000 characters, keeping the **end**.
+- `sessionId` — pass it to `--session` to resume this exact run.
+- `usage` — tokens and cost as the CLI reported them. A final cumulative `result` object wins;
+  otherwise per-turn events are summed. Any field the CLI did not report is `null`.
+
+All of it is **self-reported**. It never feeds `status`, `findings`, or `blocked`: a worker that
+claims success on an unchanged tree is still `noop`.
+
+## verification.checks
+
+One entry per `--check`, in order. Every check runs even after one fails. `outcome` is `exited`,
+`timeout`, `launch_failure`, or `skipped` (the run did not complete, so no check ran and `passed` is
+`null`). `tail` is the last 40 lines (at most 4000 characters) of combined output; `log` holds all of
+it. A check that changes the working tree is reported as a warning and never undone.
+
 ## blocked
 
-`blocked = status !== "completed" || findings.length > 0 || repository.observed === false`.
+`blocked = status !== "completed" || findings.length > 0 || repository.observed === false || any check failed`.
 Mechanical, so an orchestrator can gate on it. It means "a human decision is required", never
 "this is bad work".
 

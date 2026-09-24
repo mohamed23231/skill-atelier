@@ -14,6 +14,8 @@ node <skill>/scripts/relay.js --backend <id> --brief <file.md> --workspace "$PWD
 | `--session <id>` | Rejected if the backend cannot resume by id |
 | `--max-turns <n>` | Turn cap. Honoured by backends with `turnLimit` (`grok`); rejected if unsupported |
 | `--max-budget-usd <n>` | Spend cap in USD. Honoured by backends with `budgetLimit` (`claude`); rejected if unsupported |
+| `--check "<cmd>"` | Repeatable. A project gate the relay runs after a `completed` edit run. No shell; a failure blocks |
+| `--check-timeout <s>` | Watchdog per check, default 600 |
 | `--timeout <s>` | Watchdog timer, positive integer, default 1200, max 86400. Honoured for all backends |
 | `--workspace <dir>` | The repository the worker runs in. Pass it explicitly |
 | `--out-dir <dir>` | Artifacts location. Default `<workspace>/.delegate-fleet/runs/<stamp>-<backend>-<slug>-<pid>` |
@@ -55,6 +57,7 @@ copied into the run's private artifact directory:
   stdout.log     everything the worker printed
   stderr.log     the worker's own errors — read this first on a failure
   command.json   the exact command, argv and cwd
+  check-<n>.log  full output of each --check
 ```
 
 Artifacts are written **after** the post-run snapshot and are excluded from repository facts, so
@@ -67,15 +70,16 @@ they can never be mistaken for worker changes.
 ```json
 {
   "workers": {
-    "opencode": { "model": "deepseek/deepseek-chat" },
+    "opencode": { "model": "deepseek/deepseek-chat", "tier": "cheap" },
     "codex":    { "effort": "high", "timeoutSeconds": 2400 },
     "commandcode": { "cli": "/opt/commandcode/bin/cmd" }
   }
 }
 ```
 
-Valid keys: `cli`, `model`, `effort`, `timeoutSeconds`, `maxTurns`, `maxBudgetUsd`. Every one is consumed at
-dispatch and has an integration test proving it reaches the invocation. **Any other key is a hard
+Valid keys: `cli`, `model`, `effort`, `timeoutSeconds`, `maxTurns`, `maxBudgetUsd`, `tier`. `tier` is
+`cheap`, `standard` or `premium` and orders `fleet.js select`; it describes the model you configured,
+so it lives here and never in an adapter. Every key is consumed and has an integration test proving it reaches the invocation. **Any other key is a hard
 error**, because a config field with no consumer is a lie — that was the defining bug of the
 previous version. Explicit flags always beat configured defaults.
 

@@ -58,8 +58,18 @@ module.exports = {
 
   // Output markers that mean "refused or could not authenticate" despite exit 0.
   denyPatterns: [/not authenticated/i],
+
+  // Optional. Only when the generic parser cannot read this CLI's output.
+  // Return { summary, sessionId, usage: { inputTokens, outputTokens, cacheReadTokens, costUsd } };
+  // any field may be null. A throw degrades to `source: "none"`, never a failed run.
+  // parseReport(stdout) { … },
 };
 ```
+
+The generic parser already reads a single JSON result object (`result`/`response`, `session_id`,
+`usage`, `total_cost_usd`) and JSON-lines event streams (`item`/`part`/`message` text, per-turn
+`usage` or `tokens`). Check `result.worker.source` after a real run: `structured` means you need no
+`parseReport`.
 
 ## The rules
 

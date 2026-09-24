@@ -30,15 +30,21 @@ mechanism — a trustworthy account of what changed — and you compose your own
 
 Keep them yours, outside the relay:
 
+Hand them to the relay with `--check`, so only the tail of each reaches your context:
+
 ```bash
-node scripts/relay.js --backend opencode --brief briefs/slice-2.md --workspace "$PWD" --json > run.json
+node scripts/relay.js --backend opencode --brief briefs/slice-2.md --workspace "$PWD" --json \
+  --check "pnpm typecheck" --check "pnpm test -- src/settings" > run.json
 test "$(node -p "require('./run.json').blocked")" = false || exit 1
-pnpm test && pnpm typecheck && pnpm lint
+git diff -- $(node -p "require('./run.json').repository.scope.inScope.join(' ')")
 git add -A && git commit   # you, not the worker
 ```
 
-`verification.checks` is left empty by the relay and reserved for an orchestrator that wants to
-record what it ran alongside the run.
+The relay still decides nothing: it runs exactly the commands you named and records exit codes.
+Choosing the gates stays yours, and green checks never replace reading the diff.
+
+When a check fails, retry the **same worker** with the check's `tail` pasted into the brief before
+you escalate or fix it yourself. That loop is where most of the orchestrator's tokens are saved.
 
 ## A second opinion
 

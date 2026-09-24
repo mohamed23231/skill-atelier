@@ -181,13 +181,17 @@ function deriveStatus({ execResult, mode, diff, denyPatterns }) {
 function buildResult(parts) {
   const {
     status, reason, findings = [], request, backend, execution,
-    repository, artifacts, warnings = [],
+    repository, artifacts, warnings = [], worker = null, checks = [],
   } = parts;
 
   // A run whose repository could not be observed has not been checked at all:
   // scope, noop and commit detection were every one of them disabled. Never
   // let automation read that as a clean result.
   const unobserved = Boolean(repository) && repository.observed === false;
+  // A check the orchestrator named and that did not pass is a decision the
+  // orchestrator must make. Skipped checks do not block on their own: they
+  // are only ever skipped when the status already blocks.
+  const failedChecks = checks.some((c) => c.passed === false);
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -196,15 +200,19 @@ function buildResult(parts) {
     // A result is safe to accept only when the process succeeded, no
     // repository finding is outstanding, and the repository was actually
     // observed. This is arithmetic, not judgement.
-    blocked: status !== STATUS.COMPLETED || findings.length > 0 || unobserved,
+    blocked: status !== STATUS.COMPLETED || findings.length > 0 || unobserved || failedChecks,
     findings,
     warnings,
     request: request ?? null,
     backend: backend ?? null,
     execution: execution ?? null,
     repository: repository ?? null,
-    // The relay measures; it never verifies and never accepts.
-    verification: { performedByRelay: false, requiredFromOrchestrator: true, checks: [] },
+    // What the worker says about itself: final message, session, usage.
+    // Self-reported evidence; it never feeds status, findings or blocked.
+    worker: worker ?? null,
+    // The relay runs only the checks it was handed and records their exit
+    // codes. Passing checks are not acceptance: the diff is still read.
+    verification: { performedByRelay: checks.length > 0, requiredFromOrchestrator: true, checks },
     acceptance: { decidedBy: 'orchestrator', accepted: null, committedBy: null },
     artifacts: artifacts ?? null,
   };

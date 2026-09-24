@@ -28,6 +28,8 @@ const contract = require('../scripts/lib/contract.js');
 const options = require('../scripts/lib/options.js');
 const registry = require('../scripts/adapters/index.js');
 const environment = require('../scripts/lib/environment.js');
+const report = require('../scripts/lib/report.js');
+const checksLib = require('../scripts/lib/checks.js');
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -524,7 +526,7 @@ test('a config field with no consumer is rejected rather than silently ignored',
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
   const dir = path.join(repo, '.delegate-fleet');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ workers: { claude: { cli: H.STUB, tier: 'premium' } } }));
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ workers: { claude: { cli: H.STUB, priority: 'high' } } }));
   const b = H.writeBrief(repo);
   const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
   assert.strictEqual(res.json.status, 'invalid_request');
@@ -847,7 +849,7 @@ test('--out-dir is honoured (every option must reach something)', () => {
 test('discover output carries no stray internal fields', () => {
   const repo = H.tmpRepo();
   const res = H.runFleet(['discover', '--workspace', repo, '--json'], { cwd: repo });
-  const allowed = new Set(['id', 'title', 'cli', 'cliPath', 'supported', 'availability', 'declaredCapabilities', 'capabilities', 'localVerification', 'staleVerification', 'defaults', 'docs', 'staticEvidence']);
+  const allowed = new Set(['id', 'title', 'cli', 'cliPath', 'supported', 'availability', 'declaredCapabilities', 'capabilities', 'localVerification', 'staleVerification', 'defaults', 'docs', 'staticEvidence', 'tier']);
   for (const b of res.json.backends) {
     for (const k of Object.keys(b)) assert.ok(allowed.has(k), `unexpected field "${k}" in discover output`);
   }
@@ -1736,6 +1738,235 @@ process.exit(0);
   assert.ok(res.capabilities, 'capabilities must be recorded despite empty help and version');
   assert.strictEqual(res.capabilities.readOnly, 'verified');
   assert.strictEqual(res.reason, null);
+});
+
+/* ------------------------------------------------------------------ *
+ * Worker report: the orchestrator reads a summary, not the raw log
+ * ------------------------------------------------------------------ */
+
+test('report: a single result object yields summary, session and cumulative usage', () => {
+  const out = JSON.stringify({
+    type: 'result', result: 'Renamed Settings.\nChanged: src/a.js', session_id: 'sess-1',
+    usage: { input_tokens: 1200, output_tokens: 300, cache_read_input_tokens: 5000 }, total_cost_usd: 0.0123,
+  });
+  const w = report.extract(out);
+  assert.strictEqual(w.source, 'structured');
+  assert.strictEqual(w.selfReported, true);
+  assert.match(w.summary, /Changed: src\/a\.js/);
+  assert.strictEqual(w.sessionId, 'sess-1');
+  assert.deepStrictEqual(w.usage, { inputTokens: 1200, outputTokens: 300, cacheReadTokens: 5000, costUsd: 0.0123 });
+});
+
+test('report: a JSON-lines event stream sums per-turn usage and keeps the last message', () => {
+  const lines = [
+    { type: 'thread.started', thread_id: 't-9' },
+    { type: 'item.completed', item: { type: 'reasoning', text: 'thinking…' } },
+    { type: 'item.completed', item: { type: 'agent_message', text: 'first pass' } },
+    { type: 'turn.completed', usage: { input_tokens: 100, cached_input_tokens: 40, output_tokens: 10 } },
+    { type: 'item.completed', item: { type: 'agent_message', text: 'done: edited src/a.js' } },
+    { type: 'turn.completed', usage: { input_tokens: 50, cached_input_tokens: 0, output_tokens: 5 } },
+  ].map((o) => JSON.stringify(o)).join('\n');
+  const w = report.extract(`some banner\n${lines}\n`);
+  assert.strictEqual(w.summary, 'done: edited src/a.js');
+  assert.strictEqual(w.sessionId, 't-9');
+  assert.deepStrictEqual(w.usage, { inputTokens: 150, outputTokens: 15, cacheReadTokens: 40, costUsd: null });
+});
+
+test('report: step events with nested token parts and per-model stats are both understood', () => {
+  const steps = [
+    { type: 'text', part: { type: 'text', text: 'all set' } },
+    { type: 'step_finish', part: { tokens: { input: 10, output: 2, cache: { read: 7 } }, cost: 0.001 } },
+    { type: 'step_finish', part: { tokens: { input: 5, output: 1, cache: { read: 0 } }, cost: 0.002 } },
+  ].map((o) => JSON.stringify(o)).join('\n');
+  const a = report.extract(steps);
+  assert.strictEqual(a.summary, 'all set');
+  assert.deepStrictEqual(a.usage, { inputTokens: 15, outputTokens: 3, cacheReadTokens: 7, costUsd: 0.003 });
+  const b = report.extract(JSON.stringify({ response: 'ok', stats: { models: { m: { tokens: { prompt: 9, candidates: 4, cached: 1 } } } } }));
+  assert.deepStrictEqual(b.usage, { inputTokens: 9, outputTokens: 4, cacheReadTokens: 1, costUsd: null });
+});
+
+test('report: plain text falls back to a capped tail, and nothing becomes none', () => {
+  const long = `${'x'.repeat(5000)}\nCHANGED src/a.js`;
+  const w = report.extract(long);
+  assert.strictEqual(w.source, 'text-tail');
+  assert.ok(w.summaryTruncated);
+  assert.ok(w.summary.length <= report.SUMMARY_CAP_CHARS + 1);
+  assert.match(w.summary, /CHANGED src\/a\.js$/, 'the tail, where workers list their changes, is kept');
+  assert.strictEqual(report.extract('').source, 'none');
+  assert.strictEqual(report.extract(null).usage, null);
+});
+
+test('report: an adapter parseReport overrides the generic parser, and a throwing one degrades to none', () => {
+  const w = report.extract('RAW', { parseReport: (s) => ({ summary: `parsed ${s}`, sessionId: 'x', usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: null, costUsd: null } }) });
+  assert.strictEqual(w.source, 'adapter');
+  assert.strictEqual(w.summary, 'parsed RAW');
+  assert.strictEqual(report.extract('RAW', { parseReport: () => { throw new Error('boom'); } }).source, 'none');
+});
+
+test('an adapter whose parseReport is not a function is refused at load time', () => {
+  const base = registry.getAdapter('claude');
+  assert.throws(() => registry.assertShape({ ...base, parseReport: 'nope' }), /parseReport must be a function/);
+});
+
+test('e2e: the worker report lands in result.json and never changes blocked', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const print = JSON.stringify({ type: 'result', result: 'I renamed it. Changed: src/a.js', session_id: 'abc', usage: { input_tokens: 10, output_tokens: 3 }, total_cost_usd: 0.5 });
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: print } });
+  assert.strictEqual(res.json.status, 'completed');
+  assert.strictEqual(res.json.blocked, false);
+  assert.strictEqual(res.json.worker.summary, 'I renamed it. Changed: src/a.js');
+  assert.strictEqual(res.json.worker.sessionId, 'abc');
+  assert.strictEqual(res.json.worker.usage.costUsd, 0.5);
+  const noop = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_PRINT: print } });
+  assert.strictEqual(noop.json.status, 'noop', 'a worker claiming success does not override an unchanged tree');
+  assert.strictEqual(noop.json.blocked, true);
+});
+
+/* ------------------------------------------------------------------ *
+ * Checks: gates run by the relay, only the tail reaches the orchestrator
+ * ------------------------------------------------------------------ */
+
+const NODE = JSON.stringify(process.execPath);
+
+test('check tokenizer honours quotes and refuses shell operators', () => {
+  assert.deepStrictEqual(checksLib.tokenize(`pnpm test -- "src/a b.js" 'x y'`).argv, ['pnpm', 'test', '--', 'src/a b.js', 'x y']);
+  assert.deepStrictEqual(checksLib.tokenize('a\\ b c').argv, ['a b', 'c']);
+  for (const bad of ['pnpm test && pnpm lint', 'pnpm test | tee x', 'pnpm test > out', 'a ; b', '', '"unterminated']) {
+    assert.ok(checksLib.tokenize(bad).error, `"${bad}" must be rejected`);
+  }
+  assert.deepStrictEqual(checksLib.tokenize('echo "a && b"').argv, ['echo', 'a && b'], 'a quoted operator is just text');
+});
+
+test('--check is refused with --read-only, and --check-timeout alone is refused', () => {
+  assert.ok(options.parseArgs(['--read-only', '--check', 'pnpm test']).errors.some((e) => /read-only/.test(e)));
+  assert.ok(options.parseArgs(['--check-timeout', '30']).errors.some((e) => /without any --check/.test(e)));
+  assert.ok(options.parseArgs(['--check', 'a && b']).errors.length > 0);
+});
+
+test('e2e: passing checks are recorded with a tail and a full log, and do not block', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', `${NODE} -e "console.log('tests ok')"`], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(res.status, 0);
+  assert.strictEqual(res.json.blocked, false);
+  const [c] = res.json.verification.checks;
+  assert.strictEqual(c.passed, true);
+  assert.strictEqual(c.exitCode, 0);
+  assert.match(c.tail, /tests ok/);
+  assert.ok(fs.existsSync(c.log), 'the full output is an artifact');
+  assert.strictEqual(res.json.verification.performedByRelay, true);
+  assert.strictEqual(res.json.verification.requiredFromOrchestrator, true, 'passing gates never replace reading the diff');
+  assert.deepStrictEqual(res.json.repository.changed.modified, ['src/a.js'], 'check artifacts never leak into the worker diff');
+});
+
+test('e2e: a failing check blocks a completed run, and every check still runs', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', `${NODE} -e "console.error('2 failing'); process.exit(3)"`,
+    '--check', `${NODE} -e "console.log('lint ok')"`], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(res.status, 1);
+  assert.strictEqual(res.json.status, 'completed', 'the process succeeded; the gate is a separate fact');
+  assert.strictEqual(res.json.blocked, true);
+  const [fail, pass] = res.json.verification.checks;
+  assert.strictEqual(fail.passed, false);
+  assert.strictEqual(fail.exitCode, 3);
+  assert.match(fail.tail, /2 failing/);
+  assert.strictEqual(pass.passed, true);
+});
+
+test('text output shows why a check failed, and not the output of a passing one', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo,
+    // Built at run time so the text can only come from the output, never from the echoed command.
+    '--check', `${NODE} -e "console.error('TS23' + '04 cannot find Foo'); process.exit(2)"`,
+    '--check', `${NODE} -e "console.log('noise from ' + 'a green gate')"`], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.match(res.stdout, /check FAIL[\s\S]*TS2304 cannot find Foo/);
+  assert.doesNotMatch(res.stdout, /noise from a green gate/);
+});
+
+test('e2e: checks are skipped on a run that did not complete', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const marker = path.join(repo, 'ran.txt');
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', `${NODE} -e "require('fs').writeFileSync(${JSON.stringify(marker).replace(/"/g, "'")}, '1')"`], { cwd: repo });
+  assert.strictEqual(res.json.status, 'noop');
+  assert.strictEqual(res.json.verification.checks[0].outcome, 'skipped');
+  assert.ok(!fs.existsSync(marker), 'a skipped check never ran');
+  assert.ok(res.json.warnings.some((w) => /skipped/.test(w)));
+});
+
+test('e2e: a check that rewrites files is reported, never undone', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n', 'src/fmt.js': 'y\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', `${NODE} -e "require('fs').appendFileSync('src/fmt.js', 'formatted')"`], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.ok(res.json.warnings.some((w) => /checks themselves changed 1 path/.test(w) && /src\/fmt\.js/.test(w)));
+  assert.match(fs.readFileSync(path.join(repo, 'src/fmt.js'), 'utf8'), /formatted/);
+  assert.deepStrictEqual(res.json.repository.changed.modified, ['src/a.js'], 'the worker is not blamed for the check');
+});
+
+test('--dry-run lists the checks it would run', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--dry-run', '--check', 'pnpm test -- src/a.js'], { cwd: repo });
+  const plan = JSON.parse(res.stdout);
+  assert.deepStrictEqual(plan.checks, [{ command: 'pnpm test -- src/a.js', argv: ['pnpm', 'test', '--', 'src/a.js'] }]);
+});
+
+/* ------------------------------------------------------------------ *
+ * Cost tiers: capability filters, tier only orders
+ * ------------------------------------------------------------------ */
+
+test('an invalid tier is a config error', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude', { tier: 'free' });
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.match(res.json.reason, /tier: expected one of cheap, standard, premium/);
+});
+
+test('select orders capable workers cheapest first, untiered last, and --max-tier filters', () => {
+  const repo = H.tmpRepo();
+  H.useStub(repo, 'claude', { tier: 'premium' });
+  H.useStub(repo, 'codex', { tier: 'cheap' });
+  H.useStub(repo, 'cursor', { tier: 'standard' });
+  H.useStub(repo, 'opencode');
+  const res = H.runFleet(['select', '--need', 'edit', '--workspace', repo, '--json'], { cwd: repo });
+  const ids = res.json.matches.filter((id) => ['claude', 'codex', 'cursor', 'opencode'].includes(id));
+  assert.deepStrictEqual(ids, ['codex', 'cursor', 'claude', 'opencode']);
+  assert.strictEqual(res.json.workers.find((w) => w.id === 'codex').tier, 'cheap');
+  const capped = H.runFleet(['select', '--need', 'edit', '--max-tier', 'standard', '--workspace', repo, '--json'], { cwd: repo });
+  assert.deepStrictEqual(capped.json.matches, ['codex', 'cursor'], 'pricier and untiered workers are dropped under a ceiling');
+  const bad = H.runFleet(['select', '--need', 'edit', '--max-tier', 'gold', '--workspace', repo], { cwd: repo });
+  assert.strictEqual(bad.status, 2);
+});
+
+test('a tier never admits a worker that lacks the capability', () => {
+  const repo = H.tmpRepo();
+  H.useStub(repo, 'warp', { tier: 'cheap' });
+  const res = H.runFleet(['select', '--need', 'edit,readOnly', '--workspace', repo, '--json'], { cwd: repo });
+  assert.ok(!res.json.matches.includes('warp'));
+});
+
+test('the configured tier is recorded on the result', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude', { tier: 'cheap' }); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(res.json.backend.tier, 'cheap');
 });
 
 /* ---------------------------------- runner ---------------------------------- */

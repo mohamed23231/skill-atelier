@@ -56,6 +56,9 @@ function assertShape(a, origin) {
   if (typeof a.cli !== 'string' || !a.cli.trim()) throw new Error(`${where}: must define cli as a non-empty string`);
   if (typeof a.build !== 'function') throw new Error(`${where}: must define build()`);
   if (typeof a.probe !== 'function') throw new Error(`${where}: must define probe()`);
+  if (a.parseReport !== undefined && typeof a.parseReport !== 'function') {
+    throw new Error(`${where}: parseReport must be a function when defined`);
+  }
   if (a.helpArgs !== undefined) {
     if (!Array.isArray(a.helpArgs)) throw new Error(`${where}: helpArgs must be an array of strings`);
     if (a.helpArgs.length === 0 || !a.helpArgs.every((x) => typeof x === 'string' && x.length > 0)) {

@@ -19,6 +19,14 @@ const { probeCommand } = require('./exec.js');
 const { AVAILABILITY, applyLocalEvidence, clampToExpressible, CAPABILITY_NAMES } = require('./capabilities.js');
 
 const STATE_DIR = '.delegate-fleet';
+
+/**
+ * Cost tiers, cheapest first. A tier is a property of how YOU run a worker
+ * (which model, which plan), not of the CLI: `opencode` on a local model is
+ * cheap and on a frontier model is premium. So it lives in config, never in
+ * an adapter, and an untiered worker is simply unranked.
+ */
+const TIERS = Object.freeze(['cheap', 'standard', 'premium']);
 const CONFIG_FILE = 'config.json';
 const VERIFICATION_FILE = 'verification.json';
 
@@ -155,10 +163,14 @@ function loadConfig(repoRoot) {
       if (!Number.isFinite(n) || n <= 0) errors.push(`workers.${id}.maxBudgetUsd: expected a positive number`);
       else entry.maxBudgetUsd = n;
     }
+    if (cfg.tier !== undefined) {
+      if (!TIERS.includes(cfg.tier)) errors.push(`workers.${id}.tier: expected one of ${TIERS.join(', ')}`);
+      else entry.tier = cfg.tier;
+    }
     // Any other key is a field with no consumer: reject it rather than let it
     // look meaningful. This is the class of bug that made v1 untrustworthy.
     for (const key of Object.keys(cfg)) {
-      if (!['cli', 'model', 'effort', 'timeoutSeconds', 'maxTurns', 'maxBudgetUsd'].includes(key)) {
+      if (!['cli', 'model', 'effort', 'timeoutSeconds', 'maxTurns', 'maxBudgetUsd', 'tier'].includes(key)) {
         errors.push(`workers.${id}.${key}: unknown option; this field would be silently ignored`);
       }
     }
@@ -219,6 +231,7 @@ function inspect(adapter, { config, verification, env } = {}) {
     cli,
     cliPath: resolved,
     supported: true, // always: the adapter exists in this framework
+    tier: cfg.tier || null,
     availability: resolved ? AVAILABILITY.available : AVAILABILITY.unavailable,
     declaredCapabilities: { ...adapter.capabilities },
     capabilities: applyLocalEvidence(adapter.capabilities, local && local.capabilities),
@@ -308,7 +321,7 @@ function verify(adapter, opts = {}) {
 }
 
 module.exports = {
-  STATE_DIR, CONFIG_FILE, VERIFICATION_FILE,
+  STATE_DIR, CONFIG_FILE, VERIFICATION_FILE, TIERS,
   resolveCli, candidateDirs, stateDir, cliIdentity, sameIdentity,
   loadConfig, loadVerification, saveVerification,
   inspect, discover, verify,

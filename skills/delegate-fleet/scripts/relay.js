@@ -29,8 +29,12 @@ const briefLib = require('./lib/brief.js');
 const repo = require('./lib/repo.js');
 const exec = require('./lib/exec.js');
 const contract = require('./lib/contract.js');
+const report = require('./lib/report.js');
+const checksLib = require('./lib/checks.js');
 
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
+/** Worker stdout larger than this is not parsed for a report; the log keeps it all. */
+const REPORT_READ_CAP_BYTES = 32 * 1024 * 1024;
 
 const HELP = `
 delegate-fleet relay ${VERSION}
@@ -52,6 +56,13 @@ Run shape
   --max-budget-usd <n>  Spend cap in USD. Rejected if the backend cannot cap budget.
   --timeout <seconds>   Watchdog, positive integer, default ${options.DEFAULT_TIMEOUT_SECONDS}, max ${options.MAX_TIMEOUT_SECONDS}.
   --workspace <dir>     Repository the worker runs in (default: cwd).
+
+Checks (edit runs only; run after the worker, only when it completed)
+  --check "<command>"   A project gate to run in the workspace, e.g. --check "pnpm test".
+                        Repeatable. No shell: pipes and && are rejected; use a script.
+                        A failing check blocks the result. Full output goes to an
+                        artifact; the result carries only the tail.
+  --check-timeout <s>   Watchdog per check, default ${checksLib.DEFAULT_CHECK_TIMEOUT_SECONDS}.
 
 Output
   --stream              Tee worker stdout and stderr to relay stderr as they arrive.
@@ -98,6 +109,26 @@ function render(r) {
     lines.push(`[relay] FINDING ${f.type}: ${f.detail}`);
     for (const p of f.paths.slice(0, 20)) lines.push(`           ${p}`);
     if (f.paths.length > 20) lines.push(`           … ${f.paths.length - 20} more`);
+  }
+  const checks = (r.verification && r.verification.checks) || [];
+  for (const c of checks) {
+    const state = c.passed === true ? 'pass' : c.passed === false ? 'FAIL' : 'skipped';
+    lines.push(`[relay] check ${state}: ${c.command}${c.exitCode != null ? ` (exit ${c.exitCode}, ${c.durationSeconds}s)` : ''}`);
+    // A failure is only actionable with its reason; the full log stays an artifact.
+    if (c.passed === false && c.tail) for (const l of c.tail.split('\n').slice(-10)) lines.push(`           ${l}`);
+  }
+  if (r.worker && r.worker.usage) {
+    const u = r.worker.usage;
+    const parts = [];
+    if (u.inputTokens != null) parts.push(`in ${u.inputTokens}`);
+    if (u.outputTokens != null) parts.push(`out ${u.outputTokens}`);
+    if (u.cacheReadTokens != null) parts.push(`cache-read ${u.cacheReadTokens}`);
+    if (u.costUsd != null) parts.push(`$${u.costUsd}`);
+    lines.push(`[relay] worker usage (self-reported): ${parts.join(' · ')}`);
+  }
+  if (r.worker && r.worker.summary) {
+    lines.push('[relay] worker says (self-reported, not verified):');
+    for (const l of r.worker.summary.split('\n').slice(-15)) lines.push(`           ${l}`);
   }
   if (r.artifacts) lines.push(`[relay] artifacts: ${r.artifacts.dir}`);
   if (!r.execution) {
@@ -249,6 +280,7 @@ async function main() {
         maxTurns: effective.maxTurns, maxBudgetUsd: effective.maxBudgetUsd,
       },
       brief: { path: briefPath, scope: lint.scope, warnings: lint.warnings },
+      checks: opts.checks.map((c) => ({ command: c.command, argv: c.argv })),
       warnings,
     };
     console.log(JSON.stringify(plan, null, 2));
@@ -338,6 +370,41 @@ async function main() {
   try { fs.rmSync(liveDir, { recursive: true, force: true }); } catch { /* best effort */ }
   fs.writeFileSync(path.join(outDir, 'command.json'), `${JSON.stringify({ command, args: built.args, cwd: effective.workspace }, null, 2)}\n`);
 
+  // The worker's own account, parsed from the full log rather than the
+  // capped in-memory copy: the final result object sits at the END.
+  let rawStdout = execResult.stdout;
+  try {
+    const logPath = path.join(outDir, 'stdout.log');
+    if (fs.statSync(logPath).size <= REPORT_READ_CAP_BYTES) rawStdout = fs.readFileSync(logPath, 'utf8');
+  } catch { /* keep the in-memory copy */ }
+  const worker = report.extract(rawStdout, adapter);
+
+  // Checks run only on a completed edit run: on anything else the tree is
+  // not a candidate for acceptance, and running gates would only spend time.
+  let checkResults = [];
+  if (opts.checks.length) {
+    if (status !== contract.STATUS.COMPLETED) {
+      checkResults = opts.checks.map((c) => ({ command: c.command, outcome: 'skipped', exitCode: null, passed: null, durationSeconds: 0, tail: '', log: null }));
+      warnings.push(`checks were skipped because the run status is ${status}`);
+    } else {
+      checkResults = await checksLib.runAll({
+        checks: opts.checks, cwd: effective.workspace, env: process.env,
+        timeoutSeconds: effective.checkTimeoutSeconds, outDir,
+        onOutput: opts.stream ? (chunk) => { try { process.stderr.write(chunk); } catch { /* best effort */ } } : null,
+      });
+      // A check that rewrites files (a formatter, a snapshot update) changes
+      // what the orchestrator is about to review. Say so; never undo it.
+      const afterChecks = repo.snapshot(effective.workspace);
+      if (observed && afterChecks.ok) {
+        const runsPrefix = `${environment.STATE_DIR}/runs/`;
+        const moved = repo.changedPaths(repo.diffSnapshots(after, afterChecks)).filter((p) => !p.startsWith(runsPrefix));
+        if (moved.length) {
+          warnings.push(`the checks themselves changed ${moved.length} path(s) after the worker finished: ${moved.slice(0, 10).join(', ')}${moved.length > 10 ? ', …' : ''}`);
+        }
+      }
+    }
+  }
+
   const result = contract.buildResult({
     status, reason, findings, warnings,
     request: {
@@ -345,9 +412,10 @@ async function main() {
       effort: effective.effort, session: effective.session,
       maxTurns: effective.maxTurns, maxBudgetUsd: effective.maxBudgetUsd,
       timeoutSeconds: effective.timeoutSeconds, briefPath,
+      checks: opts.checks.map((c) => c.command),
     },
     backend: {
-      id: adapter.id, cli: view.cli, cliPath: view.cliPath,
+      id: adapter.id, cli: view.cli, cliPath: view.cliPath, tier: view.tier,
       capabilities: view.capabilities,
       capabilitiesVerifiedLocally: Boolean(view.localVerification) || freshVerifiedReadOnly,
     },
@@ -367,6 +435,8 @@ async function main() {
       head: { before: diff.headBefore, after: diff.headAfter, changed: diff.headChanged },
       stashChanged: diff.stashChanged,
     } : { observed: false, reason: before.reason || after.reason || 'git could not report' },
+    worker,
+    checks: checkResults,
     artifacts: { dir: outDir, stdout: path.join(outDir, 'stdout.log'), stderr: path.join(outDir, 'stderr.log'), result: path.join(outDir, 'result.json') },
   });
 

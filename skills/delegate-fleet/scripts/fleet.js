@@ -23,14 +23,14 @@ const registryLib = require('./adapters/index.js');
 const environment = require('./lib/environment.js');
 const caps = require('./lib/capabilities.js');
 
-const VERSION = '2.0.0';
+const VERSION = '2.2.0';
 
 const HELP = `
 delegate-fleet fleet ${VERSION}
 
   node fleet.js discover [--workspace <dir>] [--json]
   node fleet.js doctor   [--backend <id>] [--workspace <dir>] [--json]
-  node fleet.js select   --need <cap,cap> [--verified] [--workspace <dir>] [--json]
+  node fleet.js select   --need <cap,cap> [--verified] [--max-tier <tier>] [--workspace <dir>] [--json]
   node fleet.js init     [--workspace <dir>]
 
 Capabilities: ${caps.CAPABILITY_NAMES.join(', ')}
@@ -45,10 +45,13 @@ Plus any adapter in <workspace>/.delegate-fleet/adapters/*.js
             "documented" capability to "verified" — and what demotes a wrong one.
   select    Lists the available workers that satisfy every capability you name.
             --verified restricts to capabilities proven on this machine.
+            Results are ordered cheapest tier first (tiers come from
+            workers.<id>.tier in config: ${environment.TIERS.join(' < ')});
+            untiered workers come last. --max-tier drops pricier tiers.
 `;
 
 function parse(argv) {
-  const o = { cmd: argv[0] || 'help', workspace: process.cwd(), backend: null, need: [], json: false, verified: false };
+  const o = { cmd: argv[0] || 'help', workspace: process.cwd(), backend: null, need: [], json: false, verified: false, maxTier: null };
   const missing = [];
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
@@ -66,7 +69,13 @@ function parse(argv) {
     else if (a === '--verified') o.verified = true;
     else if (a === '--workspace') { const v = value(); if (v !== null) o.workspace = path.resolve(v); }
     else if (a === '--backend') { const v = value(); if (v !== null) o.backend = v; }
-    else if (a === '--need') { const v = value(); if (v !== null) o.need = v.split(',').map((s) => s.trim()).filter(Boolean); }
+    else if (a === '--max-tier') {
+      const v = value();
+      if (v !== null) {
+        if (!environment.TIERS.includes(v)) return { error: `--max-tier must be one of ${environment.TIERS.join(', ')}`, ...o };
+        o.maxTier = v;
+      }
+    } else if (a === '--need') { const v = value(); if (v !== null) o.need = v.split(',').map((s) => s.trim()).filter(Boolean); }
     else if (a === '--help' || a === '-h') o.cmd = 'help';
     else return { error: `unknown option "${a}"`, ...o };
   }
@@ -209,20 +218,32 @@ function cmdSelect(o) {
       for (const name of o.need) view.capabilities[name] = fresh.capabilities?.[name] || 'unknown';
     }
   }
+  // Capability is the hard filter; cost only orders what survives it. An
+  // untiered worker is unranked, not cheap, so it sorts after every tiered one.
+  const rank = (v) => (v.tier ? environment.TIERS.indexOf(v.tier) : environment.TIERS.length);
+  const ceiling = o.maxTier ? environment.TIERS.indexOf(o.maxTier) : Infinity;
   const matches = views.filter((v) => {
     if (v.availability !== caps.AVAILABILITY.available) return false;
+    if (o.maxTier && (!v.tier || rank(v) > ceiling)) return false;
     return o.need.every((n) => (o.verified ? caps.isVerified(v.capabilities[n]) : caps.claims(v.capabilities[n])));
-  });
+  }).map((v, i) => ({ v, i })).sort((a, b) => rank(a.v) - rank(b.v) || a.i - b.i).map(({ v }) => v);
 
-  if (o.json) { console.log(JSON.stringify({ need: o.need, verifiedOnly: o.verified, matches: matches.map((m) => m.id) }, null, 2)); return 0; }
+  if (o.json) {
+    console.log(JSON.stringify({
+      need: o.need, verifiedOnly: o.verified, maxTier: o.maxTier,
+      matches: matches.map((m) => m.id),
+      workers: matches.map((m) => ({ id: m.id, tier: m.tier, model: m.defaults.model })),
+    }, null, 2));
+    return 0;
+  }
   if (matches.length === 0) {
-    console.log(`No available worker satisfies: ${o.need.join(', ')}${o.verified ? ' (verified only)' : ''}`);
+    console.log(`No available worker satisfies: ${o.need.join(', ')}${o.verified ? ' (verified only)' : ''}${o.maxTier ? ` at tier ${o.maxTier} or cheaper` : ''}`);
     console.log('That route is closed on this machine. Say so rather than substituting a worker that cannot do the job.');
     return 1;
   }
-  console.log(`Workers that can do [${o.need.join(', ')}]${o.verified ? ' with locally verified evidence' : ''}:`);
+  console.log(`Workers that can do [${o.need.join(', ')}]${o.verified ? ' with locally verified evidence' : ''}, cheapest first:`);
   for (const m of matches) {
-    console.log(`  ${m.id.padEnd(9)} ${o.need.map((n) => `${n}=${m.capabilities[n]}`).join('  ')}`);
+    console.log(`  ${m.id.padEnd(9)} ${(m.tier || 'untiered').padEnd(9)} ${o.need.map((n) => `${n}=${m.capabilities[n]}`).join('  ')}`);
   }
   return 0;
 }
@@ -238,7 +259,7 @@ function cmdInit(o) {
   for (const k of Object.keys(workers)) if (workers[k].model === null) delete workers[k].model;
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify({
-    _readme: 'Optional per-worker defaults. Valid keys: cli, model, effort, timeoutSeconds, maxTurns, maxBudgetUsd. Any other key is rejected, because a field with no consumer is a lie.',
+    _readme: 'Optional per-worker defaults. Valid keys: cli, model, effort, timeoutSeconds, maxTurns, maxBudgetUsd, tier (cheap|standard|premium; orders fleet.js select). Any other key is rejected, because a field with no consumer is a lie.',
     workers,
   }, null, 2)}\n`);
   console.log(`wrote ${file}`);

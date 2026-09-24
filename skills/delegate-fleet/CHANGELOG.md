@@ -5,6 +5,27 @@ All notable changes to the `delegate-fleet` skill.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this skill
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-09-24
+
+### Added
+
+- **Worker report.** `result.worker` carries the worker's final message (capped at 2 KB, tail kept),
+  its session id, and token usage and cost, parsed from JSON results or JSON-lines streams with a
+  plain-text fallback. Adapters may export `parseReport(stdout)`. Self-reported; never affects
+  `status`, `findings` or `blocked`.
+- **`--check "<command>"`.** The relay runs orchestrator-named gates after a `completed` edit run,
+  without a shell, and records pass/fail plus a 40-line tail in `verification.checks`; full output
+  goes to `check-<n>.log`. A failing check blocks the result. `--check-timeout` bounds each one.
+- **Cost tiers.** `workers.<id>.tier` (`cheap`, `standard`, `premium`) in config. `fleet.js select`
+  lists capable workers cheapest first and `--max-tier` drops pricier ones. The tier is recorded on
+  `result.backend.tier`.
+
+### Changed
+
+- Worker selection is capability first, then cost. The skill now tells the orchestrator to route
+  mechanical slices to the cheapest capable tier and to read `worker` and `verification.checks`
+  instead of raw logs.
+
 ## [2.1.0] - 2026-09-22
 
 ### Added

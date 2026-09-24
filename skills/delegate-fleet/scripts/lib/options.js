@@ -12,6 +12,7 @@
  */
 
 const path = require('node:path');
+const checksLib = require('./checks.js');
 const { claims, isVerified, isSafetyCritical } = require('./capabilities.js');
 
 const MAX_TIMEOUT_SECONDS = 24 * 60 * 60;
@@ -22,6 +23,7 @@ const MAX_BUDGET_USD = 100_000;
 const FLAGS_WITH_VALUES = new Set([
   '--backend', '--brief', '--model', '--effort', '--session', '--timeout',
   '--workspace', '--out-dir', '--max-turns', '--max-budget-usd',
+  '--check', '--check-timeout',
 ]);
 const BOOLEAN_FLAGS = new Set([
   '--read-only', '--dry-run', '--json', '--help', '-h', '--version', '--allow-unverified',
@@ -92,6 +94,7 @@ function parseArgs(argv) {
     workspace: process.cwd(), outDir: null, stream: false,
     readOnly: false, dryRun: false, json: false, help: false, version: false,
     allowUnverified: false,
+    checks: [], checkTimeoutSeconds: null,
   };
   const errors = [];
 
@@ -120,6 +123,19 @@ function parseArgs(argv) {
           if (t.error) errors.push(t.error); else opts.maxTurns = t.value;
           break;
         }
+        case '--check': {
+          const t = checksLib.tokenize(value);
+          if (t.error) errors.push(t.error);
+          else if (opts.checks.length >= checksLib.MAX_CHECKS) errors.push(`at most ${checksLib.MAX_CHECKS} --check commands per run`);
+          else opts.checks.push({ command: value, argv: t.argv });
+          break;
+        }
+        case '--check-timeout': {
+          const t = parseTimeout(value);
+          if (t.error) errors.push(t.error.replace('--timeout', '--check-timeout'));
+          else opts.checkTimeoutSeconds = t.value;
+          break;
+        }
         case '--max-budget-usd': {
           const b = parseMaxBudgetUsd(value);
           if (b.error) errors.push(b.error); else opts.maxBudgetUsd = b.value;
@@ -145,6 +161,10 @@ function parseArgs(argv) {
   }
 
   opts.mode = opts.readOnly ? 'read-only' : 'edit';
+  // Checks judge an implementation. A read-only run produced none, and running
+  // arbitrary commands inside an analysis run would undo its whole point.
+  if (opts.readOnly && opts.checks.length) errors.push('--check cannot be combined with --read-only');
+  if (opts.checkTimeoutSeconds != null && opts.checks.length === 0) errors.push('--check-timeout was passed without any --check');
   return { opts, errors };
 }
 

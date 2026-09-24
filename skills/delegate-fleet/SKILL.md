@@ -3,7 +3,7 @@ name: delegate-fleet
 description: Dispatches bounded implementation slices to external coding-agent CLIs (such as Claude Code or Codex) and verifies their diffs independently before landing. Use when explicitly asked to delegate work via delegate-fleet, dispatch tasks through the relay, perform capability-based worker selection, inspect installed workers with fleet.js doctor, or run a sub-task through an external agent CLI while keeping planning, review, and git commits on the orchestrator.
 license: MIT
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
 ---
 
 # Delegate Fleet
@@ -88,15 +88,24 @@ first — you have not planned yet.
 Slice so each slice is independently verifiable and independently revertable. One slice, one brief,
 one run.
 
-## 3. Select by capability, never by reputation or price
+## 3. Select by capability, then by cost
 
 ```bash
-node <skill>/scripts/fleet.js select --need edit,readOnly --verified
+node <skill>/scripts/fleet.js select --need edit --max-tier standard
 ```
 
-Ask for the behaviour the slice needs — `edit`, `readOnly`, `resumeById`, `modelSelection`,
-`effort`, `structuredOutput`, `turnLimit`, `budgetLimit` — and take any available worker that has it. If nothing satisfies the
-need, that route is closed: say so rather than downgrade the requirement silently.
+Capability is the hard filter. Ask for the behaviour the slice needs — `edit`, `readOnly`,
+`resumeById`, `modelSelection`, `effort`, `structuredOutput`, `turnLimit`, `budgetLimit`. If nothing
+satisfies the need, that route is closed: say so rather than downgrade the requirement silently.
+
+Cost only orders the survivors. Tag workers in `.delegate-fleet/config.json` with
+`"tier": "cheap" | "standard" | "premium"` (a tier describes the model you run, not the CLI);
+`select` lists them cheapest first. The point of delegating is that the expensive model plans and
+reviews while cheaper ones spend the tokens:
+
+- **Mechanical** slices (wiring, renames, CRUD, tests from a spec): `--max-tier cheap`.
+- **Moderate** slices (a contained feature with a clear pattern to copy): `--max-tier standard`.
+- **Judgement-heavy** slices: do not delegate them; that is the orchestrator's job.
 
 ### Read-only vs edit runs
 
@@ -128,6 +137,17 @@ node <skill>/scripts/relay.js --backend opencode --brief .delegate-fleet/briefs/
 Run it in the background for anything slow, tell the user which worker has which slice, and keep
 working. `--dry-run` prints the exact argv first. Details in
 [`references/dispatch.md`](references/dispatch.md).
+
+Pass the project's gates as `--check` so the relay runs them and only a short tail reaches your
+context — the full output goes to an artifact:
+
+```bash
+node <skill>/scripts/relay.js --backend opencode --brief … --workspace "$PWD" --json \
+  --check "pnpm typecheck" --check "pnpm test -- src/settings"
+```
+
+One command per `--check`, no shell (`&&` and pipes are refused; use a script). Checks run only on a
+`completed` edit run, and a failing check sets `blocked`.
 
 ### Operational controls
 
@@ -169,7 +189,14 @@ exit 0 and still be blocked.
 | `read_only_violation` | An analysis run wrote. Treat the backend's read-only claim as broken |
 | `framework_state_modified` | The worker modified framework state under `.delegate-fleet/` (outside `runs/`), such as config or adapters |
 
-`blocked` is `true` whenever the status is not `completed`, any finding is present, or the repository could not be observed (`repository.observed === false`). It is arithmetic, not judgement.
+`blocked` is `true` whenever the status is not `completed`, any finding is present, a `--check`
+failed, or the repository could not be observed (`repository.observed === false`). It is
+arithmetic, not judgement.
+
+**Read `worker` and `verification.checks` in the result, not `stdout.log`.** `worker.summary` is
+the worker's final message (capped at 2 KB), with `worker.sessionId` for `--session` and
+`worker.usage` for tokens and cost. All of it is self-reported: evidence, never fact. Open the raw
+log only when a run failed and the summary does not explain why.
 
 ## Dirty-tree protection and honest limits
 
@@ -188,9 +215,11 @@ The relay takes content-addressed snapshots before and after execution:
 
 The worker says "I implemented it." The relay says "here are the facts." **You** decide.
 
-1. Read the diff yourself, in full. `status: completed` is a claim about a process, not about quality.
-2. Run the project's own gates — tests, typecheck, lint, build — on the changed files.
-3. Only then commit. The worker never commits; if it did, that is a finding, not a shortcut.
+1. Check `verification.checks` first. A failing gate means retry with its tail in the brief; there is
+   no point reading a diff that does not build.
+2. Read the diff yourself (`git diff -- <changed paths>`). `status: completed` and green checks are
+   claims about processes, not about quality.
+3. Run any gate you did not pass as `--check`. Only then commit. The worker never commits; if it did, that is a finding, not a shortcut.
 
 See [`references/verification.md`](references/verification.md).
 

@@ -4,8 +4,8 @@
  * The capability vocabulary.
  *
  * A capability answers "what can this worker actually do", never "what does it
- * cost". Worker selection is capability-based: the orchestrator asks for the
- * behaviour a slice needs and takes any worker that can satisfy it.
+ * cost". Capability is the hard filter in worker selection; cost is a separate
+ * axis (a `tier` in project config) that only orders the workers that pass.
  *
  * Keep this list small. Every capability here must be something an adapter can
  * really express in argv and a test can really prove reaches the backend.
