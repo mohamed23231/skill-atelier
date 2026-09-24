@@ -24,7 +24,7 @@ const MAX_FIX_ATTEMPTS = 3;
 const FLAGS_WITH_VALUES = new Set([
   '--backend', '--brief', '--model', '--effort', '--session', '--timeout',
   '--workspace', '--out-dir', '--max-turns', '--max-budget-usd',
-  '--check', '--check-timeout', '--route', '--fix-attempts',
+  '--check', '--check-timeout', '--route', '--fix-attempts', '--state-root',
 ]);
 const BOOLEAN_FLAGS = new Set([
   '--read-only', '--dry-run', '--json', '--help', '-h', '--version', '--allow-unverified',
@@ -95,7 +95,7 @@ function parseArgs(argv) {
     workspace: process.cwd(), outDir: null, stream: false,
     readOnly: false, dryRun: false, json: false, help: false, version: false,
     allowUnverified: false,
-    checks: [], checkTimeoutSeconds: null, route: null, fixAttempts: null,
+    checks: [], checkTimeoutSeconds: null, route: null, fixAttempts: null, stateRoot: null,
   };
   const errors = [];
 
@@ -132,6 +132,7 @@ function parseArgs(argv) {
           break;
         }
         case '--route': opts.route = value; break;
+        case '--state-root': opts.stateRoot = path.resolve(value); break;
         case '--fix-attempts': {
           const text = String(value).trim();
           if (!/^\d+$/.test(text) || Number(text) > MAX_FIX_ATTEMPTS) errors.push(`--fix-attempts must be an integer from 0 to ${MAX_FIX_ATTEMPTS}, got "${text}"`);

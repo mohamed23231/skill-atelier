@@ -33,7 +33,7 @@ const report = require('./lib/report.js');
 const checksLib = require('./lib/checks.js');
 const ledger = require('./lib/ledger.js');
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 /** Worker stdout larger than this is not parsed for a report; the log keeps it all. */
 const REPORT_READ_CAP_BYTES = 32 * 1024 * 1024;
 
@@ -73,6 +73,7 @@ Checks (edit runs only; run after the worker, only when it completed)
 Output
   --stream              Tee worker stdout and stderr to relay stderr as they arrive.
   --out-dir <dir>       Where run artifacts go (default: <workspace>/.delegate-fleet/runs/<stamp>).
+  --state-root <dir>    Where quota marks and run history are kept (default: the workspace).
   --dry-run             Print the exact argv and the lint result. Dispatch nothing.
   --json                Print only the result JSON.
   --allow-unverified    Proceed when a safety-critical capability is merely documented.
@@ -244,9 +245,12 @@ async function main() {
   if (config.errors.length) invalid('invalid .delegate-fleet/config.json', config.errors);
   const verification = environment.loadVerification(opts.workspace);
   if (verification.warning) capWarnings.push(verification.warning);
-  const quota = ledger.loadQuota(opts.workspace);
+  // Quota marks and the run history can live in another checkout: a batch runs
+  // each slice in its own worktree but keeps one ledger in the main one.
+  const stateRoot = opts.stateRoot || opts.workspace;
+  const quota = ledger.loadQuota(stateRoot);
   let runsCache = null;
-  const runs = () => (runsCache ||= ledger.loadRuns(opts.workspace));
+  const runs = () => (runsCache ||= ledger.loadRuns(stateRoot));
 
   // ---- choose the worker ---------------------------------------------------
   let adapter;
@@ -465,7 +469,7 @@ async function main() {
       const hit = ledger.matchesQuota(`${execResult.stdout}\n${execResult.stderr}`);
       if (hit) {
         const until = Date.now() + ledger.DEFAULT_COOLDOWN_MINUTES * 60e3;
-        try { ledger.markExhausted(effective.workspace, adapter.id, until, `output matched ${hit}`); } catch { /* best effort */ }
+        try { ledger.markExhausted(stateRoot, adapter.id, until, `output matched ${hit}`); } catch { /* best effort */ }
         worker = { ...worker, quotaExhausted: true };
         warnings.push(`"${adapter.id}" looks out of quota (output matched ${hit}); marked exhausted for ${ledger.DEFAULT_COOLDOWN_MINUTES} minutes. Clear with: node scripts/fleet.js quota --clear ${adapter.id}`);
       }

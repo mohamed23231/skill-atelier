@@ -2207,6 +2207,167 @@ test('ledger: --until accepts relative, clock and ISO forms', () => {
   assert.strictEqual(ledger.parseUntil('25:00', now), null);
 });
 
+/* ------------------------------------------------------------------ *
+ * Batch: parallel slices in worktrees, one summary
+ * ------------------------------------------------------------------ */
+
+const BATCH = path.join(H.SKILL, 'scripts', 'batch.js');
+const batchLib = require('../scripts/batch.js');
+const DIR_BRIEF = H.GOOD_BRIEF.replace('- `src/a.js` — rename the component and update its export', '- `src/` — the slice may edit anything under src');
+
+function runBatch(args, { cwd, env = {} } = {}) {
+  const res = spawnSync(process.execPath, [BATCH, ...args], { cwd, encoding: 'utf8', timeout: 180000, env: { ...process.env, ...env } });
+  let json = null;
+  try { json = JSON.parse(res.stdout); } catch { /* text mode */ }
+  return { ...res, json };
+}
+
+function batchRepo() {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n', 'src/b.js': 'y\n', '.gitignore': '.delegate-fleet/\n' } });
+  H.useStub(repo, 'claude', { tier: 'cheap' });
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const briefs = path.join(repo, '.delegate-fleet', 'briefs');
+  fs.mkdirSync(briefs, { recursive: true });
+  fs.writeFileSync(path.join(briefs, 'dir.md'), DIR_BRIEF);
+  fs.writeFileSync(path.join(briefs, 'a-only.md'), H.GOOD_BRIEF);
+  return repo;
+}
+
+function writePlan(repo, plan) {
+  const p = path.join(repo, '.delegate-fleet', 'plan.json');
+  fs.writeFileSync(p, JSON.stringify(plan));
+  return p;
+}
+
+const worktreeCount = (repo) => spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd: repo, encoding: 'utf8' }).stdout.split('\n').filter((l) => l.startsWith('worktree ')).length;
+
+test('batch plan validation: every key consumed, graph acyclic, briefs present', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'df-plan-'));
+  fs.writeFileSync(path.join(dir, 'b.md'), 'x');
+  const bad = batchLib.validatePlan({
+    extra: 1, concurrency: 99,
+    slices: [
+      { id: 'a', brief: 'b.md', backend: 'claude', dependsOn: ['c'] },
+      { id: 'c', brief: 'b.md', route: 'x', backend: 'claude', dependsOn: ['a'] },
+      { id: 'a', brief: 'missing.md', colour: 'red' },
+      { id: 'Bad Id', brief: 'b.md', backend: 'claude', fixAttempts: 1 },
+    ],
+  }, dir);
+  for (const re of [/unknown plan key "extra"/, /concurrency/, /exactly one of "backend" or "route"/, /duplicate "a"/, /brief: not found/, /colour: unknown key/, /lowercase/, /fixAttempts: needs checks/]) {
+    assert.ok(bad.errors.some((e) => re.test(e)), `expected ${re}`);
+  }
+  const cyc = batchLib.validatePlan({ slices: [{ id: 'a', brief: 'b.md', backend: 'x', dependsOn: ['b'] }, { id: 'b', brief: 'b.md', backend: 'x', dependsOn: ['a'] }] }, dir);
+  assert.ok(cyc.errors.some((e) => /cycle/.test(e)));
+  const ok = batchLib.validatePlan({ slices: [{ id: 'c', brief: 'b.md', backend: 'x', dependsOn: ['a', 'b'] }, { id: 'a', brief: 'b.md', backend: 'x' }, { id: 'b', brief: 'b.md', backend: 'x', dependsOn: ['a'] }] }, dir);
+  assert.deepStrictEqual(ok.errors, []);
+  assert.deepStrictEqual(ok.waves, [['a'], ['b'], ['c']]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('e2e batch: parallel slices in worktrees, dependents build on their dependencies, main untouched', () => {
+  const repo = batchRepo();
+  const plan = writePlan(repo, { slices: [
+    { id: 'one', brief: 'briefs/dir.md', backend: 'claude', checks: [`${NODE} -e "process.exit(0)"`] },
+    { id: 'two', brief: 'briefs/dir.md', backend: 'claude', dependsOn: ['one'] },
+    { id: 'solo', brief: 'briefs/dir.md', backend: 'claude' },
+  ] });
+  const res = runBatch([plan, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: JSON.stringify({ type: 'result', result: 'ok', total_cost_usd: 0.01 }) } });
+  assert.strictEqual(res.status, 0, res.stdout + res.stderr);
+  const out = res.json;
+  assert.strictEqual(out.totals.clean, 3);
+  assert.strictEqual(out.totals.workerCostUsd, 0.03);
+  assert.deepStrictEqual(out.landOrder.indexOf('one') < out.landOrder.indexOf('two'), true, 'a dependency lands first');
+  assert.strictEqual(spawnSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).stdout.trim(), '', 'nothing touched the main checkout');
+  assert.strictEqual(worktreeCount(repo), 4);
+  // Landing both patches in order reproduces the dependent's final state.
+  const two = out.slices.find((x) => x.id === 'two');
+  for (const id of ['one', 'two']) {
+    const r = spawnSync('git', ['apply', out.slices.find((x) => x.id === id).patch], { cwd: repo, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+  }
+  assert.strictEqual(fs.readFileSync(path.join(repo, 'src/a.js'), 'utf8'), fs.readFileSync(path.join(two.worktree, 'src/a.js'), 'utf8'));
+  assert.ok(!fs.readFileSync(out.slices[0].patch, 'utf8').includes('.delegate-fleet'), 'framework state is never part of a patch');
+  // Every run is in the main ledger, so report sees the batch.
+  const rep = H.runFleet(['report', '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(rep.json.total.runs, 3);
+  const clean = runBatch(['--cleanup', out.batchId, '--workspace', repo], { cwd: repo });
+  assert.strictEqual(clean.status, 0, clean.stdout);
+  assert.strictEqual(worktreeCount(repo), 1, 'cleanup removes exactly the batch worktrees');
+  assert.ok(fs.existsSync(out.slices[0].patch), 'patches survive cleanup');
+});
+
+test('e2e batch: a blocked dependency skips its dependents and the batch exits 1', () => {
+  const repo = batchRepo();
+  const plan = writePlan(repo, { slices: [
+    { id: 'narrow', brief: 'briefs/a-only.md', backend: 'claude' },
+    { id: 'after', brief: 'briefs/dir.md', backend: 'claude', dependsOn: ['narrow'] },
+  ] });
+  const res = runBatch([plan, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js,src/b.js' } });
+  assert.strictEqual(res.status, 1);
+  const narrow = res.json.slices.find((x) => x.id === 'narrow');
+  assert.strictEqual(narrow.blocked, true);
+  assert.ok(narrow.findings.some((f) => f.startsWith('scope_violation')));
+  const after = res.json.slices.find((x) => x.id === 'after');
+  assert.strictEqual(after.status, 'skipped');
+  assert.match(after.reason, /dependency "narrow" did not finish clean/);
+  assert.deepStrictEqual(res.json.landOrder, []);
+  runBatch(['--cleanup', res.json.batchId, '--workspace', repo], { cwd: repo });
+});
+
+test('e2e batch: a write into the main checkout during the batch is reported', () => {
+  const repo = batchRepo();
+  const plan = writePlan(repo, { slices: [{ id: 'one', brief: 'briefs/dir.md', backend: 'claude' }] });
+  const res = runBatch([plan, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_CREATE: path.join(repo, 'intruder.js') } });
+  assert.strictEqual(res.status, 1);
+  assert.ok(res.json.warnings.some((w) => /main workspace .* changed while the batch ran/.test(w)));
+  runBatch(['--cleanup', res.json.batchId, '--workspace', repo], { cwd: repo });
+});
+
+test('batch warns that uncommitted work is not carried into worktrees, and dry-run spends nothing', () => {
+  const repo = batchRepo();
+  fs.writeFileSync(path.join(repo, 'src/a.js'), 'dirty\n');
+  const plan = writePlan(repo, { slices: [{ id: 'one', brief: 'briefs/dir.md', backend: 'claude' }] });
+  const res = runBatch([plan, '--workspace', repo, '--dry-run'], { cwd: repo });
+  assert.strictEqual(res.status, 0);
+  assert.ok(res.json.warnings.some((w) => /do NOT include them/.test(w)));
+  assert.deepStrictEqual(res.json.waves, [['one']]);
+  assert.strictEqual(worktreeCount(repo), 1, 'a dry run creates no worktree');
+});
+
+test('fleet quota: mark, list, and clear by hand; bad times are refused', () => {
+  const repo = H.tmpRepo();
+  const mark = H.runFleet(['quota', '--mark', 'codex', '--until', '+2h', '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(mark.status, 0);
+  const list = H.runFleet(['quota', '--workspace', repo, '--json'], { cwd: repo });
+  assert.ok(list.json.exhausted.codex);
+  assert.strictEqual(H.runFleet(['quota', '--mark', 'codex', '--until', 'soon', '--workspace', repo], { cwd: repo }).status, 2);
+  assert.strictEqual(H.runFleet(['quota', '--mark', 'codex', '--workspace', repo], { cwd: repo }).status, 2);
+  const clear = H.runFleet(['quota', '--clear', 'codex', '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(clear.json.wasMarked, true);
+  assert.deepStrictEqual(H.runFleet(['quota', '--workspace', repo, '--json'], { cwd: repo }).json.exhausted, {});
+});
+
+test('fleet report: sums self-reported usage by tier and worker, and counts the unreported', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude', { tier: 'cheap' }); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const print = JSON.stringify({ type: 'result', result: 'ok', usage: { input_tokens: 1000, output_tokens: 100 }, total_cost_usd: 0.25 });
+  H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: print } });
+  H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: print } });
+  H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  const rep = H.runFleet(['report', '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(rep.json.total.runs, 3);
+  assert.strictEqual(rep.json.total.inputTokens, 2000);
+  assert.strictEqual(rep.json.total.costUsd, 0.5);
+  assert.strictEqual(rep.json.total.unreported, 1, 'no usage is unknown, never zero');
+  assert.strictEqual(rep.json.byTier.cheap.runs, 3);
+  const text = H.runFleet(['report', '--workspace', repo], { cwd: repo });
+  assert.match(text.stdout, /BY TIER[\s\S]*cheap[\s\S]*TOTAL/);
+  const future = H.runFleet(['report', '--since', '2999-01-01', '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(future.json.total.runs, 0);
+  assert.strictEqual(H.runFleet(['report', '--since', 'yesterday', '--workspace', repo], { cwd: repo }).status, 2);
+});
+
 /* ---------------------------------- runner ---------------------------------- */
 
 (async () => {
