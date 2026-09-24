@@ -31,9 +31,51 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function realPathOr(target) {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    return target;
+  }
+}
+
+// True only for a path strictly below root: the root itself grounds nothing.
+function isWithin(root, target) {
+  const relative = path.relative(root, target);
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+/**
+ * Resolves a locator path against the repository root and reports whether it
+ * stays strictly under it. Absolute paths, `../` escapes, symlinks that lead
+ * out of the root, and the root itself all count as outside. Only the repo-relative path is returned, so no
+ * machine-local absolute path reaches a generated artifact.
+ */
 function resolveRepoPath(repoRoot, targetPath) {
-  if (!targetPath) return null;
-  return path.isAbsolute(targetPath) ? targetPath : path.resolve(repoRoot, targetPath);
+  if (!targetPath || typeof targetPath !== 'string') return null;
+  const root = path.resolve(repoRoot);
+  const candidate = path.resolve(root, targetPath);
+  const exists = fs.existsSync(candidate);
+  const lexicallyInside = isWithin(root, candidate);
+  // For a path that exists, where it really lives decides: a symlink out of the
+  // repo is outside, an alias of the repo root (e.g. /var vs /private/var) is not.
+  const realRoot = realPathOr(root);
+  const realCandidate = exists ? realPathOr(candidate) : candidate;
+  const inside = exists ? isWithin(realRoot, realCandidate) : lexicallyInside;
+  if (!inside) {
+    return { absolutePath: candidate, relativePath: null, inside: false };
+  }
+  const relativePath = (lexicallyInside ? path.relative(root, candidate) : path.relative(realRoot, realCandidate)).split(path.sep).join('/');
+  return { absolutePath: candidate, relativePath, inside: true, exists };
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function containsSymbol(content, symbol) {
+  const pattern = new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegExp(symbol)}($|[^A-Za-z0-9_$])`);
+  return pattern.test(content);
 }
 
 function countLines(content) {
@@ -54,8 +96,8 @@ class RepoInspector {
    */
   exists(relativePath) {
     if (!relativePath) return false;
-    const target = resolveRepoPath(this.repoRoot, relativePath);
-    return fs.existsSync(target);
+    const resolved = resolveRepoPath(this.repoRoot, relativePath);
+    return Boolean(resolved && resolved.inside && resolved.exists);
   }
 
   inspectEvidence(record = {}) {
@@ -92,9 +134,16 @@ class RepoInspector {
       return result;
     }
 
-    const absolutePath = resolveRepoPath(this.repoRoot, relativePath);
-    result.absolutePath = absolutePath;
-    result.exists = fs.existsSync(absolutePath);
+    const resolved = resolveRepoPath(this.repoRoot, relativePath);
+    if (!resolved || !resolved.inside) {
+      result.verification = EVIDENCE_VERIFICATION.UNRESOLVED;
+      result.exists = false;
+      result.outsideRepo = true;
+      return result;
+    }
+    const absolutePath = resolved.absolutePath;
+    result.resolvedPath = resolved.relativePath;
+    result.exists = resolved.exists;
     if (!result.exists) {
       result.verification = EVIDENCE_VERIFICATION.UNRESOLVED;
       return result;
@@ -135,7 +184,14 @@ class RepoInspector {
         result.verification = EVIDENCE_VERIFICATION.UNRESOLVED;
         return result;
       }
-      result.symbolFound = content.includes(symbol);
+      // Match the whole identifier, and only inside the cited line range when
+      // one is given and valid, so "create" does not verify "createOrder".
+      let scope = content;
+      if (result.verification !== EVIDENCE_VERIFICATION.STALE && (result.locator.startLine != null || result.locator.endLine != null)) {
+        const lines = content.split(/\r?\n/);
+        scope = lines.slice((result.locator.startLine || 1) - 1, result.locator.endLine || lines.length).join('\n');
+      }
+      result.symbolFound = containsSymbol(scope, String(symbol));
       if (!result.symbolFound) {
         result.verification = EVIDENCE_VERIFICATION.STALE;
       }
@@ -151,12 +207,13 @@ class RepoInspector {
   verifyFiles(files = []) {
     return files.map((entry) => {
       const filePath = typeof entry === 'string' ? entry : entry?.path;
-      const target = path.isAbsolute(filePath) ? filePath : path.resolve(this.repoRoot, filePath);
-      const exists = fs.existsSync(target);
+      const resolved = resolveRepoPath(this.repoRoot, filePath);
+      const inside = Boolean(resolved && resolved.inside);
       return {
         path: filePath,
-        exists,
-        absolutePath: target,
+        exists: inside && Boolean(resolved.exists),
+        insideRepo: inside,
+        resolvedPath: inside ? resolved.relativePath : null,
       };
     });
   }
@@ -227,6 +284,7 @@ class RepoInspector {
 
 module.exports = {
   RepoInspector,
+  resolveRepoPath,
   EVIDENCE_TYPE,
   EVIDENCE_VERIFICATION,
   EVIDENCE_ORIGIN,

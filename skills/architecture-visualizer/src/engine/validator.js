@@ -1,6 +1,4 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const { RepoInspector, EVIDENCE_TYPE, EVIDENCE_VERIFICATION, EVIDENCE_ORIGIN } = require('../utils/repo-inspector.js');
+const { RepoInspector, resolveRepoPath, EVIDENCE_TYPE, EVIDENCE_VERIFICATION, EVIDENCE_ORIGIN } = require('../utils/repo-inspector.js');
 
 const VALID_NODE_TYPES = new Set(['actor', 'frontend', 'mobile', 'api_gateway', 'service', 'worker', 'database', 'cache', 'queue', 'topic', 'storage', 'external', 'cloud_function', 'boundary_group']);
 
@@ -57,6 +55,7 @@ const BUILTIN_POLICY = {
   EVIDENCE_MISSING: 'evidence.missing',
   EVIDENCE_STALE: 'evidence.stale',
   EVIDENCE_UNRESOLVED_REF: 'evidence.unresolved_reference',
+  EVIDENCE_OUTSIDE_REPO: 'evidence.outside_repo',
 };
 
 const POLICY_KIND = {
@@ -223,8 +222,14 @@ function resolveModelEvidence(model, options) {
     if (Object.prototype.hasOwnProperty.call(inspected, 'exists')) {
       cloned.exists = inspected.exists;
     }
-    if (inspected.absolutePath) {
-      cloned.absolutePath = inspected.absolutePath;
+    delete cloned.absolutePath;
+    delete cloned.resolvedPath;
+    delete cloned.outsideRepo;
+    if (inspected.resolvedPath) {
+      cloned.resolvedPath = inspected.resolvedPath;
+    }
+    if (inspected.outsideRepo) {
+      cloned.outsideRepo = true;
     }
     if (Object.prototype.hasOwnProperty.call(inspected, 'lineCount')) {
       cloned.lineCount = inspected.lineCount;
@@ -273,7 +278,17 @@ function collectEvidenceFindings(model, { verifyFilesOnDisk }) {
         });
         return;
       }
-      if (record.verification === EVIDENCE_VERIFICATION.UNRESOLVED) {
+      if (record.outsideRepo) {
+        findings.push({
+          id: `finding_evidence_outside_repo_${record.id}`,
+          severity: FINDING_SEVERITY.WARN,
+          message: `Evidence "${record.id}" for node "${node.id}" does not point to a path under the repository root.`,
+          nodeIds: [node.id],
+          edgeIds: [],
+          policyId: BUILTIN_POLICY.EVIDENCE_OUTSIDE_REPO,
+          evidenceIds: [record.id],
+        });
+      } else if (record.verification === EVIDENCE_VERIFICATION.UNRESOLVED) {
         findings.push({
           id: `finding_evidence_missing_${record.id}`,
           severity: FINDING_SEVERITY.WARN,
@@ -318,7 +333,7 @@ function appendUnresolvedEvidence(missingFiles, model) {
       missingFiles.push({
         nodeId: node.id,
         filePath,
-        absoluteTarget: record.absolutePath || filePath,
+        outsideRepo: Boolean(record.outsideRepo),
       });
     });
   });
@@ -877,11 +892,16 @@ function validateArchitecture(spec, options = {}) {
         node.details.files.forEach((fileEntry) => {
           const filePath = typeof fileEntry === 'string' ? fileEntry : fileEntry?.path;
           if (filePath && node.status === 'VERIFIED') {
-            const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(repoRoot, filePath);
-            if (!fs.existsSync(absoluteTarget)) {
-              missingFiles.push({ nodeId: node.id, filePath, absoluteTarget });
+            const resolved = resolveRepoPath(repoRoot, filePath);
+            if (!resolved || !resolved.inside) {
+              missingFiles.push({ nodeId: node.id, filePath, outsideRepo: true });
               warnings.push(
-                `Node "${node.id}" marked VERIFIED references file "${filePath}", but it does not exist on disk at ${absoluteTarget}. Consider marking as ASSUMED or INFERRED if not yet created.`
+                `Node "${node.id}" marked VERIFIED references file "${filePath}", which is not under the repository root. Evidence must be a path inside the repository.`
+              );
+            } else if (!resolved.exists) {
+              missingFiles.push({ nodeId: node.id, filePath, outsideRepo: false });
+              warnings.push(
+                `Node "${node.id}" marked VERIFIED references file "${filePath}", but it does not exist on disk under the repository root. Consider marking as ASSUMED or INFERRED if not yet created.`
               );
             }
           }
@@ -1287,9 +1307,14 @@ function runQualityGate(ctx) {
   if (illustrative) {
     add(13, 'Repository grounding', GATE_STATUS.SKIP, 'meta.grounding is "illustrative" — file paths are examples, disk verification skipped.');
   } else if (missingFiles.length > 0) {
-    add(13, 'Repository grounding', GATE_STATUS.WARN, `${missingFiles.length} VERIFIED file path(s) do not exist on disk.`);
+    const outside = missingFiles.filter((entry) => entry.outsideRepo).length;
+    const missing = missingFiles.length - outside;
+    const parts = [];
+    if (missing > 0) parts.push(`${missing} VERIFIED file path(s) do not exist on disk`);
+    if (outside > 0) parts.push(`${outside} VERIFIED file path(s) point outside the repository root`);
+    add(13, 'Repository grounding', GATE_STATUS.WARN, `${parts.join('; ')}.`);
   } else {
-    add(13, 'Repository grounding', GATE_STATUS.PASS, 'Every VERIFIED file path resolves on disk.');
+    add(13, 'Repository grounding', GATE_STATUS.PASS, 'Every VERIFIED file path resolves on disk under the repository root.');
   }
 
   // 14 - Implementation traceability

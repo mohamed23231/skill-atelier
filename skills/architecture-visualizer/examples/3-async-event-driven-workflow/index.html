@@ -93,6 +93,8 @@
       gap: 12px;
     }
 
+    .badge-status[hidden] { display: none; }
+    .filter-bar .badge-status { flex-shrink: 0; white-space: nowrap; }
     .badge-status {
       font-size: 11px;
       padding: 2px 8px;
@@ -1028,6 +1030,7 @@
     <button class="filter-chip" data-filter="backend">Backend</button>
     <button class="filter-chip" data-filter="data">Data/Storage</button>
     <button class="filter-chip" data-filter="external">External</button>
+    <span id="doc-grounding" class="badge-status ASSUMED" hidden title="Illustrative example: file paths were not checked against a repository.">Illustrative</span>
   </div>
 
   <!-- Delta View Controls -->
@@ -6971,6 +6974,7 @@
         const statusBadge = document.getElementById('doc-status');
         statusBadge.textContent = ARCH_SPEC.meta.status || 'PROPOSED';
         statusBadge.className = `badge-status ${ARCH_SPEC.meta.status || 'PROPOSED'}`;
+        document.getElementById('doc-grounding').hidden = ARCH_SPEC.meta.grounding !== 'illustrative';
       }
 
       initTheme();

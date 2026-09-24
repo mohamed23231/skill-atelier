@@ -226,6 +226,41 @@ const cases = [
       assert.strictEqual(typeof ctx.ArchVizGeometry.cubicPointAt, 'function');
     },
   ],
+  [
+    'keeps machine-local absolute paths out of the built HTML and Markdown',
+    () => {
+      const dir = tmpDir();
+      try {
+        fs.mkdirSync(path.join(dir, 'src', 'api'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'src', 'api', 'Api.ts'), 'export const api = 1;\n');
+        const spec = clone(VALID_SPEC);
+        delete spec.meta.grounding;
+        spec.schemaVersion = 2;
+        spec.evidence = [{ id: 'ev_api', type: 'file', locator: { path: 'src/api/Api.ts' } }];
+        spec.nodes[0].evidenceIds = ['ev_api'];
+        const htmlPath = path.join(dir, 'out', 'index.html');
+        const mdPath = path.join(dir, 'out', 'index.md');
+        compileArchitecture(spec, { repoRoot: dir, outputHtml: htmlPath, outputMarkdown: mdPath });
+        const roots = [dir, fs.realpathSync(dir)];
+        [htmlPath, mdPath].forEach((file) => {
+          const text = fs.readFileSync(file, 'utf8');
+          roots.forEach((root) => assert.ok(!text.includes(root), `${path.basename(file)} leaks ${root}`));
+        });
+        assert.ok(fs.readFileSync(htmlPath, 'utf8').includes('"resolvedPath": "src/api/Api.ts"'));
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  ],
+  [
+    'marks an illustrative diagram as illustrative in the built HTML',
+    () => {
+      const illustrative = compileArchitecture(clone(VALID_SPEC));
+      assert.ok(illustrative.html.includes('id="doc-grounding"'));
+      assert.ok(/"grounding": "illustrative"/.test(illustrative.html));
+      assert.ok(illustrative.html.includes("document.getElementById('doc-grounding').hidden = ARCH_SPEC.meta.grounding !== 'illustrative'"));
+    },
+  ],
 ];
 
 module.exports = { name: 'Compiler & Exporter', cases };

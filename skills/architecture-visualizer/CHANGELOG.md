@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Repository grounding is confined to the repository root**: evidence and `details.files` paths now have to resolve strictly under `--repo-root`. Absolute paths elsewhere, `../` escapes, symlinks that lead out of the root, and the root itself are `unresolved` and raise the new `evidence.outside_repo` finding and a Gate 13 warning (which fails `--strict`). Previously `/etc/hosts` could verify a node.
+- **No machine-local paths in artifacts**: evaluated evidence records `resolvedPath` (repo-relative) instead of `absolutePath`, so built HTML no longer embeds the author's home directory. Warnings name the path as written in the spec. `RepoInspector#verifyFiles` returns `insideRepo` and `resolvedPath` in place of `absolutePath`.
+- **Stricter symbol evidence**: a symbol must appear as a whole identifier, so `create` no longer verifies against `createOrder`, and it must fall inside `startLine`–`endLine` when a range is given.
+- **`scaffold --repo-root <subdir>`**: paths are written relative to the requested root, so `validate --repo-root <subdir>` resolves them. Previously they were git-root-relative and failed Gate 13. `--ignore` prefixes are now matched against those root-relative paths.
+
+### Added
+
+- **Illustrative marker**: specs with `meta.grounding: "illustrative"` show an *Illustrative* badge in the workbench filter bar, so example diagrams cannot pass for verified ones.
+
 - **Workbench panels**: inspector visibility is driven solely by `data-open`, panels use `role="dialog"`, closed panels are marked `inert` and `aria-hidden="true"`, and `aria-modal` is set only for open overlay drawers.
 - **Workbench docking & canvas reflow**: docked panels reflow canvas and fit view when `userMovedView` is false; selection on canvas nodes opens inspector via `setDrawerOpen()` with proper responsive reflow and backdrop handling.
 - **Tabs bar**: minimize toggle is placed outside `role="tablist"` navigation, vertical wheel scrolling respects scroll boundaries and deltaMode without locking vertical page scroll, and active view tabs synchronize on URL restoration and view switching.

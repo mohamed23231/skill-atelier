@@ -179,14 +179,18 @@ const cases = [
       writeFile(dir, 'packages/app/src/styles.ts', 'export default {};\n');
       writeFile(dir, 'packages/other/Ignored.ts', 'export default 1;\n');
 
-      const { spec } = scaffoldFromDiff({ repoRoot: path.join(dir, 'packages/app') });
+      const scopedRoot = path.join(dir, 'packages/app');
+      const { spec } = scaffoldFromDiff({ repoRoot: scopedRoot });
       const files = spec.nodes.map((n) => n.details.files[0]).sort();
-      assert.deepStrictEqual(files, ['packages/app/src/Card.tsx', 'packages/app/src/styles.ts']);
+      assert.deepStrictEqual(files, ['src/Card.tsx', 'src/styles.ts']);
       assert.ok(
         spec.nodes.every((n) => n.status === 'VERIFIED'),
-        'paths must resolve against the git root'
+        'paths must resolve against the requested root'
       );
       assert.strictEqual(spec.edges.length, 1);
+      const result = validateArchitecture(spec, { repoRoot: scopedRoot });
+      assert.ok(result.model.evidence.every((e) => e.verification === 'verified'), 'validate with the same --repo-root must resolve every scaffolded path');
+      assert.strictEqual(result.gate.find((g) => g.id === 13).status, 'PASS');
       fs.rmSync(dir, { recursive: true, force: true });
     },
   ],

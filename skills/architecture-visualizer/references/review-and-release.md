@@ -36,7 +36,7 @@ INSPECT → MODEL → VALIDATE → BUILD → REVIEW → RELEASE
 - **Requirements**:
   - Ensure zero validation errors.
   - In CI/release pipelines, run with `--strict` so any unhandled warnings fail the check.
-  - Confirm all `VERIFIED` files resolve on disk (or declare `meta.grounding: "illustrative"` for teaching examples).
+  - Confirm all `VERIFIED` files resolve on disk under the repository root (or declare `meta.grounding: "illustrative"` for teaching examples).
   - Resolve or explicitly justify any policy findings.
 
 ### Gate 4: Build Gate
