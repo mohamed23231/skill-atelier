@@ -27,6 +27,99 @@ const STATE_DIR = '.delegate-fleet';
  * an adapter, and an untiered worker is simply unranked.
  */
 const TIERS = Object.freeze(['cheap', 'standard', 'premium']);
+const MAX_FIX_ATTEMPTS = 3;
+const ROUTE_NAME = /^[a-z][a-z0-9-]{0,39}$/;
+/** Keys a route candidate may set; each overrides the worker's own default. */
+const ROUTE_KEYS = ['backend', 'model', 'effort', 'timeoutSeconds', 'maxTurns', 'maxBudgetUsd', 'fixAttempts'];
+const TOP_LEVEL_KEYS = ['_readme', 'workers', 'routes', 'limits'];
+
+const positiveInt = (v) => Number.isInteger(Number(v)) && Number(v) > 0 && typeof v !== 'boolean';
+
+/**
+ * Validate the per-run fields shared by a worker entry and a route candidate.
+ * Returns the cleaned entry; pushes one error per bad field.
+ */
+function readRunFields(cfg, where, errors) {
+  const entry = {};
+  for (const key of ['model', 'effort']) {
+    if (cfg[key] === undefined) continue;
+    if (typeof cfg[key] !== 'string' || !cfg[key].trim()) errors.push(`${where}.${key}: expected a non-empty string`);
+    else entry[key] = cfg[key].trim();
+  }
+  for (const key of ['timeoutSeconds', 'maxTurns']) {
+    if (cfg[key] === undefined) continue;
+    if (!positiveInt(cfg[key])) errors.push(`${where}.${key}: expected a positive integer`);
+    else entry[key] = Number(cfg[key]);
+  }
+  if (cfg.maxBudgetUsd !== undefined) {
+    const n = Number(cfg.maxBudgetUsd);
+    if (!Number.isFinite(n) || n <= 0 || typeof cfg.maxBudgetUsd === 'boolean') errors.push(`${where}.maxBudgetUsd: expected a positive number`);
+    else entry.maxBudgetUsd = n;
+  }
+  if (cfg.fixAttempts !== undefined) {
+    const n = Number(cfg.fixAttempts);
+    if (!Number.isInteger(n) || n < 0 || n > MAX_FIX_ATTEMPTS || typeof cfg.fixAttempts === 'boolean') {
+      errors.push(`${where}.fixAttempts: expected an integer from 0 to ${MAX_FIX_ATTEMPTS}`);
+    } else entry.fixAttempts = n;
+  }
+  return entry;
+}
+
+/**
+ * Routes: a task class the orchestrator names, mapped to an ordered list of
+ * candidates. The model classifies the slice; code owns the flags. The first
+ * candidate that is installed, capable, under its limit and not exhausted wins.
+ */
+function readRoutes(raw, errors) {
+  const routes = {};
+  if (raw === undefined) return routes;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    errors.push(`${CONFIG_FILE}: "routes" must be an object keyed by task class`);
+    return routes;
+  }
+  for (const [name, value] of Object.entries(raw)) {
+    if (!ROUTE_NAME.test(name)) { errors.push(`routes.${name}: a route name must be lowercase letters, digits and hyphens`); continue; }
+    const list = Array.isArray(value) ? value : [value];
+    if (list.length === 0) { errors.push(`routes.${name}: needs at least one candidate`); continue; }
+    const candidates = [];
+    list.forEach((c, i) => {
+      const where = `routes.${name}[${i}]`;
+      if (!c || typeof c !== 'object' || Array.isArray(c)) { errors.push(`${where}: expected an object`); return; }
+      if (typeof c.backend !== 'string' || !c.backend.trim()) { errors.push(`${where}.backend: required`); return; }
+      for (const key of Object.keys(c)) {
+        if (!ROUTE_KEYS.includes(key)) errors.push(`${where}.${key}: unknown option; this field would be silently ignored`);
+      }
+      candidates.push({ backend: c.backend.trim(), ...readRunFields(c, where, errors) });
+    });
+    routes[name] = candidates;
+  }
+  return routes;
+}
+
+/** Limits: how many runs each tier may start in any rolling 24 hours. */
+function readLimits(raw, errors) {
+  const limits = { runsPer24h: {} };
+  if (raw === undefined) return limits;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    errors.push(`${CONFIG_FILE}: "limits" must be an object`);
+    return limits;
+  }
+  for (const key of Object.keys(raw)) {
+    if (key !== 'runsPer24h') errors.push(`limits.${key}: unknown option; this field would be silently ignored`);
+  }
+  const per = raw.runsPer24h;
+  if (per === undefined) return limits;
+  if (per === null || typeof per !== 'object' || Array.isArray(per)) {
+    errors.push('limits.runsPer24h: expected an object keyed by tier');
+    return limits;
+  }
+  for (const [tier, n] of Object.entries(per)) {
+    if (!TIERS.includes(tier)) errors.push(`limits.runsPer24h.${tier}: expected one of ${TIERS.join(', ')}`);
+    else if (!Number.isInteger(n) || n < 0) errors.push(`limits.runsPer24h.${tier}: expected a non-negative integer`);
+    else limits.runsPer24h[tier] = n;
+  }
+  return limits;
+}
 const CONFIG_FILE = 'config.json';
 const VERIFICATION_FILE = 'verification.json';
 
@@ -124,14 +217,18 @@ function loadConfig(repoRoot) {
   const read = readJson(file);
   const workers = {};
   const errors = [];
-  if (read.error) return { workers, errors: [`${CONFIG_FILE}: could not be read as JSON (${read.error})`] };
+  const empty = { workers, routes: {}, limits: { runsPer24h: {} } };
+  if (read.error) return { ...empty, errors: [`${CONFIG_FILE}: could not be read as JSON (${read.error})`] };
   const raw = read.value;
   if (read.present && (raw === null || typeof raw !== 'object' || Array.isArray(raw))) {
-    return { workers, errors: [`${CONFIG_FILE}: expected a JSON object at the top level`] };
+    return { ...empty, errors: [`${CONFIG_FILE}: expected a JSON object at the top level`] };
   }
   const rawWorkers = raw && raw.workers !== undefined ? raw.workers : {};
   if (rawWorkers === null || typeof rawWorkers !== 'object' || Array.isArray(rawWorkers)) {
-    return { workers, errors: [`${CONFIG_FILE}: "workers" must be an object keyed by backend id`] };
+    return { ...empty, errors: [`${CONFIG_FILE}: "workers" must be an object keyed by backend id`] };
+  }
+  for (const key of Object.keys(raw || {})) {
+    if (!TOP_LEVEL_KEYS.includes(key)) errors.push(`${CONFIG_FILE}: unknown top-level key "${key}"; it would be silently ignored`);
   }
   for (const [id, cfg] of Object.entries(rawWorkers)) {
     if (!cfg || typeof cfg !== 'object') { errors.push(`workers.${id}: expected an object`); continue; }
@@ -140,29 +237,7 @@ function loadConfig(repoRoot) {
       if (typeof cfg.cli !== 'string' || !cfg.cli.trim()) errors.push(`workers.${id}.cli: expected a non-empty string`);
       else entry.cli = cfg.cli.trim();
     }
-    if (cfg.model !== undefined) {
-      if (typeof cfg.model !== 'string' || !cfg.model.trim()) errors.push(`workers.${id}.model: expected a non-empty string`);
-      else entry.model = cfg.model.trim();
-    }
-    if (cfg.effort !== undefined) {
-      if (typeof cfg.effort !== 'string' || !cfg.effort.trim()) errors.push(`workers.${id}.effort: expected a non-empty string`);
-      else entry.effort = cfg.effort.trim();
-    }
-    if (cfg.timeoutSeconds !== undefined) {
-      const n = Number(cfg.timeoutSeconds);
-      if (!Number.isInteger(n) || n <= 0) errors.push(`workers.${id}.timeoutSeconds: expected a positive integer`);
-      else entry.timeoutSeconds = n;
-    }
-    if (cfg.maxTurns !== undefined) {
-      const n = Number(cfg.maxTurns);
-      if (!Number.isInteger(n) || n <= 0) errors.push(`workers.${id}.maxTurns: expected a positive integer`);
-      else entry.maxTurns = n;
-    }
-    if (cfg.maxBudgetUsd !== undefined) {
-      const n = Number(cfg.maxBudgetUsd);
-      if (!Number.isFinite(n) || n <= 0) errors.push(`workers.${id}.maxBudgetUsd: expected a positive number`);
-      else entry.maxBudgetUsd = n;
-    }
+    Object.assign(entry, readRunFields(cfg, `workers.${id}`, errors));
     if (cfg.tier !== undefined) {
       if (!TIERS.includes(cfg.tier)) errors.push(`workers.${id}.tier: expected one of ${TIERS.join(', ')}`);
       else entry.tier = cfg.tier;
@@ -170,13 +245,15 @@ function loadConfig(repoRoot) {
     // Any other key is a field with no consumer: reject it rather than let it
     // look meaningful. This is the class of bug that made v1 untrustworthy.
     for (const key of Object.keys(cfg)) {
-      if (!['cli', 'model', 'effort', 'timeoutSeconds', 'maxTurns', 'maxBudgetUsd', 'tier'].includes(key)) {
+      if (!['cli', 'model', 'effort', 'timeoutSeconds', 'maxTurns', 'maxBudgetUsd', 'tier', 'fixAttempts'].includes(key)) {
         errors.push(`workers.${id}.${key}: unknown option; this field would be silently ignored`);
       }
     }
     workers[id] = entry;
   }
-  return { workers, errors };
+  const routes = readRoutes(raw ? raw.routes : undefined, errors);
+  const limits = readLimits(raw ? raw.limits : undefined, errors);
+  return { workers, routes, limits, errors };
 }
 
 /** Locally recorded capability evidence, written by `fleet.js doctor`. */
@@ -243,6 +320,7 @@ function inspect(adapter, { config, verification, env } = {}) {
       timeoutSeconds: cfg.timeoutSeconds || null,
       maxTurns: cfg.maxTurns ?? null,
       maxBudgetUsd: cfg.maxBudgetUsd ?? null,
+      fixAttempts: cfg.fixAttempts ?? null,
     },
     docs: adapter.docs,
     staticEvidence: adapter.evidence || null,
@@ -321,7 +399,7 @@ function verify(adapter, opts = {}) {
 }
 
 module.exports = {
-  STATE_DIR, CONFIG_FILE, VERIFICATION_FILE, TIERS,
+  STATE_DIR, CONFIG_FILE, VERIFICATION_FILE, TIERS, MAX_FIX_ATTEMPTS, ROUTE_KEYS,
   resolveCli, candidateDirs, stateDir, cliIdentity, sameIdentity,
   loadConfig, loadVerification, saveVerification,
   inspect, discover, verify,

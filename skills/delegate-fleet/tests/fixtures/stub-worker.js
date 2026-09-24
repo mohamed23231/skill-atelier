@@ -24,6 +24,21 @@ if (process.argv.includes('--help')) {
   process.exit(exitCode);
 }
 
+// A fix attempt carries the failing checks in its prompt. Let a test script a
+// worker that repairs, ignores, or wrecks its own previous attempt.
+if (process.argv.some((a) => a.includes('--- FIX ATTEMPT'))) {
+  if (env.STUB_FIX_ECHO) fs.writeFileSync(env.STUB_FIX_ECHO, process.argv.slice(2).join('\n'));
+  if (env.STUB_FIX_APPEND) {
+    const [f, text] = env.STUB_FIX_APPEND.split(':');
+    fs.appendFileSync(abs(f), `${text}\n`);
+  }
+  if (env.STUB_FIX_CREATE) {
+    for (const f of env.STUB_FIX_CREATE.split(',')) fs.writeFileSync(abs(f), 'created by a fix attempt\n');
+  }
+  if (env.STUB_FIX_PRINT) process.stdout.write(`${env.STUB_FIX_PRINT}\n`);
+  process.exit(Number(env.STUB_FIX_EXIT || 0));
+}
+
 // Prove which argv the adapter actually produced.
 if (env.STUB_ECHO_ARGV) {
   fs.writeFileSync(env.STUB_ECHO_ARGV, JSON.stringify({ argv: process.argv.slice(2), cwd }, null, 2));

@@ -182,6 +182,7 @@ function buildResult(parts) {
   const {
     status, reason, findings = [], request, backend, execution,
     repository, artifacts, warnings = [], worker = null, checks = [],
+    route = null, attempts = [],
   } = parts;
 
   // A run whose repository could not be observed has not been checked at all:
@@ -205,7 +206,11 @@ function buildResult(parts) {
     warnings,
     request: request ?? null,
     backend: backend ?? null,
+    // Which task class chose this worker, and every cheaper candidate skipped.
+    route,
     execution: execution ?? null,
+    // One line per attempt when a fix loop ran; the last attempt is the result.
+    attempts,
     repository: repository ?? null,
     // What the worker says about itself: final message, session, usage.
     // Self-reported evidence; it never feeds status, findings or blocked.

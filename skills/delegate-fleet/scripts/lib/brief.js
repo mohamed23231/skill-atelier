@@ -139,6 +139,34 @@ function buildPrompt({ briefText, mode, scope }) {
   return prompt;
 }
 
+/**
+ * The prompt for a fix attempt: the same contract, plus the evidence of what
+ * failed. Only the failing checks' tails travel, never the whole log, so a
+ * retry costs the worker little and the orchestrator nothing.
+ */
+function buildFixPrompt({ briefText, scope, attempt, failures, ownPaths, previousSummary }) {
+  const base = buildPrompt({ briefText, mode: 'edit', scope });
+  const lines = [
+    base,
+    '',
+    `--- FIX ATTEMPT ${attempt} ---`,
+    'Your previous attempt is still in the working tree. The orchestrator\'s checks failed on it.',
+    'Fix the cause of these failures. Do not start over, and do not weaken or delete tests to make them pass.',
+  ];
+  if (ownPaths && ownPaths.length) {
+    lines.push(`These files were changed by your previous attempt and are yours to edit again: ${ownPaths.join(', ')}`);
+  }
+  if (previousSummary) {
+    lines.push('', 'Your previous final message was:', previousSummary.trim());
+  }
+  lines.push('', 'FAILING CHECKS:');
+  for (const f of failures) {
+    lines.push('', `$ ${f.command}   (exit ${f.exitCode == null ? f.outcome : f.exitCode})`, f.tail || '(no output)');
+  }
+  lines.push('', '--- END FIX ATTEMPT ---');
+  return lines.join('\n');
+}
+
 function promptTooLarge(prompt) {
   const bytes = Buffer.byteLength(prompt, 'utf8');
   return bytes > MAX_PROMPT_BYTES ? bytes : 0;
@@ -149,6 +177,7 @@ module.exports = {
   extractScope,
   sectionBody,
   buildPrompt,
+  buildFixPrompt,
   promptTooLarge,
   ENFORCED_CONSTRAINTS,
   SECTIONS,

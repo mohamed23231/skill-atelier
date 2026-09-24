@@ -1969,6 +1969,244 @@ test('the configured tier is recorded on the result', () => {
   assert.strictEqual(res.json.backend.tier, 'cheap');
 });
 
+/* ------------------------------------------------------------------ *
+ * Fix loop: failing checks go back to the SAME worker, bounded
+ * ------------------------------------------------------------------ */
+
+const NEEDS_FIXED = `${NODE} -e "const t=require('fs').readFileSync('src/a.js','utf8'); if(!t.includes('fixed')){console.error('FAIL: a.js is not fi'+'xed yet'); process.exit(1)}"`;
+
+test('fix loop: a failing check is fed back to the same worker, which repairs it', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const echo = path.join(os.tmpdir(), `df-fix-echo-${process.pid}-${Date.now()}.txt`);
+  const usage = JSON.stringify({ type: 'result', result: 'done', usage: { input_tokens: 100, output_tokens: 10 }, total_cost_usd: 0.01 });
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', NEEDS_FIXED, '--fix-attempts', '2'], {
+    cwd: repo,
+    env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: usage, STUB_FIX_APPEND: 'src/a.js:fixed', STUB_FIX_ECHO: echo, STUB_FIX_PRINT: usage },
+  });
+  assert.strictEqual(res.status, 0, res.stdout);
+  assert.strictEqual(res.json.status, 'completed');
+  assert.strictEqual(res.json.blocked, false);
+  assert.strictEqual(res.json.attempts.length, 2);
+  assert.deepStrictEqual(res.json.attempts[0].checksFailed, [NEEDS_FIXED]);
+  assert.deepStrictEqual(res.json.attempts[1].checksFailed, []);
+  assert.strictEqual(res.json.verification.checks[0].passed, true);
+  assert.strictEqual(res.json.execution.attempts, 2);
+  assert.strictEqual(res.json.worker.usage.inputTokens, 200, 'usage is summed across attempts');
+  assert.strictEqual(res.json.worker.usage.costUsd, 0.02);
+  const prompt = fs.readFileSync(echo, 'utf8');
+  assert.match(prompt, /FAIL: a\.js is not fixed yet/, 'the failing tail travels to the worker');
+  assert.match(prompt, /yours to edit again: src\/a\.js/);
+  assert.match(prompt, /--- BEGIN TASK BRIEF ---/, 'the original contract is repeated');
+  assert.ok(fs.existsSync(path.join(res.json.artifacts.dir, 'attempt-2', 'stdout.log')));
+  assert.deepStrictEqual(res.json.repository.changed.modified, ['src/a.js']);
+  assert.deepStrictEqual(res.json.findings, [], 'the worker re-editing its own file is not a pre-existing change');
+  fs.rmSync(echo, { force: true });
+});
+
+test('fix loop: stops at the attempt limit and stays blocked', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', NEEDS_FIXED, '--fix-attempts', '2'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_FIX_APPEND: 'src/a.js:still-broken' } });
+  assert.strictEqual(res.status, 1);
+  assert.strictEqual(res.json.attempts.length, 3, 'one run plus exactly two fix attempts');
+  assert.strictEqual(res.json.blocked, true);
+  assert.strictEqual(res.json.verification.checks[0].passed, false);
+});
+
+test('fix loop: a fix attempt that changes nothing ends the loop without losing the work', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', NEEDS_FIXED, '--fix-attempts', '3'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(res.json.attempts.length, 2);
+  assert.strictEqual(res.json.attempts[1].status, 'noop');
+  assert.strictEqual(res.json.status, 'completed');
+  assert.strictEqual(res.json.blocked, true, 'the checks still fail');
+  assert.deepStrictEqual(res.json.repository.changed.modified, ['src/a.js']);
+  assert.ok(res.json.warnings.some((w) => /changed nothing/.test(w)));
+});
+
+test('fix loop: never retries past a finding', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n', 'src/other.js': 'y\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', NEEDS_FIXED, '--fix-attempts', '2'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js,src/other.js', STUB_FIX_APPEND: 'src/a.js:fixed' } });
+  assert.strictEqual(res.json.attempts.length, 1, 'a scope violation needs a human, not another attempt');
+  assert.ok(res.json.findings.some((f) => f.type === 'scope_violation'));
+});
+
+test('fix loop: a violation made by a fix attempt is reported, and ends the loop', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json',
+    '--check', NEEDS_FIXED, '--fix-attempts', '3'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_FIX_CREATE: 'surprise.js' } });
+  assert.strictEqual(res.json.attempts.length, 2);
+  const v = res.json.findings.find((f) => f.type === 'scope_violation');
+  assert.ok(v && v.paths.includes('surprise.js'));
+  assert.strictEqual(res.json.blocked, true);
+});
+
+test('--fix-attempts is validated, and a configured default only applies with checks', () => {
+  assert.ok(options.parseArgs(['--fix-attempts', '1']).errors.some((e) => /needs at least one --check/.test(e)));
+  assert.ok(options.parseArgs(['--fix-attempts', '4', '--check', 'x']).errors.some((e) => /0 to 3/.test(e)));
+  assert.ok(options.parseArgs(['--fix-attempts', 'two', '--check', 'x']).errors.length > 0);
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude', { fixAttempts: 2 }); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const dry = JSON.parse(H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--dry-run', '--check', 'x'], { cwd: repo }).stdout);
+  assert.strictEqual(dry.effective.fixAttempts, 2);
+  const none = JSON.parse(H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--dry-run'], { cwd: repo }).stdout);
+  assert.strictEqual(none.effective.fixAttempts, 0);
+  H.useStub(repo, 'claude', { fixAttempts: 9 });
+  const bad = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.match(bad.json.reason, /fixAttempts: expected an integer from 0 to 3/);
+});
+
+/* ------------------------------------------------------------------ *
+ * Routes: the model classifies, code owns the flags
+ * ------------------------------------------------------------------ */
+
+function writeConfig(repo, cfg) {
+  const dir = path.join(repo, '.delegate-fleet');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg, null, 2));
+}
+
+test('route: the first installed, capable candidate runs with the route flags', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  writeConfig(repo, {
+    workers: { aider: { cli: '/nonexistent/aider' }, claude: { cli: H.STUB, tier: 'cheap' } },
+    routes: { mechanical: [{ backend: 'aider' }, { backend: 'claude', model: 'route-model', effort: 'low' }] },
+  });
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const echo = path.join(repo, '.delegate-fleet', 'argv.json');
+  const res = H.runRelay(['--route', 'mechanical', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_ECHO_ARGV: echo } });
+  assert.strictEqual(res.json.status, 'completed');
+  assert.strictEqual(res.json.backend.id, 'claude');
+  assert.strictEqual(res.json.route.name, 'mechanical');
+  assert.strictEqual(res.json.route.candidate, 1);
+  assert.strictEqual(res.json.route.skipped[0].backend, 'aider');
+  const argv = JSON.parse(fs.readFileSync(echo, 'utf8')).argv;
+  assert.ok(argv.includes('route-model') && argv.includes('low'), 'the route owns the flags');
+  assert.ok(res.json.warnings.some((w) => /fell through to claude/.test(w)));
+});
+
+test('route: explicit flags still beat the route', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  writeConfig(repo, { workers: { claude: { cli: H.STUB } }, routes: { mechanical: { backend: 'claude', model: 'route-model' } } });
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const dry = JSON.parse(H.runRelay(['--route', 'mechanical', '--model', 'mine', '--brief', b, '--workspace', repo, '--dry-run'], { cwd: repo }).stdout);
+  assert.strictEqual(dry.effective.model, 'mine');
+  assert.strictEqual(dry.route.chosen, 'claude');
+});
+
+test('route: a candidate that lacks a needed capability is skipped, never forced', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  writeConfig(repo, { workers: { cursor: { cli: H.STUB }, claude: { cli: H.STUB } }, routes: { think: [{ backend: 'cursor', effort: 'high' }, { backend: 'claude', effort: 'high' }] } });
+  H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const dry = JSON.parse(H.runRelay(['--route', 'think', '--brief', b, '--workspace', repo, '--dry-run'], { cwd: repo }).stdout);
+  assert.strictEqual(dry.backend, 'claude');
+  assert.match(dry.route.skipped[0].reason, /effort/);
+});
+
+test('route: unknown, unroutable and fully-uninstalled routes are refused before dispatch', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  writeConfig(repo, { workers: { aider: { cli: '/nonexistent/aider' }, claude: { cli: H.STUB } }, routes: { gone: { backend: 'aider' }, mechanical: { backend: 'claude' } } });
+  const b = H.writeBrief(repo);
+  const unknown = H.runRelay(['--route', 'nope', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(unknown.status, 2);
+  assert.match(unknown.json.reason, /configured routes: gone, mechanical/);
+  const gone = H.runRelay(['--route', 'gone', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(gone.json.status, 'backend_unavailable');
+  assert.ok(options.parseArgs(['--route', 'a', '--backend', 'b']).errors.some((e) => /not both/.test(e)));
+});
+
+test('route and limits config is validated field by field', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  writeConfig(repo, {
+    workers: { claude: { cli: H.STUB } },
+    routes: { 'Bad Name': { backend: 'claude' }, ok: [{ model: 'x' }, { backend: 'claude', colour: 'red' }] },
+    limits: { runsPer24h: { gold: 1, premium: -1 }, perHour: {} },
+    extra: true,
+  });
+  const b = H.writeBrief(repo);
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.json.status, 'invalid_request');
+  for (const re of [/route name must be lowercase/, /routes\.ok\[0\]\.backend: required/, /routes\.ok\[1\]\.colour: unknown option/,
+    /limits\.runsPer24h\.gold/, /limits\.runsPer24h\.premium: expected a non-negative integer/, /limits\.perHour: unknown option/, /unknown top-level key "extra"/]) {
+    assert.match(res.json.reason, re);
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * Quota and budget: steer away from workers that cannot take the job
+ * ------------------------------------------------------------------ */
+
+test('quota: a worker whose output says it is out of quota is marked, and routes skip it', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  writeConfig(repo, { workers: { claude: { cli: H.STUB }, codex: { cli: H.STUB } }, routes: { mechanical: [{ backend: 'claude' }, { backend: 'codex' }] } });
+  H.markVerified(repo, 'claude', ALL_CAPS); H.markVerified(repo, 'codex', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const first = H.runRelay(['--route', 'mechanical', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_EXIT: '1', STUB_PRINT: 'Error: usage limit reached for this plan' } });
+  assert.strictEqual(first.json.status, 'process_failure', 'quota never rewrites the status');
+  assert.strictEqual(first.json.worker.quotaExhausted, true);
+  const quota = JSON.parse(fs.readFileSync(path.join(repo, '.delegate-fleet', 'quota.json'), 'utf8'));
+  assert.ok(Date.parse(quota.backends.claude.until) > Date.now());
+  const second = H.runRelay(['--route', 'mechanical', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(second.json.backend.id, 'codex');
+  assert.match(second.json.route.skipped[0].reason, /out of quota until/);
+});
+
+test('quota: the same words in a successful run mark nothing', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo); H.markVerified(repo, 'claude', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_PRINT: 'handled the rate limit exceeded branch' } });
+  assert.ok(!fs.existsSync(path.join(repo, '.delegate-fleet', 'quota.json')));
+});
+
+test('limits: a tier over its 24h budget is skipped by routes and refused when named', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  writeConfig(repo, {
+    workers: { claude: { cli: H.STUB, tier: 'premium' }, codex: { cli: H.STUB, tier: 'cheap' } },
+    routes: { hard: [{ backend: 'claude' }, { backend: 'codex' }] },
+    limits: { runsPer24h: { premium: 1 } },
+  });
+  H.markVerified(repo, 'claude', ALL_CAPS); H.markVerified(repo, 'codex', ALL_CAPS);
+  const b = H.writeBrief(repo);
+  const one = H.runRelay(['--route', 'hard', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(one.json.backend.id, 'claude');
+  const two = H.runRelay(['--route', 'hard', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(two.json.backend.id, 'codex');
+  assert.match(two.json.route.skipped[0].reason, /premium tier used 1 of 1/);
+  const named = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(named.json.status, 'invalid_request');
+  assert.match(named.json.reason, /premium tier has used 1 of its 1 runs/);
+});
+
+test('ledger: --until accepts relative, clock and ISO forms', () => {
+  const ledger = require('../scripts/lib/ledger.js');
+  const now = Date.parse('2026-01-01T10:00:00');
+  assert.strictEqual(ledger.parseUntil('+90m', now), now + 90 * 60e3);
+  assert.strictEqual(ledger.parseUntil('+2h', now), now + 2 * 3600e3);
+  assert.strictEqual(ledger.parseUntil('12:30', now), Date.parse('2026-01-01T12:30:00'));
+  assert.strictEqual(ledger.parseUntil('09:00', now), Date.parse('2026-01-02T09:00:00'), 'a passed clock time means tomorrow');
+  assert.strictEqual(ledger.parseUntil('2026-02-01T00:00:00Z', now), Date.parse('2026-02-01T00:00:00Z'));
+  assert.strictEqual(ledger.parseUntil('soon', now), null);
+  assert.strictEqual(ledger.parseUntil('25:00', now), null);
+});
+
 /* ---------------------------------- runner ---------------------------------- */
 
 (async () => {
