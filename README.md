@@ -14,9 +14,18 @@ The flagship skill is **[architecture-visualizer](skills/architecture-visualizer
 turns a feature, migration, refactor, or system design into a grounded, interactive architecture
 visualization, and validates the result against a mechanical quality gate before presenting it.
 
+It ships with **[delegate-fleet](skills/delegate-fleet/)** — one brain, many workers. Your expensive
+orchestrating model plans, briefs, reviews and commits; the typing runs on cheaper coding-agent CLIs.
+Routes map a task class to the cheapest worker that can really do it here, the relay runs your checks
+and loops failures back to the same worker before you ever see them, and independent slices run in
+parallel worktrees with one summary. 20 backends ship supported, and a relay sits between as a
+deterministic trust boundary that reports facts, protects your uncommitted work, and never decides
+whether work is good.
+
 ```
 skills/
   architecture-visualizer/   grounded architecture visualization + `arch-viz` CLI
+  delegate-fleet/            delegation to cheaper worker CLIs + `relay`/`batch`/`fleet`
 ```
 
 ## See it work
@@ -40,15 +49,21 @@ Run these from a checkout of this repository. The commands are real, not illustr
 git clone https://github.com/mohamed23231/skill-atelier.git
 cd skill-atelier
 
-# 1. Install the skill into the cross-client skills directory for this project
+# 1. Install skills into the cross-client skills directory for this project
 mkdir -p .agents/skills
 cp -R skills/architecture-visualizer .agents/skills/architecture-visualizer
+cp -R skills/delegate-fleet .agents/skills/delegate-fleet
 
-# 2. Or install it for every project you work on
+# 2. Or install for every project you work on
 mkdir -p ~/.agents/skills
 cp -R skills/architecture-visualizer ~/.agents/skills/architecture-visualizer
+cp -R skills/delegate-fleet ~/.agents/skills/delegate-fleet
 
-# 3. Or skip the agent and use the CLI directly
+# 3. Discover and verify available worker CLIs for delegation
+node skills/delegate-fleet/scripts/fleet.js discover
+node skills/delegate-fleet/scripts/fleet.js doctor
+
+# 4. Or inspect architecture directly with the CLI
 node skills/architecture-visualizer/bin/arch-viz.js inspect .
 ```
 
@@ -92,6 +107,7 @@ standalone artifacts; it never changes the target project's runtime, dependencie
 | Skill | Description | Status |
 | ----- | ----------- | ------ |
 | [architecture-visualizer](skills/architecture-visualizer/) | Grounded, interactive architecture visualizations with a 14-point quality gate and a zero-dependency CLI. | Available |
+| [delegate-fleet](skills/delegate-fleet/) | Delegation to 20 coding-agent CLIs, routed by task class and cost tier. Runs your checks, loops failures back to the worker, runs independent slices in parallel worktrees, reports spend, protects your uncommitted work, and leaves review and the commit with the orchestrator. | Available |
 
 The catalog is intentionally small. New skills are held to the packaging rules in
 [docs/MAINTAINERS.md](docs/MAINTAINERS.md).
@@ -123,6 +139,42 @@ node skills/architecture-visualizer/bin/arch-viz.js init [output.json]
 
 The generated HTML is a single file with no CDN and no network access. It opens offline and can be attached
 to a pull request or a message.
+
+## The `delegate-fleet` skill
+
+`delegate-fleet` keeps planning and review on your orchestrating model and moves the implementation
+to cheaper coding-agent CLIs. The relay between them reports facts, never opinions:
+
+```bash
+# Once per machine: what is installed, and what it really supports
+node skills/delegate-fleet/scripts/fleet.js discover
+node skills/delegate-fleet/scripts/fleet.js doctor
+
+# One slice: the route picks the worker; checks run; failures go back to the same worker
+node skills/delegate-fleet/scripts/relay.js --route mechanical --brief .delegate-fleet/briefs/slice-1.md \
+  --workspace "$PWD" --check "pnpm test -- src/cart" --fix-attempts 2 --json
+
+# Independent slices: parallel worktrees, one summary, a patch per slice
+node skills/delegate-fleet/scripts/batch.js .delegate-fleet/plan.json
+
+# What the workers spent
+node skills/delegate-fleet/scripts/fleet.js report --since 7d
+```
+
+Routes, tiers and budgets live in `.delegate-fleet/config.json`: the model names a task class, and
+code owns the flags. To measure the saving on your own fleet, run `skills/delegate-fleet/bench/`: an
+A/B benchmark of the orchestrator alone against the orchestrator with the fleet, scored by
+acceptance tests the agents never see.
+
+### When NOT to use it
+
+- **You have not planned yet.** If you cannot specify the exact files, interfaces, and acceptance criteria from memory, do not delegate. Planning belongs on the orchestrator.
+- **Trivial edits.** Small, single-file fixes take less time and fewer tokens to do directly in session.
+- **Interactive or exploratory debugging.** Rapid back-and-forth iteration is better handled in the main session.
+- **Concurrent workers in the same working tree.** Workers editing the same tree make diffs and findings unattributable. Run slices sequentially, or dispatch to separate git worktrees (`--workspace`).
+- **Hard filesystem isolation is required.** A worker running with write permissions has normal user filesystem access. Use worktrees, containers, or an OS-sandboxed backend (`codex`) when containment is required.
+
+See [skills/delegate-fleet/SKILL.md](skills/delegate-fleet/SKILL.md) and its [reference guides](skills/delegate-fleet/references/architecture.md).
 
 ## How a change is verified
 
@@ -170,6 +222,7 @@ scripts/
   test-all.js                runs every skill's test suite
 skills/
   architecture-visualizer/   the flagship skill
+  delegate-fleet/            capability-based delegation skill
 .github/                     issue and PR templates, CI, release workflow
 .claude-plugin/              optional Claude Code plugin marketplace entry
 ```
