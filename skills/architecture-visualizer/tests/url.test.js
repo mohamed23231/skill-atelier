@@ -107,9 +107,9 @@ const cases = [
   ],
 
   [
-    'chapter defaults to walkthrough and is omitted',
+    'chapter defaults to overview and is omitted',
     () => {
-      assert.strictEqual(encodeViewHash({ chapter: 'walkthrough', node: 'api' }), 'v=2&n=api');
+      assert.strictEqual(encodeViewHash({ chapter: 'overview', node: 'api' }), 'v=2&n=api');
       assert.deepStrictEqual(camp('v=2&n=api'), { version: 2, node: 'api' });
     },
   ],

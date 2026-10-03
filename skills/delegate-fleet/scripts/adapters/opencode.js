@@ -61,9 +61,12 @@ module.exports = {
     for (const name of ['auth.json', 'mcp-auth.json']) {
       const target = path.join(shared, name);
       const link = path.join(data, name);
-      if (fs.existsSync(target) && !fs.existsSync(link)) {
-        try { fs.symlinkSync(target, link); } catch { /* a concurrent run linked it first */ }
-      }
+      if (!fs.existsSync(target)) continue;
+      // Re-point a link left by an earlier run (a moved or deleted XDG_DATA_HOME leaves it dangling).
+      let current = null;
+      try { current = fs.readlinkSync(link); } catch { current = null; }
+      if (current === target) continue;
+      try { fs.rmSync(link, { force: true }); fs.symlinkSync(target, link); } catch { /* a concurrent run linked it first */ }
     }
     return { XDG_DATA_HOME: root };
   },

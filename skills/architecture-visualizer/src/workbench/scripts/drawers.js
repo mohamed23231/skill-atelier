@@ -28,9 +28,6 @@ function setDrawerOpen(kind, open, opener) {
   const overlay = isOverlayPanels();
   const wasOpen = region.getAttribute('data-open') === 'true';
   if (open && overlay) {
-    const otherKind = kind === 'navigator' ? 'rail' : 'navigator';
-    const other = document.querySelector(`[data-region="${otherKind}"]`);
-    if (other) other.setAttribute('data-open', 'false');
     activeDrawer = kind;
     drawerReturnFocus = opener || document.activeElement;
   }

@@ -27,7 +27,7 @@ const DESIGN_TOKENS = ['--bg', '--surface', '--surface-2', '--lane', '--ink', '-
 
 const state = {
   theme: THEMES.DARK,
-  chapter: 'walkthrough',
+  chapter: 'overview',
   currentView: VIEWS.ARCHITECTURE,
   deltaMode: DELTA_MODES.DIFF,
   animatingFlow: false,

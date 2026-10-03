@@ -53,16 +53,65 @@ function makeReviewButton(kind, item, label, stateValue) {
 }
 
 function renderReviewNavigator() {
-  const evidenceTarget = document.querySelector('[data-navigator-section="evidence"]');
   const findingTarget = document.querySelector('[data-navigator-section="findings"]');
-  evidenceTarget.replaceChildren();
+  if (!findingTarget) return;
   findingTarget.replaceChildren();
-  evidenceTarget.className = 'workbench-review-list';
   findingTarget.className = 'workbench-review-list';
-  const evidence = ARCH_SPEC.review?.evidenceManifest || ARCH_SPEC.evidence || [];
   const findings = ARCH_SPEC.findings || ARCH_SPEC.review?.policyFindings || [];
-  if (!evidence.length) evidenceTarget.textContent = 'No evidence records in this model.';
-  evidence.forEach(item => evidenceTarget.appendChild(makeReviewButton('evidence', item, item.id || item.type || 'Evidence', item.verification)));
-  if (!findings.length) findingTarget.textContent = 'No policy or evidence findings.';
+  if (!findings.length) {
+    findingTarget.textContent = 'No policy or evidence findings.';
+    return;
+  }
   findings.forEach(item => findingTarget.appendChild(makeReviewButton('finding', item, item.id || item.message || 'Finding', item.severity)));
+}
+
+// The Evidence chapter: one row per component in canvas order, each listing every locator behind it.
+function renderEvidenceChapter() {
+  const target = document.getElementById('evidence-list');
+  if (!target) return;
+  target.replaceChildren();
+  (LAYOUT_DATA.nodes || []).forEach(node => {
+    const evidence = nodeEvidence(ARCH_SPEC, node.id);
+    const row = document.createElement('div');
+    row.className = 'evidence-row';
+    row.setAttribute('data-evidence-node', node.id);
+
+    const head = document.createElement('div');
+    head.className = 'evidence-head';
+    const icon = document.createElement('span');
+    icon.className = 'evidence-icon';
+    icon.innerHTML = iconMarkup(getNodeIcon(node.type));
+    const name = document.createElement('button');
+    name.type = 'button';
+    name.className = 'evidence-name';
+    name.setAttribute('data-evidence-node-label', node.id);
+    name.textContent = node.label || node.id;
+    name.addEventListener('click', () => openInspectorForNode(node.id));
+    const chip = document.createElement('span');
+    chip.className = 'evidence-chip';
+    chip.setAttribute('data-evidence-state', evidence.state);
+    chip.textContent = evidence.label;
+    head.append(icon, name, chip);
+
+    const locators = document.createElement('div');
+    locators.className = 'evidence-locators';
+    if (evidence.locators.length === 0) {
+      const empty = document.createElement('span');
+      empty.className = 'evidence-empty';
+      empty.textContent = 'No evidence records';
+      locators.appendChild(empty);
+    } else {
+      evidence.locators.forEach(record => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'evidence-locator';
+        button.textContent = trustLocatorKey(record.locator);
+        button.addEventListener('click', () => openReviewInspector('evidence', record));
+        locators.appendChild(button);
+      });
+    }
+
+    row.append(head, locators);
+    target.appendChild(row);
+  });
 }

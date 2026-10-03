@@ -89,7 +89,6 @@
     <div class="header-actions">
       <button id="btn-palette" class="btn-icon" aria-keyshortcuts="Control+K Meta+K" aria-label="Search and commands"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-search"></use></svg><span>Search</span><kbd>Ctrl K</kbd></button>
       <button id="btn-copy-link" class="btn-icon" title="Copy a link to this exact view"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Copy link</span></button>
-      <button class="btn-icon icon-only workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-menu"></use></svg></button>
       <button class="btn-icon icon-only workbench-mobile-toggle" data-action="rail-toggle" aria-label="Open reading rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-panel"></use></svg></button>
       <button id="btn-theme" class="btn-icon icon-only" title="Toggle Light/Dark Theme" aria-label="Toggle light and dark theme">
         <span id="theme-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-moon"></use></svg></span>
@@ -180,14 +179,6 @@
   </div>
 
 <button class="workbench-backdrop" data-action="drawer-backdrop" aria-label="Close open panel"></button>
-<aside class="workbench-navigator" data-region="navigator" data-open="false" aria-label="Architecture navigator" aria-modal="false">
-  <div class="workbench-panel-header"><strong>Navigator</strong><button class="btn-icon workbench-close" data-action="navigator-close" aria-label="Close navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button></div>
-  <div class="workbench-panel-body">
-    <section><h2>Model outline</h2><div data-navigator-section="outline">Select a component to inspect it.</div></section>
-    <section><h2>Search results</h2><div data-navigator-section="search">Type in search to find nodes and relationships.</div></section>
-    <section><h2>Evidence</h2><div data-navigator-section="evidence">No evidence selected.</div></section>
-  </div>
-</aside>
 
   <!-- Interactive SVG Canvas Container -->
   <div id="canvas-container" data-region="canvas">
@@ -240,9 +231,29 @@
       <button class="btn-icon icon-only" data-action="rail-close" aria-label="Close rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
     </div>
     <div class="rail-body">
-      <section id="chapter-walkthrough" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-walkthrough" data-chapter-panel="walkthrough">
+      <section id="chapter-overview" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-overview" data-chapter-panel="overview">
+        <h2 id="overview-title">Overview</h2>
+        <p id="overview-description" class="voice-serif"></p>
+        <p id="overview-meta" class="rail-muted"></p>
+        <dl id="overview-facts" class="overview-facts"></dl>
+        <h3>Trust</h3>
+        <div id="overview-trust" class="overview-trust"></div>
+        <h3>How it works</h3>
+        <ol id="overview-stages" class="overview-stages"></ol>
+        <h3>What changes</h3>
+        <div id="overview-changes" class="overview-changes"></div>
+      </section>
+      <section id="chapter-walkthrough" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-walkthrough" data-chapter-panel="walkthrough" hidden>
         <h2>Walkthrough</h2>
         <div data-navigator-section="scenarios">No scenario selected.</div>
+      </section>
+      <section id="chapter-changes" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-changes" data-chapter-panel="changes" hidden>
+        <h2>Changes</h2>
+        <div id="changes-deltas"></div>
+        <h3>Blast radius</h3>
+        <div id="changes-blast"></div>
+        <h3>Traceability</h3>
+        <div id="changes-traceability"></div>
       </section>
       <section id="chapter-review" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-review" data-chapter-panel="review" hidden>
         <h2>Review</h2>
@@ -271,6 +282,10 @@
           <h3>Decisions</h3>
           <div id="review-decisions"></div>
         </section>
+      </section>
+      <section id="chapter-evidence" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-evidence" data-chapter-panel="evidence" hidden>
+        <h2>Evidence</h2>
+        <div id="evidence-list"></div>
       </section>
       <section id="chapter-data" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-data" data-chapter-panel="data" hidden>
         <h2>Data model</h2>
@@ -370,8 +385,6 @@
     <!-- include: scripts/dom.js -->
 
     <!-- include: scripts/drawers.js -->
-
-    <!-- include: scripts/navigator.js -->
 
     <!-- include: scripts/minimap.js -->
 

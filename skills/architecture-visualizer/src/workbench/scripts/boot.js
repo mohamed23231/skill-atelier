@@ -14,9 +14,7 @@ function initMotionPreference() {
 let lastOverlayMode = null;
 function syncResponsiveRegions(force) {
   const overlay = isOverlayPanels();
-  const navigator = document.querySelector('[data-region="navigator"]');
   const railRegion = document.querySelector('[data-region="rail"]');
-  navigator.setAttribute('aria-modal', overlay ? 'true' : 'false');
   if (railRegion) {
     railRegion.setAttribute('aria-modal', overlay && railRegion.getAttribute('data-open') === 'true' ? 'true' : 'false');
   }
@@ -24,7 +22,6 @@ function syncResponsiveRegions(force) {
   lastOverlayMode = overlay;
   activeDrawer = null;
   drawerReturnFocus = null;
-  navigator.setAttribute('data-open', overlay ? 'false' : 'true');
   if (railRegion) {
     railRegion.setAttribute('data-open', overlay ? 'false' : 'true');
   }
@@ -48,7 +45,6 @@ function init() {
   initMotionPreference();
   setupEventListeners();
   renderDiagram();
-  renderNavigatorOutline();
   renderReviewNavigator();
   renderScenarioNavigator();
   renderMinimap();
@@ -57,6 +53,9 @@ function init() {
   renderQualityGate();
   renderTrustStrip();
   initRail();
+  renderOverviewChapter();
+  renderChangesChapter();
+  renderEvidenceChapter();
   renderReviewChapter();
   applyVisibility();
   fitToScreen();
@@ -182,11 +181,8 @@ function setupEventListeners() {
   container.addEventListener('touchmove', handleTouchMove, { passive: false });
   container.addEventListener('touchend', handleTouchEnd);
 
-  const navigatorToggle = document.querySelector('[data-action="navigator-toggle"]');
   const railToggle = document.querySelector('[data-action="rail-toggle"]');
-  navigatorToggle.addEventListener('click', () => toggleDrawer('navigator', navigatorToggle));
   if (railToggle) railToggle.addEventListener('click', () => toggleDrawer('rail', railToggle));
-  document.querySelector('[data-action="navigator-close"]').addEventListener('click', () => setDrawerOpen('navigator', false));
   document.querySelector('[data-action="rail-close"]')?.addEventListener('click', () => setDrawerOpen('rail', false));
   document.querySelector('[data-action="sheet-back"]')?.addEventListener('click', hideSheetKeepSelection);
   document.querySelector('[data-action="inspector-close"]').addEventListener('click', closeInspector);
@@ -206,7 +202,6 @@ function setupEventListeners() {
 
   document.getElementById('search-box').addEventListener('input', e => {
     actions.setSearchQuery(e.target.value.toLowerCase().trim());
-    renderSearchResults(state.searchQuery);
     applyVisibility();
   });
 

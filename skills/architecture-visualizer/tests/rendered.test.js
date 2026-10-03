@@ -8,7 +8,7 @@ const geometry = require('../src/engine/geometry.js');
 const { loadTemplate } = require('../src/workbench/assemble.js');
 const fixtures = require('./fixtures.js');
 
-const REGION_NAMES = ['topbar', 'navigator', 'canvas', 'rail'];
+const REGION_NAMES = ['topbar', 'canvas', 'rail'];
 const CAMERA_CONTROL_SELECTORS = ['#btn-zoom-in', '#btn-zoom-out', '#btn-fit', '#btn-reset'];
 const templateHtml = loadTemplate();
 const bpMatch = templateHtml.match(/const\s+PANEL_BREAKPOINT\s*=\s*(\d+)/);
@@ -587,6 +587,7 @@ function regionsScript() {
       out.rects[name] = __rect(el);
       out.visible[name] = __visible(el);
     });
+    out.navigatorPresent = !!__q('.workbench-navigator');
     var minimap = __region('minimap');
     out.minimap = { present: !!minimap, rect: __rect(minimap), visible: __visible(minimap) };
     out.cameraControls = ${q(CAMERA_CONTROL_SELECTORS)}.map(function (sel) {
@@ -598,7 +599,6 @@ function regionsScript() {
 }
 
 function drawerSteps() {
-  const navigatorToggle = '[data-action="navigator-toggle"]';
   const railToggle = '[data-action="rail-toggle"]';
   const steps = [];
 
@@ -606,72 +606,8 @@ function drawerSteps() {
     ev(`(async function () {
       ${PAGE_HELPERS}
       window.__obs = {};
-      __record('navigatorToggle', !!__q(${q(navigatorToggle)}));
       __record('railToggle', !!__q(${q(railToggle)}));
-      __record('navigatorInitialOpen', __open('navigator'));
       __record('railInitialOpen', __open('rail'));
-      return __observed();
-    })()`)
-  );
-
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      __click(__q(${q(navigatorToggle)}));
-      await __sleep(100);
-      __record('navigatorOpen', __open('navigator'));
-      __record('navigatorVisible', __visible(__region('navigator')));
-      __record('navigatorFocusOnOpen', __inside(__region('navigator')));
-      var tabbables = __tabbables(__region('navigator'));
-      __record('navigatorTabbableCount', tabbables.length);
-      var last = tabbables[tabbables.length - 1];
-      var first = tabbables[0];
-      if (last) last.focus();
-      __record('navigatorLastTabbableFocused', !!last && document.activeElement === last);
-      if (first) first.focus();
-      __record('navigatorFirstTabbableFocused', !!first && document.activeElement === first);
-      return __observed();
-    })()`)
-  );
-
-  steps.push(TAB());
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      await __sleep(60);
-      __record('navigatorForwardWrappedInside', __inside(__region('navigator')));
-      return __observed();
-    })()`)
-  );
-
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      var tabbables = __tabbables(__region('navigator'));
-      var first = tabbables[0];
-      if (first) first.focus();
-      __record('navigatorFirstRefocused', !!first && document.activeElement === first);
-      return __observed();
-    })()`)
-  );
-
-  steps.push(SHIFT_TAB());
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      await __sleep(60);
-      __record('navigatorBackwardWrappedInside', __inside(__region('navigator')));
-      return __observed();
-    })()`)
-  );
-
-  steps.push(ESCAPE());
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      await __sleep(120);
-      __record('navigatorAfterEscapeOpen', __open('navigator'));
-      __record('navigatorEscapeFocusRestored', document.activeElement === __q(${q(navigatorToggle)}));
       return __observed();
     })()`)
   );
@@ -767,44 +703,28 @@ function drawerSteps() {
     })()`)
   );
 
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      __click(__q(${q(navigatorToggle)}));
-      await __sleep(100);
-      var close = __q('[data-action="navigator-close"]');
-      __record('navigatorCloseControl', !!close);
-      __click(close);
-      await __sleep(120);
-      __record('navigatorAfterCloseOpen', __open('navigator'));
-      return __observed();
-    })()`)
-  );
-
   return steps;
 }
 
+// Search now lives in the command palette; these rows carry the same data-model-id contract.
 function searchSteps(label, modelId, selectedSelector, expectedKind) {
-  const resultSelector = `[data-search-result][data-model-id=${q(modelId)}]`;
+  const resultSelector = `#palette-list [data-model-id=${q(modelId)}]`;
   return [
     ev(`(async function () {
       ${PAGE_HELPERS}
       window.__obs = {};
       __record('expectedKind', ${q(expectedKind)});
-      var toggle = __q('[data-action="navigator-toggle"]');
-      if (toggle && __open('navigator') !== 'true') {
-        __click(toggle);
-        await __sleep(120);
-      }
-      __record('navigatorOpen', __open('navigator'));
-      var input = __q('[data-action="search-input"]') || document.getElementById('search-box');
-      __record('searchInputPresent', !!input);
+      __click(__q('#btn-palette'));
+      await __sleep(120);
+      var input = __q('#palette-input');
+      __record('paletteOpen', __q('#palette-scrim') ? __q('#palette-scrim').getAttribute('data-open') : null);
+      __record('paletteInputPresent', !!input);
       __record('transformBefore', __transform());
       __input(input, ${q(label)});
       var result = await __waitFor(function () { return __q(${q(resultSelector)}); }, 2500);
       __record('resultPresent', !!result);
-      if (result && typeof result.focus === 'function') result.focus();
-      __record('resultFocused', !!result && document.activeElement === result);
+      // The palette rows are combo options driven by aria-activedescendant, so the input keeps focus.
+      __record('resultFocused', document.activeElement === input && !!result && input.getAttribute('aria-activedescendant') === result.id);
       return __observed();
     })()`),
     ENTER(),
@@ -898,21 +818,21 @@ function desktopInspectorCloseSteps() {
   ];
 }
 
-function tabletNavigatorOverlaySteps() {
+function tabletRailOverlaySteps() {
   return [
     ev(`(async function () {
       ${PAGE_HELPERS}
       window.__obs = {};
       __record('innerWidth', window.innerWidth);
       __record('docScrollWidthInitial', document.documentElement.scrollWidth);
-      __record('navigatorInitialOpen', __open('navigator'));
-      __record('navigatorInitialVisible', __visible(__region('navigator')));
+      __record('railInitialOpen', __open('rail'));
+      __record('railInitialVisible', __visible(__region('rail')));
       __record('canvasWidthInitial', __rect(__region('canvas')).width);
-      __click(__q('[data-action="navigator-toggle"]'));
+      __click(__q('[data-action="rail-toggle"]'));
       await __sleep(320);
-      __record('navigatorOpenAfterToggle', __open('navigator'));
-      __record('navigatorVisibleAfterToggle', __visible(__region('navigator')));
-      __record('navigatorRectOpen', __rect(__region('navigator')));
+      __record('railOpenAfterToggle', __open('rail'));
+      __record('railVisibleAfterToggle', __visible(__region('rail')));
+      __record('railRectOpen', __rect(__region('rail')));
       __record('canvasRectOpen', __rect(__region('canvas')));
       __record('canvasWidthOpen', __rect(__region('canvas')).width);
       __record('docScrollWidthOpen', document.documentElement.scrollWidth);
@@ -920,11 +840,11 @@ function tabletNavigatorOverlaySteps() {
     })()`),
     ev(`(async function () {
       ${PAGE_HELPERS}
-      __click(__q('[data-action="navigator-close"]'));
+      __click(__q('[data-action="rail-close"]'));
       await __sleep(320);
-      __record('navigatorOpenAfterClose', __open('navigator'));
-      __record('navigatorVisibleAfterClose', __visible(__region('navigator')));
-      __record('navigatorRectAfterClose', __rect(__region('navigator')));
+      __record('railOpenAfterClose', __open('rail'));
+      __record('railVisibleAfterClose', __visible(__region('rail')));
+      __record('railRectAfterClose', __rect(__region('rail')));
       __record('canvasRectAfterClose', __rect(__region('canvas')));
       __record('canvasWidthAfterClose', __rect(__region('canvas')).width);
       __record('docScrollWidthAfterClose', document.documentElement.scrollWidth);
@@ -933,21 +853,24 @@ function tabletNavigatorOverlaySteps() {
   ];
 }
 
-function longNavigatorTextSteps() {
+// The Evidence chapter carries the full, uncapped locator text that used to live in the navigator.
+function longEvidenceTextSteps() {
   return [
     ev(`(async function () {
       ${PAGE_HELPERS}
       window.__obs = {};
-      var body = __q('.workbench-panel-body');
-      var evidence = __qa('[data-review-kind="evidence"]');
-      __record('evidenceCount', evidence.length);
-      __record('evidenceTextLength', evidence.length ? evidence[0].textContent.length : 0);
+      openChapter('evidence');
+      await __sleep(160);
+      var body = __q('.rail-body');
+      var locators = __qa('#evidence-list .evidence-locator');
+      __record('evidenceCount', locators.length);
+      __record('evidenceTextLength', locators.length ? locators[0].textContent.length : 0);
       __record('innerWidth', window.innerWidth);
       __record('docScrollWidth', document.documentElement.scrollWidth);
       __record('bodyScrollWidth', body ? body.scrollWidth : null);
       __record('bodyClientWidth', body ? body.clientWidth : null);
       __record('bodyOverflowX', body ? window.getComputedStyle(body).overflowX : null);
-      __record('navigatorRect', __rect(__region('navigator')));
+      __record('railRect', __rect(__region('rail')));
       return __observed();
     })()`),
   ];
@@ -1012,54 +935,54 @@ function assertDesktopInspectorClose(raw) {
   );
 }
 
-function assertTabletNavigatorOverlay(raw) {
-  assert.ok(raw, 'no tablet navigator observations returned');
+function assertTabletRailOverlay(raw) {
+  assert.ok(raw, 'no tablet rail observations returned');
   assert.strictEqual(raw.innerWidth, 900, `Emulation override not applied: innerWidth=${raw.innerWidth}, expected 900`);
-  assert.strictEqual(raw.navigatorInitialOpen, 'false', 'navigator should start closed at 900px');
-  assert.strictEqual(raw.navigatorInitialVisible, false, 'navigator should not be visible at 900px before opening');
+  assert.strictEqual(raw.railInitialOpen, 'false', 'rail should start closed at 900px');
+  assert.strictEqual(raw.railInitialVisible, false, 'rail should not be visible at 900px before opening');
 
-  assert.strictEqual(raw.navigatorOpenAfterToggle, 'true', 'navigator header toggle did not open the overlay');
-  assert.ok(raw.navigatorVisibleAfterToggle, 'navigator overlay is not visible after opening');
+  assert.strictEqual(raw.railOpenAfterToggle, 'true', 'rail header toggle did not open the overlay');
+  assert.ok(raw.railVisibleAfterToggle, 'rail overlay is not visible after opening');
   assert.ok(
-    rectsOverlap(raw.navigatorRectOpen, raw.canvasRectOpen),
-    'navigator should overlay the canvas at 900px'
+    rectsOverlap(raw.railRectOpen, raw.canvasRectOpen),
+    'rail should overlay the canvas at 900px'
   );
   assert.ok(
     Math.abs(raw.canvasWidthOpen - raw.canvasWidthInitial) <= 1,
-    `overlay navigator permanently shrank the canvas (initial=${raw.canvasWidthInitial}, open=${raw.canvasWidthOpen})`
+    `overlay rail permanently shrank the canvas (initial=${raw.canvasWidthInitial}, open=${raw.canvasWidthOpen})`
   );
 
-  assert.strictEqual(raw.navigatorOpenAfterClose, 'false', 'navigator close control did not dismiss the overlay');
-  assert.strictEqual(raw.navigatorVisibleAfterClose, false, 'navigator overlay is still visible after dismissal');
+  assert.strictEqual(raw.railOpenAfterClose, 'false', 'rail close control did not dismiss the overlay');
+  assert.strictEqual(raw.railVisibleAfterClose, false, 'rail overlay is still visible after dismissal');
   assert.ok(
     Math.abs(raw.canvasWidthAfterClose - raw.canvasWidthInitial) <= 1,
     `canvas width changed after overlay dismissal (initial=${raw.canvasWidthInitial}, after=${raw.canvasWidthAfterClose})`
   );
   assert.ok(
-    !rectsOverlap(raw.navigatorRectAfterClose, raw.canvasRectAfterClose),
-    'dismissed navigator overlay still overlaps the canvas'
+    !rectsOverlap(raw.railRectAfterClose, raw.canvasRectAfterClose),
+    'dismissed rail overlay still overlaps the canvas'
   );
   assert.ok(
     raw.docScrollWidthInitial <= raw.innerWidth + 1 && raw.docScrollWidthOpen <= raw.innerWidth + 1 &&
       raw.docScrollWidthAfterClose <= raw.innerWidth + 1,
-    `navigator caused horizontal page overflow (initial=${raw.docScrollWidthInitial}, open=${raw.docScrollWidthOpen}, after=${raw.docScrollWidthAfterClose}, viewport=${raw.innerWidth})`
+    `rail caused horizontal page overflow (initial=${raw.docScrollWidthInitial}, open=${raw.docScrollWidthOpen}, after=${raw.docScrollWidthAfterClose}, viewport=${raw.innerWidth})`
   );
 }
 
-function assertLongNavigatorText(raw) {
-  assert.ok(raw, 'no long navigator text observations returned');
-  assert.ok(raw.evidenceCount >= 1, 'long evidence record was not rendered in the navigator');
+function assertLongEvidenceText(raw) {
+  assert.ok(raw, 'no long evidence text observations returned');
+  assert.ok(raw.evidenceCount >= 1, 'long evidence locator was not rendered in the Evidence chapter');
   assert.ok(raw.evidenceTextLength > 200, `evidence text was truncated too early (length=${raw.evidenceTextLength})`);
-  assert.ok(raw.navigatorRect && raw.navigatorRect.width > 0.5, 'navigator has no rendered size');
+  assert.ok(raw.railRect && raw.railRect.width > 0.5, 'rail has no rendered size');
   assert.ok(
     raw.docScrollWidth <= raw.innerWidth + 1,
-    `long navigator text overflowed the page horizontally (scrollWidth=${raw.docScrollWidth}, viewport=${raw.innerWidth})`
+    `long evidence text overflowed the page horizontally (scrollWidth=${raw.docScrollWidth}, viewport=${raw.innerWidth})`
   );
   assert.ok(
     raw.bodyScrollWidth <= raw.bodyClientWidth + 1,
-    `navigator body is horizontally scrollable (scrollWidth=${raw.bodyScrollWidth}, clientWidth=${raw.bodyClientWidth})`
+    `rail body is horizontally scrollable (scrollWidth=${raw.bodyScrollWidth}, clientWidth=${raw.bodyClientWidth})`
   );
-  assert.strictEqual(raw.bodyOverflowX, 'hidden', `navigator body overflow-x should be hidden, got ${raw.bodyOverflowX}`);
+  assert.strictEqual(raw.bodyOverflowX, 'hidden', `rail body overflow-x should be hidden, got ${raw.bodyOverflowX}`);
 }
 
 function assertRegionLayout(raw, width) {
@@ -1070,24 +993,24 @@ function assertRegionLayout(raw, width) {
   });
 
   assert.strictEqual(raw.innerWidth, width, `Emulation override not applied: innerWidth=${raw.innerWidth}, expected ${width}`);
+  assert.strictEqual(raw.navigatorPresent, false, `the removed navigator panel must not exist at ${width}px`);
 
   assert.ok(raw.visible.topbar, `topbar region not visible at ${width}px`);
   assert.ok(raw.visible.canvas, `canvas region not visible at ${width}px`);
   if (width >= PANEL_BREAKPOINT) {
-    assert.ok(raw.visible.navigator, `navigator should be docked open by default at ${width}px`);
     assert.ok(raw.visible.rail, `rail should be docked open by default at ${width}px`);
     const expectedRailWidth = width >= 1280 ? 400 : 340;
     assert.ok(
       Math.abs(raw.rects.rail.width - expectedRailWidth) <= 1,
       `rail width should be ${expectedRailWidth}px at ${width}px, got ${raw.rects.rail.width}`
     );
-    const expectedCanvasWidth = width - 240 - expectedRailWidth;
+    const expectedCanvasWidth = width - expectedRailWidth;
     assert.ok(
       Math.abs(raw.rects.canvas.width - expectedCanvasWidth) <= 1,
       `canvas width should be ${expectedCanvasWidth}px at ${width}px, got ${raw.rects.canvas.width}`
     );
+    assert.ok(Math.abs(raw.rects.canvas.x) <= 1, `canvas should start at x=0 at ${width}px, got ${raw.rects.canvas.x}`);
   } else {
-    assert.ok(!raw.visible.navigator, `navigator region should be collapsed by default at ${width}px`);
     assert.ok(!raw.visible.rail, `rail region should be collapsed by default at ${width}px`);
   }
 
@@ -1134,24 +1057,9 @@ function assertMinimapContainment(raw, width) {
 
 function assertDrawerBehavior(raw) {
   assert.ok(raw, 'no drawer observations returned');
-  assert.ok(raw.navigatorToggle, 'missing [data-action="navigator-toggle"] control at 320px');
   assert.ok(raw.railToggle, 'missing [data-action="rail-toggle"] control at 320px');
 
-  assert.strictEqual(raw.navigatorInitialOpen, 'false', 'navigator drawer should start collapsed at 320px');
   assert.strictEqual(raw.railInitialOpen, 'false', 'rail drawer should start collapsed at 320px');
-
-  assert.strictEqual(raw.navigatorOpen, 'true', 'navigator toggle did not open the drawer');
-  assert.ok(raw.navigatorVisible, 'navigator drawer is not visibly rendered after opening');
-  assert.ok(raw.navigatorFocusOnOpen, 'keyboard focus was not moved into the navigator drawer on open');
-  assert.ok(raw.navigatorTabbableCount >= 2, `navigator drawer exposes ${raw.navigatorTabbableCount} tabbables, expected at least 2`);
-  assert.ok(raw.navigatorLastTabbableFocused, 'could not focus the last tabbable in the navigator drawer');
-  assert.ok(raw.navigatorFirstTabbableFocused, 'could not focus the first tabbable in the navigator drawer');
-  assert.ok(raw.navigatorForwardWrappedInside, 'real Tab from the last navigator tabbable escaped the navigator drawer');
-  assert.ok(raw.navigatorFirstRefocused, 'could not refocus the first tabbable in the navigator drawer');
-  assert.ok(raw.navigatorBackwardWrappedInside, 'real Shift+Tab from the first navigator tabbable escaped the navigator drawer');
-
-  assert.strictEqual(raw.navigatorAfterEscapeOpen, 'false', 'real Escape did not dismiss the navigator drawer');
-  assert.ok(raw.navigatorEscapeFocusRestored, 'focus was not restored to the navigator toggle after real Escape');
 
   assert.strictEqual(raw.railOpen, 'true', 'rail toggle did not open the drawer');
   assert.ok(raw.railVisible, 'rail drawer is not visibly rendered after opening');
@@ -1173,20 +1081,18 @@ function assertDrawerBehavior(raw) {
   if (raw.sheetBackPresent !== undefined) {
     assert.ok(raw.sheetBackPresent, 'missing [data-action="sheet-back"] when sheet open');
   }
-
-  assert.ok(raw.navigatorCloseControl, 'missing [data-action="navigator-close"] control at 320px');
-  assert.strictEqual(raw.navigatorAfterCloseOpen, 'false', 'navigator close control did not dismiss the drawer');
 }
 
 function assertSearchActivation(raw, expectedKind, modelId) {
   assert.ok(raw, 'no search activation observations returned');
-  assert.ok(raw.searchInputPresent, 'no search input rendered');
-  assert.ok(raw.resultPresent, `no search result rendered for ${modelId}`);
-  assert.ok(raw.resultFocused, `search result for ${modelId} is not keyboard focusable`);
-  assert.ok(raw.selectionPresent, `real Enter on the search result for ${modelId} did not mark it data-selected="true"`);
-  assert.strictEqual(raw.railOpen, 'true', `activating search result for ${modelId} did not open the rail`);
+  assert.strictEqual(raw.paletteOpen, 'true', 'the command palette did not open');
+  assert.ok(raw.paletteInputPresent, 'no palette search input rendered');
+  assert.ok(raw.resultPresent, `no palette result rendered for ${modelId}`);
+  assert.ok(raw.resultFocused, `palette result for ${modelId} is not keyboard focusable`);
+  assert.ok(raw.selectionPresent, `real Enter on the palette row for ${modelId} did not mark it data-selected="true"`);
+  assert.strictEqual(raw.railOpen, 'true', `activating palette result for ${modelId} did not open the rail`);
   assert.strictEqual(raw.railSheet, expectedKind, `rail is not in the ${expectedKind} sheet state after activating ${modelId}`);
-  assert.notStrictEqual(raw.transformAfter, raw.transformBefore, `camera transform did not change after activating search result for ${modelId}`);
+  assert.notStrictEqual(raw.transformAfter, raw.transformBefore, `camera transform did not change after activating palette result for ${modelId}`);
 }
 
 function assertMinimapBehavior(raw) {
@@ -1337,7 +1243,7 @@ const cases = [
   ],
 
   [
-    'B2a: topbar, navigator, canvas and rail render without overlap at 320, 768 and 1440',
+    'B2a: topbar, canvas and rail render without overlap at 320, 768 and 1440',
     () => {
       const phases = VIEWPORTS.map((viewport) => ({
         width: viewport.width,
@@ -1362,23 +1268,23 @@ const cases = [
   ],
 
   [
-    'B2b: at 900 the navigator is an overlay, dismisses cleanly and never shrinks or overlaps the canvas',
+    'B2b: at 900 the rail is an overlay, dismisses cleanly and never shrinks or overlaps the canvas',
     () => {
-      const results = runPhases(fixtures.VALID_SPEC, [{ width: 900, height: 900, mobile: false, steps: tabletNavigatorOverlaySteps() }]);
-      assertTabletNavigatorOverlay(lastEvalValue(results[0]));
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 900, height: 900, mobile: false, steps: tabletRailOverlaySteps() }]);
+      assertTabletRailOverlay(lastEvalValue(results[0]));
     },
   ],
 
   [
-    'B2b: long navigator outline/evidence text wraps without horizontal page or panel scrolling',
+    'B2b: long evidence locator text wraps without horizontal page or rail scrolling',
     () => {
-      const results = runPhases(longEvidenceSpec(), [{ width: 1440, height: 900, mobile: false, steps: longNavigatorTextSteps() }]);
-      assertLongNavigatorText(lastEvalValue(results[0]));
+      const results = runPhases(longEvidenceSpec(), [{ width: 1440, height: 900, mobile: false, steps: longEvidenceTextSteps() }]);
+      assertLongEvidenceText(lastEvalValue(results[0]));
     },
   ],
 
   [
-    'B2a: at 320 the navigator and rail drawers trap focus, dismiss and restore focus',
+    'B2a: at 320 the rail drawer traps focus, dismisses and restores focus',
     () => {
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 320, height: 800, mobile: false, steps: drawerSteps() }]);
       assertDrawerBehavior(lastEvalValue(results[0]));
@@ -1386,7 +1292,7 @@ const cases = [
   ],
 
   [
-    'B2a: real Enter on a node search row selects it, opens the inspector and moves the camera',
+    'B2a: real Enter on a node palette row selects it, opens the inspector and moves the camera',
     () => {
       const steps = searchSteps('API Service', 'api', '#node-api[data-selected="true"]', 'node');
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
@@ -1395,7 +1301,7 @@ const cases = [
   ],
 
   [
-    'B2a: real Enter on an edge search row selects it, opens the edge inspector and moves the camera',
+    'B2a: real Enter on an edge palette row selects it, opens the edge inspector and moves the camera',
     () => {
       const steps = searchSteps('SQL Write', 'e1', '#path-e1[data-selected="true"]', 'edge');
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
@@ -1550,7 +1456,7 @@ const cases = [
     'Phase 0: playback, delta and gate overlays never sit under each other or a docked panel at 1440 and 1600',
     () => {
       const OVERLAPS = ev(`(function () {
-        const sel = ['.filter-bar', '#delta-bar', '#sequence-bar', '.legend-box', '.workbench-minimap', '.viewport-controls', '[data-region=navigator]', '#rail'];
+        const sel = ['.filter-bar', '#delta-bar', '#sequence-bar', '.legend-box', '.workbench-minimap', '.viewport-controls', '#rail'];
         const vis = sel.map((s) => [s, document.querySelector(s)])
           .filter(([, e]) => e && e.getAttribute('data-open') !== 'false' && getComputedStyle(e).display !== 'none')
           .map(([s, e]) => [s, e.getBoundingClientRect()])
@@ -1913,26 +1819,40 @@ const cases = [
         ev(`(async function () {
           ${PAGE_HELPERS}
           window.__obs = {};
-          var tabWalk = __q('#chapter-tab-walkthrough');
-          if (tabWalk) tabWalk.focus();
+          var tabOv = __q('#chapter-tab-overview');
+          if (tabOv) tabOv.focus();
           await __sleep(60);
-          __record('initialFocus', document.activeElement === tabWalk);
-          __record('initialWalkSelected', tabWalk ? tabWalk.getAttribute('aria-selected') : null);
+          __record('initialFocus', document.activeElement === tabOv);
+          __record('initialChapter', state.chapter);
+          __record('initialOvSelected', tabOv ? tabOv.getAttribute('aria-selected') : null);
+          __record('initialOvHidden', __q('#chapter-overview') ? __q('#chapter-overview').hidden : null);
           __record('initialWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
-          __record('initialReviewHidden', __q('#chapter-review') ? __q('#chapter-review').hidden : null);
           return __observed();
         })()`),
         ARROW_RIGHT,
         ev(`(async function () {
           ${PAGE_HELPERS}
           await __sleep(60);
-          var tabRev = __q('#chapter-tab-review');
           var tabWalk = __q('#chapter-tab-walkthrough');
-          __record('afterRightFocus', document.activeElement === tabRev);
+          var tabOv = __q('#chapter-tab-overview');
+          __record('afterRightFocusWalk', document.activeElement === tabWalk);
+          __record('afterRightOvSelected', tabOv ? tabOv.getAttribute('aria-selected') : null);
           __record('afterRightWalkSelected', tabWalk ? tabWalk.getAttribute('aria-selected') : null);
-          __record('afterRightRevSelected', tabRev ? tabRev.getAttribute('aria-selected') : null);
+          __record('afterRightOvHidden', __q('#chapter-overview') ? __q('#chapter-overview').hidden : null);
           __record('afterRightWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
-          __record('afterRightRevHidden', __q('#chapter-review') ? __q('#chapter-review').hidden : null);
+          return __observed();
+        })()`),
+        ARROW_RIGHT,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(60);
+          var tabCh = __q('#chapter-tab-changes');
+          var tabWalk = __q('#chapter-tab-walkthrough');
+          __record('afterSecondFocusChanges', document.activeElement === tabCh);
+          __record('afterSecondWalkSelected', tabWalk ? tabWalk.getAttribute('aria-selected') : null);
+          __record('afterSecondChangesSelected', tabCh ? tabCh.getAttribute('aria-selected') : null);
+          __record('afterSecondWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
+          __record('afterSecondChangesHidden', __q('#chapter-changes') ? __q('#chapter-changes').hidden : null);
           return __observed();
         })()`),
         ARROW_LEFT,
@@ -1940,31 +1860,37 @@ const cases = [
           ${PAGE_HELPERS}
           await __sleep(60);
           var tabWalk = __q('#chapter-tab-walkthrough');
-          var tabRev = __q('#chapter-tab-review');
+          var tabCh = __q('#chapter-tab-changes');
           __record('afterLeftFocus', document.activeElement === tabWalk);
           __record('afterLeftWalkSelected', tabWalk ? tabWalk.getAttribute('aria-selected') : null);
-          __record('afterLeftRevSelected', tabRev ? tabRev.getAttribute('aria-selected') : null);
+          __record('afterLeftChangesSelected', tabCh ? tabCh.getAttribute('aria-selected') : null);
           __record('afterLeftWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
-          __record('afterLeftRevHidden', __q('#chapter-review') ? __q('#chapter-review').hidden : null);
+          __record('afterLeftChangesHidden', __q('#chapter-changes') ? __q('#chapter-changes').hidden : null);
           return __observed();
         })()`),
       ];
       const results = runPhases('examples/2-complex-database-migration/architecture.json', [{ width: 1440, height: 900, mobile: false, steps }]);
       const obs = lastEvalValue(results[0]);
-      assert.strictEqual(obs.initialFocus, true, 'Walkthrough tab should be focused initially');
-      assert.strictEqual(obs.initialWalkSelected, 'true', 'Walkthrough tab should be selected initially');
-      assert.strictEqual(obs.initialWalkHidden, false, 'Walkthrough panel should be visible initially');
-      assert.strictEqual(obs.initialReviewHidden, true, 'Review panel should be hidden initially');
-      assert.strictEqual(obs.afterRightFocus, true, 'ArrowRight should move focus to Review tab');
-      assert.strictEqual(obs.afterRightWalkSelected, 'false', 'Walkthrough tab should not be selected after ArrowRight');
-      assert.strictEqual(obs.afterRightRevSelected, 'true', 'Review tab should be selected after ArrowRight');
-      assert.strictEqual(obs.afterRightWalkHidden, true, 'Walkthrough panel should be hidden after ArrowRight');
-      assert.strictEqual(obs.afterRightRevHidden, false, 'Review panel should be visible after ArrowRight');
+      assert.strictEqual(obs.initialFocus, true, 'Overview tab should be focused initially');
+      assert.strictEqual(obs.initialChapter, 'overview', 'Overview should be the default chapter');
+      assert.strictEqual(obs.initialOvSelected, 'true', 'Overview tab should be selected initially');
+      assert.strictEqual(obs.initialOvHidden, false, 'Overview panel should be visible initially');
+      assert.strictEqual(obs.initialWalkHidden, true, 'Walkthrough panel should be hidden initially');
+      assert.strictEqual(obs.afterRightFocusWalk, true, 'ArrowRight should move focus to Walkthrough tab');
+      assert.strictEqual(obs.afterRightOvSelected, 'false', 'Overview tab should not be selected after ArrowRight');
+      assert.strictEqual(obs.afterRightWalkSelected, 'true', 'Walkthrough tab should be selected after ArrowRight');
+      assert.strictEqual(obs.afterRightOvHidden, true, 'Overview panel should be hidden after ArrowRight');
+      assert.strictEqual(obs.afterRightWalkHidden, false, 'Walkthrough panel should be visible after ArrowRight');
+      assert.strictEqual(obs.afterSecondFocusChanges, true, 'A second ArrowRight should move focus to Changes tab');
+      assert.strictEqual(obs.afterSecondWalkSelected, 'false', 'Walkthrough tab should not be selected after the second ArrowRight');
+      assert.strictEqual(obs.afterSecondChangesSelected, 'true', 'Changes tab should be selected after the second ArrowRight');
+      assert.strictEqual(obs.afterSecondWalkHidden, true, 'Walkthrough panel should be hidden after the second ArrowRight');
+      assert.strictEqual(obs.afterSecondChangesHidden, false, 'Changes panel should be visible after the second ArrowRight');
       assert.strictEqual(obs.afterLeftFocus, true, 'ArrowLeft should move focus back to Walkthrough tab');
       assert.strictEqual(obs.afterLeftWalkSelected, 'true', 'Walkthrough tab should be selected after ArrowLeft');
-      assert.strictEqual(obs.afterLeftRevSelected, 'false', 'Review tab should not be selected after ArrowLeft');
+      assert.strictEqual(obs.afterLeftChangesSelected, 'false', 'Changes tab should not be selected after ArrowLeft');
       assert.strictEqual(obs.afterLeftWalkHidden, false, 'Walkthrough panel should be visible after ArrowLeft');
-      assert.strictEqual(obs.afterLeftRevHidden, true, 'Review panel should be hidden after ArrowLeft');
+      assert.strictEqual(obs.afterLeftChangesHidden, true, 'Changes panel should be hidden after ArrowLeft');
     },
   ],
 
@@ -2062,7 +1988,7 @@ const cases = [
           var nodeEl = __q('#node-api');
           __record('nodeAttrSelected', nodeEl ? nodeEl.getAttribute('data-selected') : null);
           __record('chapter', state.chapter);
-          __record('chapterWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
+          __record('chapterOverviewHidden', __q('#chapter-overview') ? __q('#chapter-overview').hidden : null);
           return __observed();
         })()`),
       ];
@@ -2075,8 +2001,8 @@ const cases = [
       assert.strictEqual(obs.sheetHiddenAfter, true, 'Sheet should be hidden after Back');
       assert.strictEqual(obs.nodeSelectedAfter, 'api', 'Node should still be selected in state after Back');
       assert.strictEqual(obs.nodeAttrSelected, 'true', '#node-api should keep data-selected="true" after Back');
-      assert.strictEqual(obs.chapter, 'walkthrough', 'Should return to current chapter (walkthrough)');
-      assert.strictEqual(obs.chapterWalkHidden, false, 'Walkthrough chapter should be visible');
+      assert.strictEqual(obs.chapter, 'overview', 'Should return to the default chapter (overview)');
+      assert.strictEqual(obs.chapterOverviewHidden, false, 'Overview chapter should be visible');
     },
   ],
 
@@ -2114,17 +2040,16 @@ const cases = [
   ],
 
   [
-    '1c: rail at 1440 the docked rail plus canvas fill the width with no overlap',
+    '1c: rail at 1440 the canvas starts at x=0 and ends at the rail edge with no navigator',
     () => {
       const steps = [
         ev(`(async function () {
           ${PAGE_HELPERS}
           await __sleep(300);
           window.__obs = {};
-          var nav = __region('navigator');
           var canvas = __region('canvas');
           var rail = __region('rail');
-          __record('navRect', __rect(nav));
+          __record('navigatorPresent', !!__q('.workbench-navigator'));
           __record('canvasRect', __rect(canvas));
           __record('railRect', __rect(rail));
           __record('scrollWidth', document.documentElement.scrollWidth);
@@ -2135,17 +2060,208 @@ const cases = [
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
       const obs = lastEvalValue(results[0]);
       assert.strictEqual(obs.innerWidth, 1440);
+      assert.strictEqual(obs.navigatorPresent, false, 'the navigator panel must not exist at 1440px');
       assert.ok(obs.scrollWidth <= 1440 + 1, `Page should not scroll horizontally (scrollWidth=${obs.scrollWidth}, innerWidth=${obs.innerWidth})`);
-      assert.ok(Math.abs(obs.navRect.width - 240) <= 1, `Navigator width should be 240, got ${obs.navRect.width}`);
       assert.ok(Math.abs(obs.railRect.width - 400) <= 1, `Rail width should be 400 at 1440px, got ${obs.railRect.width}`);
-      const expectedCanvasWidth = 1440 - 240 - 400;
+      const expectedCanvasWidth = 1440 - 400;
       assert.ok(Math.abs(obs.canvasRect.width - expectedCanvasWidth) <= 1, `Canvas width should be ${expectedCanvasWidth}, got ${obs.canvasRect.width}`);
-      assert.ok(obs.navRect.right <= obs.canvasRect.x + 1, 'Navigator should not overlap canvas on the left');
-      assert.ok(obs.canvasRect.right <= obs.railRect.x + 1, 'Canvas should not overlap rail on the right');
+      assert.ok(Math.abs(obs.canvasRect.x) <= 1, `Canvas should start at x=0, got ${obs.canvasRect.x}`);
+      assert.ok(obs.canvasRect.right <= obs.railRect.x + 1, 'Canvas should end at the rail edge');
       assert.ok(obs.railRect.right <= obs.innerWidth + 1, 'Rail should stay within viewport right boundary');
-      assert.ok(!rectsOverlap(obs.navRect, obs.canvasRect), 'Navigator and canvas must not overlap');
       assert.ok(!rectsOverlap(obs.canvasRect, obs.railRect), 'Canvas and rail must not overlap');
-      assert.ok(!rectsOverlap(obs.navRect, obs.railRect), 'Navigator and rail must not overlap');
+    },
+  ],
+
+  [
+    '1c: chapters Overview shows the five trust rows and its Open Evidence button selects Evidence',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          openChapter('overview');
+          await __sleep(150);
+          var summary = trustSummary(ARCH_SPEC, QUALITY_GATE);
+          __record('expected', Object.keys(summary).map(function (key) {
+            return { key: key, label: summary[key].label, state: summary[key].state, chapter: summary[key].chapter };
+          }));
+          __record('rows', __qa('#overview-trust .ov-trust-row').map(function (row) {
+            var dot = row.querySelector('.trust-dot');
+            return {
+              key: row.getAttribute('data-trust-key'),
+              label: (row.querySelector('.ov-trust-label') || {}).textContent,
+              state: dot ? dot.getAttribute('data-state') : null,
+              chapter: row.querySelector('.ov-trust-open') ? row.querySelector('.ov-trust-open').getAttribute('data-trust-chapter') : null,
+            };
+          }));
+          __record('title', (__q('#overview-title') || {}).textContent);
+          __record('expectedTitle', ARCH_SPEC.meta.title);
+          __record('facts', __qa('#overview-facts .overview-fact').length);
+          var evidenceBtn = __q('#overview-trust [data-trust-chapter="evidence"]');
+          __record('evidenceButtonText', evidenceBtn ? evidenceBtn.textContent : null);
+          if (evidenceBtn) __click(evidenceBtn);
+          await __sleep(120);
+          __record('chapterAfter', state.chapter);
+          __record('evidencePanelHidden', __q('#chapter-evidence') ? __q('#chapter-evidence').hidden : null);
+          __record('evidenceTabSelected', __q('#chapter-tab-evidence') ? __q('#chapter-tab-evidence').getAttribute('aria-selected') : null);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(SAGA, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.rows.length, 5, `Overview should show five trust rows, found ${obs.rows.length}`);
+      assert.deepStrictEqual(obs.rows, obs.expected, 'Overview trust rows must mirror trustSummary(ARCH_SPEC, QUALITY_GATE)');
+      assert.strictEqual(obs.title, obs.expectedTitle, 'Overview h2 should be the model title');
+      assert.strictEqual(obs.facts, 4, `Overview should show four facts, found ${obs.facts}`);
+      assert.strictEqual(obs.evidenceButtonText, 'Open Evidence', 'grounding/evidence rows should offer an Open Evidence button');
+      assert.strictEqual(obs.chapterAfter, 'evidence', 'Open Evidence should select the Evidence chapter');
+      assert.strictEqual(obs.evidencePanelHidden, false, 'Evidence panel should be visible after Open Evidence');
+      assert.strictEqual(obs.evidenceTabSelected, 'true', 'Evidence tab should be selected after Open Evidence');
+    },
+  ],
+
+  [
+    '1c: chapters Overview "How it works" item activates that stage on the canvas',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          openChapter('overview');
+          await __sleep(150);
+          var buttons = __qa('#overview-stages button');
+          __record('names', buttons.map(function (b) { return b.textContent; }));
+          var target = null;
+          buttons.forEach(function (b) {
+            if (b.getAttribute('data-overview-stage') === 'stage_publish_order_created') target = b;
+          });
+          __record('targetPresent', !!target);
+          if (target) __click(target);
+          await __sleep(220);
+          __record('scenarioActive', state.scenarioActive);
+          __record('stageId', (flattenScenarioStages(selectedScenario().stages)[state.scenarioStage] || {}).id);
+          __record('highlighted', __qa('.edge-path.highlighted').length);
+          __record('chapter', state.chapter);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(SAGA, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.ok(obs.names.includes('Publish to Kafka Event Bus'), `top-level stage names missing: ${JSON.stringify(obs.names)}`);
+      assert.strictEqual(obs.targetPresent, true, 'the Publish to Kafka Event Bus stage button should exist');
+      assert.strictEqual(obs.scenarioActive, true, 'selecting an Overview stage should activate the scenario');
+      assert.strictEqual(obs.stageId, 'stage_publish_order_created', 'the clicked stage should be the active stage');
+      assert.ok(obs.highlighted > 0, 'the canvas should spotlight the stage interactions');
+      assert.strictEqual(obs.chapter, 'walkthrough', 'selecting a stage should open the Walkthrough chapter');
+    },
+  ],
+
+  [
+    '1c: chapters Changes lists every added component and its blast-radius counts',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          openChapter('changes');
+          await __sleep(150);
+          __record('added', __qa('[data-change-delta="ADDED"] [data-change-component]').map(function (b) {
+            return b.getAttribute('data-change-component');
+          }).sort());
+          __record('expectedAdded', ARCH_SPEC.review.changedComponents.filter(function (c) {
+            return c.delta === 'ADDED';
+          }).map(function (c) { return c.id; }).sort());
+          __record('blast', __qa('#changes-blast [data-blast-node]').map(function (d) {
+            return {
+              id: d.getAttribute('data-blast-node'),
+              up: Number(d.getAttribute('data-blast-up')),
+              down: Number(d.getAttribute('data-blast-down')),
+            };
+          }));
+          __record('expectedBlast', ARCH_SPEC.review.blastRadius.map(function (e) {
+            return { id: e.nodeId, up: e.upstream.length, down: e.downstream.length };
+          }));
+          var trace = __q('#changes-traceability [data-trace-summary]');
+          __record('trace', trace ? trace.textContent : null);
+          __record('traceExpected', ARCH_SPEC.review.traceability.mapped.length + ' of ' + ARCH_SPEC.review.traceability.changed.length + ' changed components mapped');
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(SAGA, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.deepStrictEqual(obs.added, obs.expectedAdded, 'Changes must list every ADDED component of example 3');
+      assert.ok(obs.expectedAdded.length >= 4, `example 3 should have several ADDED components, found ${obs.expectedAdded.length}`);
+      assert.strictEqual(obs.blast.length, obs.expectedBlast.length, 'every blast-radius entry should render');
+      assert.deepStrictEqual(obs.blast, obs.expectedBlast, 'blast-radius counts must match the model');
+      assert.strictEqual(obs.trace, obs.traceExpected, 'traceability line should state mapped of changed');
+    },
+  ],
+
+  [
+    '1c: chapters Evidence lists every locator of a component without a cap',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          openChapter('evidence');
+          await __sleep(150);
+          var evidence = nodeEvidence(ARCH_SPEC, 'saga_orchestrator');
+          var row = __q('[data-evidence-node="saga_orchestrator"]');
+          __record('locatorCount', row ? row.querySelectorAll('.evidence-locator').length : -1);
+          __record('expectedLocators', evidence.locators.length);
+          __record('chipState', row && row.querySelector('.evidence-chip') ? row.querySelector('.evidence-chip').getAttribute('data-evidence-state') : null);
+          __record('expectedState', evidence.state);
+          __record('firstLocatorText', row && row.querySelector('.evidence-locator') ? row.querySelector('.evidence-locator').textContent : null);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(SAGA, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.ok(obs.expectedLocators >= 1, 'saga_orchestrator should have at least one locator');
+      assert.strictEqual(obs.locatorCount, obs.expectedLocators, 'Evidence must render every locator of saga_orchestrator');
+      assert.strictEqual(obs.chipState, obs.expectedState, 'evidence state chip must match nodeEvidence');
+      assert.ok(obs.firstLocatorText && obs.firstLocatorText.length > 0, 'locator buttons should carry their text');
+    },
+  ],
+
+  [
+    '1c: chapters every chapter opens without horizontal page scroll from 320 to 1440',
+    () => {
+      const CHAPTERS = ['overview', 'walkthrough', 'changes', 'review', 'evidence'];
+      const WIDTHS = [320, 390, 768, 1024, 1440];
+      const phases = WIDTHS.map((width) => ({
+        width,
+        height: 844,
+        mobile: false,
+        script: `(async function () {
+          ${PAGE_HELPERS}
+          var out = { innerWidth: window.innerWidth, overflow: {} };
+          var chapters = ${q(CHAPTERS)};
+          for (var i = 0; i < chapters.length; i++) {
+            openChapter(chapters[i]);
+            await __sleep(50);
+            out.overflow[chapters[i]] = document.documentElement.scrollWidth - window.innerWidth;
+          }
+          return out;
+        })()`,
+      }));
+      const results = runPhases(fixtures.VALID_SPEC, phases);
+      WIDTHS.forEach((width, index) => {
+        const raw = results[index];
+        assert.ok(raw, `no chapter overflow observations at ${width}px`);
+        assert.strictEqual(raw.innerWidth, width, `Emulation override not applied at ${width}px`);
+        CHAPTERS.forEach((chapter) => {
+          assert.ok(
+            raw.overflow[chapter] <= 0,
+            `${chapter} caused horizontal page scroll at ${width}px (overflow=${raw.overflow[chapter]})`
+          );
+        });
+      });
     },
   ],
 

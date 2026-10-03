@@ -3,7 +3,6 @@
   .rail { width: 340px; }
   body:has(.rail[data-open="true"]) { --canvas-right: 340px; }
   body:has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 340px); }
-  body:has(.workbench-navigator[data-open="true"]):has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 580px); }
   body:has(.rail[data-open="true"]) .viewport-controls { right: 360px; }
 }
 
@@ -11,15 +10,10 @@
   .rail { width: 400px; }
   body:has(.rail[data-open="true"]) { --canvas-right: 400px; }
   body:has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 400px); }
-  body:has(.workbench-navigator[data-open="true"]):has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 640px); }
   body:has(.rail[data-open="true"]) .viewport-controls { right: 420px; }
 }
 
 @media (min-width: 1100px) {
-  .workbench-navigator { width: 240px; }
-  body:has(.workbench-navigator[data-open="true"]) { --canvas-left: 240px; }
-  body:has(.workbench-navigator[data-open="true"]) #canvas-container { margin-left: 240px; width: calc(100% - 240px); }
-  body:has(.workbench-navigator[data-open="true"]) .filter-bar { left: 256px; }
   /* The legend stacks above the minimap, inside the column the playback bar's clearance already keeps free. */
   .legend-box { left: calc(var(--canvas-left) + 16px); bottom: 140px; }
 }
@@ -28,9 +22,8 @@
   .workbench-minimap { left: 8px; width: 112px; height: 76px; }
 }
 
-/* Below the workbench breakpoint both panels are overlay drawers */
+/* Below the workbench breakpoint the rail is an overlay drawer */
 @media (max-width: 1099px) {
-  body:has(.workbench-navigator[data-open="true"]) .workbench-backdrop,
   body:has(.rail[data-open="true"]) .workbench-backdrop { display: block; }
   .viewport-controls { right: 8px; }
   .legend-box { display: none; }

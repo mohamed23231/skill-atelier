@@ -199,12 +199,12 @@ function restoreUrlState() {
       return notices;
     }
     if (link.chapter !== undefined) {
-      const available = typeof availableChapters === 'function' ? availableChapters().map(c => c.id) : ['walkthrough', 'review', 'data', 'plan'];
+      const available = typeof availableChapters === 'function' ? availableChapters().map(c => c.id) : ['overview', 'walkthrough', 'changes', 'review', 'evidence', 'data', 'plan'];
       if (available.includes(link.chapter)) {
         openChapter(link.chapter);
       } else {
-        notices.push(`Chapter ${link.chapter} does not exist; showing the walkthrough.`);
-        openChapter('walkthrough');
+        notices.push(`Chapter ${link.chapter} does not exist; showing the overview.`);
+        openChapter('overview');
       }
     }
     if (link.view !== undefined) {
