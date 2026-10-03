@@ -26,11 +26,13 @@ Options for 'build':
   --md <file>              Also write a Markdown architecture report
   --strict                 Fail the build if any quality warning is found
   --direction <LR|TB>      Layout flow direction (default: LR)
+  --router <curved|orthogonal> Routing style (default: orthogonal)
   --repo-root <dir>        Root used to resolve VERIFIED file paths (default: cwd)
   --no-open                Do not open the generated HTML in the default browser
                            (build opens it automatically unless this flag or ARCH_VIZ_NO_OPEN is set)
 
 Options for 'scaffold':
+  --router <curved|orthogonal> Routing style for the drafted spec
   -o, --output <file>      Where to write the draft spec (default: ./architecture.json)
   --base <ref>             Diff against this git ref instead of the uncommitted working tree
   --repo-root <dir>        Repository to read the diff from (default: cwd)
@@ -64,7 +66,7 @@ function parseOptions(args) {
   const opts = { _: [] };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    const needsValue = ['-o', '--output', '--md', '--direction', '--repo-root', '--view', '--base', '--title', '--ignore'];
+    const needsValue = ['-o', '--output', '--md', '--direction', '--router', '--repo-root', '--view', '--base', '--title', '--ignore'];
     if (needsValue.includes(arg)) {
       const value = args[i + 1];
       if (value === undefined || value.startsWith('-')) fail(`Option ${arg} requires a value.`);
@@ -74,6 +76,9 @@ function parseOptions(args) {
       else if (arg === '--direction') {
         if (value !== 'LR' && value !== 'TB') fail(`--direction must be LR or TB, received "${value}".`);
         opts.direction = value;
+      } else if (arg === '--router') {
+        if (!['curved', 'orthogonal'].includes(value)) fail('--router must be curved or orthogonal.');
+        opts.router = value;
       } else if (arg === '--repo-root') opts.repoRoot = value;
       else if (arg === '--view') opts.view = value;
       else if (arg === '--base') opts.base = value;
@@ -284,7 +289,7 @@ function commandBuild(args) {
       outputMarkdown: opts.markdown || null,
       strict: Boolean(opts.strict),
       repoRoot: opts.repoRoot ? path.resolve(opts.repoRoot) : process.cwd(),
-      layoutOverrides: opts.direction ? { direction: opts.direction } : {},
+      layoutOverrides: { ...(opts.direction ? { direction: opts.direction } : {}), ...(opts.router ? { router: opts.router } : {}) },
     });
 
     console.log('\n--- Architecture Visualization Generated ---');
@@ -328,6 +333,7 @@ function commandScaffold(args) {
   }
 
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  if (opts.router) result.spec.layout = { ...result.spec.layout, router: opts.router };
   fs.writeFileSync(targetPath, JSON.stringify(result.spec, null, 2), 'utf8');
 
   console.log(`\nScaffolded draft specification: ${targetPath}`);

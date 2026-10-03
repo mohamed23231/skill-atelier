@@ -2,7 +2,9 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { computeLayout, buildEdgeGeometry, cubicPointAt, curveSanityScore, resolveLabelCollisions } = require('../src/engine/layout.js');
+const { computeLayout: computeDefaultLayout, buildEdgeGeometry, cubicPointAt, curveSanityScore, resolveLabelCollisions } = require('../src/engine/layout.js');
+// Existing geometry cases explicitly exercise the curved fallback.
+const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { ...config, router: 'curved' });
 const geometry = require('../src/engine/geometry.js');
 const { loadTemplate } = require('../src/workbench/assemble.js');
 const {
@@ -642,14 +644,16 @@ const cases = [
       const { compileArchitecture } = require('../src/engine/compiler.js');
       const nodeGeometry = require('../src/engine/geometry.js');
       const spec = require(path.join(__dirname, '../examples/1-crud-business-feature/architecture.json'));
-      const compiled = compileArchitecture(spec);
+      const compiled = compileArchitecture(spec, { layoutOverrides: { router: 'curved' } });
       const geometrySource = fs.readFileSync(path.join(__dirname, '../src/engine/geometry.js'), 'utf8');
 
-      assert.ok(compiled.html.includes(geometrySource), 'generated HTML must contain the exact geometry runtime');
+      assert.ok(compiled.html.includes(require('../src/workbench/assemble.js').compactSource(geometrySource)), 'generated HTML must contain the exact geometry runtime code');
 
       const ctx = { Math, String, Number, Array, JSON, console };
       vm.createContext(ctx);
-      const injected = compiled.html.slice(compiled.html.indexOf(geometrySource), compiled.html.indexOf(geometrySource) + geometrySource.length);
+      // Run the code exactly as the page carries it, so the parity below is the browser's.
+      const shipped = require('../src/workbench/assemble.js').compactSource(geometrySource);
+      const injected = compiled.html.slice(compiled.html.indexOf(shipped), compiled.html.indexOf(shipped) + shipped.length);
       vm.runInContext(injected, ctx);
       const browserGeometry = ctx.ArchVizGeometry;
       assert.ok(browserGeometry, 'injected runtime must attach ArchVizGeometry');
@@ -692,7 +696,7 @@ const cases = [
         assert.deepStrictEqual(JSON.parse(JSON.stringify(fromBrowser)), JSON.parse(JSON.stringify(fromNode)), `live drag recomputation diverged on edge ${edge.id}`);
       });
 
-      const recipCompiled = compileArchitecture(clone(ADVERSARIAL_RECIPROCAL_SPEC));
+      const recipCompiled = compileArchitecture(clone(ADVERSARIAL_RECIPROCAL_SPEC), { layoutOverrides: { router: 'curved' } });
       const makeEl = () => ({
         querySelector: () => makeEl(),
         querySelectorAll: () => [],
@@ -1004,5 +1008,20 @@ const cases = [
     },
   ],
 ];
+
+cases.push(['orthogonal layout is the default and widens overfull column gaps', () => {
+  const spec = clone(ADVERSARIAL_DENSE_PORTS_SPEC);
+  const narrow = computeDefaultLayout(spec, { boundaryGapX: 0 });
+  const curved = computeLayout(spec, { boundaryGapX: 0 });
+  assert.strictEqual(narrow.config.router, 'orthogonal');
+  assert.strictEqual(narrow.routingStats.cardCrossings, 0);
+  assert.ok(narrow.nodes.some(n => n.x > curved.nodes.find(c => c.id === n.id).x), 'overfull gap must widen');
+  assert.ok(!narrow.routingStats.gapDemand, 'widening resolves track demand');
+  narrow.boundaries.forEach(b => {
+    const left = Math.min(...narrow.nodes.filter(n => n.boundary === b.id).map(n => n.x));
+    assert.strictEqual(left - b.x, narrow.config.boundaryPaddingX, 'whole boundary moves with its columns');
+  });
+  assert.deepStrictEqual(narrow, computeDefaultLayout(spec, { boundaryGapX: 0 }));
+}]);
 
 module.exports = { name: 'Layout Engine', cases };

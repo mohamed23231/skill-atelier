@@ -85,9 +85,8 @@ function moveDraggedBoundary(clientX, clientY) {
     if (nodeEl) nodeEl.setAttribute('transform', `translate(${node.x}, ${node.y})`);
   });
 
-  movedNodes.forEach(({ node }) => {
-    recalculateNodeEdges(node.id);
-  });
+  if (LAYOUT_DATA.config.router === 'orthogonal') recomputeAllEdges();
+  else movedNodes.forEach(({ node }) => recalculateNodeEdges(node.id));
 }
 
 function syncLabelLeader(edge) {
@@ -148,7 +147,40 @@ function resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes) {
   });
 }
 
+function recomputeAllEdges() {
+  if (LAYOUT_DATA.config.router !== 'orthogonal') {
+    (LAYOUT_DATA.nodes || []).forEach(node => recalculateNodeEdges(node.id));
+    return;
+  }
+  const labelWidths = Object.fromEntries(LAYOUT_DATA.edges.map(edge => [edge.id, estimateLabelWidth(edge.label || edge.packetLabel)]));
+  const result = ArchVizOrthogonal.routeOrthogonal(LAYOUT_DATA, { labelWidths, direction: LAYOUT_DATA.config.direction });
+  LAYOUT_DATA.routingStats = result.stats;
+  LAYOUT_DATA.edges.forEach(edge => {
+    Object.assign(edge, ArchVizOrthogonal.buildRouteGeometry(result.routes[edge.id], labelWidths[edge.id], ArchVizGeometry, { source: nodeById.get(edge.source), target: nodeById.get(edge.target) }));
+    const path = document.getElementById(`path-${edge.id}`);
+    if (path) path.setAttribute('d', edge.path);
+    const group = document.getElementById(`label-${edge.id}`);
+    if (group) {
+      const rect = group.querySelector('rect');
+      const text = group.querySelector('text');
+      if (rect) {
+        rect.setAttribute('x', edge.labelX - edge.labelWidth / 2);
+        rect.setAttribute('y', edge.labelY - 9);
+      }
+      if (text) {
+        text.setAttribute('x', edge.labelX);
+        text.setAttribute('y', edge.labelY);
+      }
+      syncLabelLeader(edge);
+    }
+  });
+}
+
 function recalculateNodeEdges(nodeId) {
+  if (LAYOUT_DATA.config.router === 'orthogonal') {
+    recomputeAllEdges();
+    return;
+  }
   (LAYOUT_DATA.edges || [])
     .filter(e => e.source === nodeId || e.target === nodeId)
     .forEach(edge => {

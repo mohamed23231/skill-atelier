@@ -76,7 +76,15 @@ function drawGhostSteps(steps) {
     const to = nodeById.get(step.to);
     if (!from || !to) return;
 
-    const geometry = buildEdgeGeometry(from, to, isLRLayout);
+    let geometry;
+    if (LAYOUT_DATA.config.router === 'orthogonal') {
+      const route = ArchVizOrthogonal.routeOrthogonal({ nodes: LAYOUT_DATA.nodes, boundaries: LAYOUT_DATA.boundaries,
+        edges: [{ id: 'playback-hop', source: from.id, target: to.id }] },
+        { labelWidths: { 'playback-hop': 0 }, direction: LAYOUT_DATA.config.direction }).routes['playback-hop'];
+      geometry = ArchVizOrthogonal.buildRouteGeometry(route, 0, ArchVizGeometry, { source: from, target: to });
+    } else {
+      geometry = buildEdgeGeometry(from, to, isLRLayout);
+    }
     const path = el('path', { class: 'edge-path ghost playback-ghost highlighted', d: geometry.path, 'marker-end': 'url(#arrow-highlight)' });
     withTooltip(path, `${step.label || 'Playback step'} (no modelled edge)`);
     ghostLayer.appendChild(path);

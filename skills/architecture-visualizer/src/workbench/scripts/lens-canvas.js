@@ -1,4 +1,42 @@
 // Lens encoding changes marks, never visibility or spotlight state.
+function lensEdgePoint(edge, t) {
+  if (edge && edge.points && edge.controls && typeof ArchVizGeometry !== 'undefined') {
+    return ArchVizGeometry.cubicPointAt(t, edge.points, edge.controls);
+  }
+  return { x: (edge && edge.labelX) || 0, y: (edge && edge.labelY) || 0 };
+}
+
+// An against-flow edge earns a chevron at its midpoint; a cycle edge a numbered disc.
+function renderEdgeLensMarks(group, edge, mark) {
+  if (!group || !mark) return;
+  if (mark.marker === 'against-flow') {
+    const mid = lensEdgePoint(edge, 0.5);
+    const before = lensEdgePoint(edge, 0.4);
+    const angle = (Math.atan2(mid.y - before.y, mid.x - before.x) * 180) / Math.PI;
+    group.appendChild(el('path', {
+      class: 'edge-chevron',
+      d: 'M -5 -5 L 5 0 L -5 5',
+      transform: `translate(${mid.x}, ${mid.y}) rotate(${angle})`,
+      'data-edge-id': edge.id,
+      'aria-hidden': 'true',
+    }));
+  }
+  if (mark.cycleIndex != null) {
+    const mid = lensEdgePoint(edge, 0.5);
+    const badge = el('g', {
+      class: 'edge-cycle-marker',
+      transform: `translate(${mid.x}, ${mid.y})`,
+      'data-cycle-index': String(mark.cycleIndex),
+      'aria-hidden': 'true',
+    });
+    badge.appendChild(el('circle', { class: 'edge-cycle-circle', r: 9 }));
+    const text = el('text', { class: 'edge-cycle-text', x: 0, y: 0 });
+    text.textContent = String(mark.cycleIndex);
+    badge.appendChild(text);
+    group.appendChild(badge);
+  }
+}
+
 function applyLens() {
   const encoding = lensEncoding(state.lens, ARCH_SPEC);
   (LAYOUT_DATA.nodes || []).forEach(node => {
@@ -11,14 +49,23 @@ function applyLens() {
     else group.removeAttribute('data-lens-fill');
     group.toggleAttribute('data-lens-muted', mark.mutedText);
     group.toggleAttribute('data-lens-strike', mark.strike);
+    group.querySelectorAll('.node-evidence-marker').forEach(item => item.remove());
     renderNodeLensDetails(group, node, mark.badge, mark.marker);
+    if (mark.marker === 'evidence-missing') {
+      group.appendChild(el('circle', { class: 'node-evidence-marker', cx: node.width - 22, cy: 16, r: 4.5, 'aria-hidden': 'true' }));
+    }
   });
   (LAYOUT_DATA.edges || []).forEach(edge => {
+    const group = document.getElementById(`edge-${edge.id}`);
     const path = document.getElementById(`path-${edge.id}`);
     const mark = encoding.edges[edge.id];
     if (!path || !mark) return;
     path.dataset.lensStroke = mark.stroke;
     path.dataset.lensStyle = mark.strokeStyle;
+    if (group) {
+      group.querySelectorAll('.edge-chevron, .edge-cycle-marker').forEach(item => item.remove());
+      renderEdgeLensMarks(group, edge, mark);
+    }
   });
   ghostLayer.querySelectorAll('.policy-ghost').forEach(item => item.remove());
   encoding.ghosts.forEach(ghost => {

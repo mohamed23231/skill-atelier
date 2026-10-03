@@ -212,41 +212,143 @@ function lensPolicyIdsWithFindings(findings) {
   return found;
 }
 
+function lensPolicyMap(parts) {
+  const byId = {};
+  parts.policies.forEach((policy) => {
+    if (policy && policy.id != null) byId[policy.id] = policy;
+  });
+  return byId;
+}
+
+// A finding answers to a policy only when that policy is declared; built-in evidence findings
+// (evidence.*) and unknown ids stay generic.
+function lensFindingKind(byId, finding) {
+  if (!finding || finding.policyId == null) return null;
+  const policy = byId[finding.policyId];
+  return policy && policy.kind ? policy.kind : null;
+}
+
+function lensNodeFindings(findings, nodeId) {
+  return findings.filter((finding) => finding && lensArray(finding.nodeIds).indexOf(nodeId) !== -1);
+}
+
+function lensRiskNodeCounts(parts, nodeId, key) {
+  return parts.edges.filter((edge) => edge && edge[key] === nodeId).length;
+}
+
 function lensRiskNodes(parts, options) {
+  const byId = lensPolicyMap(parts);
   const nodes = {};
   let hasFailure = false;
   let hasViolation = false;
+  let hasFanLimit = false;
+  let hasRequiredEvidence = false;
   parts.nodes.forEach((node) => {
     if (!node || node.id == null) return;
-    const finding = lensFirstFinding(parts.findings, 'nodeIds', node.id);
-    const modes = lensArray(lensObject(node.details).failureModes);
-    if (finding) {
+    const findings = lensNodeFindings(parts.findings, node.id);
+    let generic = null;
+    let fan = null;
+    let missingEvidence = false;
+    findings.forEach((finding) => {
+      if (!finding) return;
       hasViolation = true;
-      const text = finding.policyId != null ? String(finding.policyId) : 'Violation';
-      nodes[node.id] = lensNodeEncoding({ stroke: 'risk', badge: lensBadge(text, 'risk') });
-      return;
-    }
-    if (modes.length > 0) {
+      const kind = lensFindingKind(byId, finding);
+      if (kind === 'fan_in' || kind === 'fan_out') {
+        if (!fan) fan = { finding: finding, kind: kind, policy: byId[finding.policyId] };
+        return;
+      }
+      if (kind === 'required_evidence') {
+        missingEvidence = true;
+        return;
+      }
+      if (!generic) generic = finding;
+    });
+    const modes = lensArray(lensObject(node.details).failureModes);
+    let stroke = 'line';
+    let badge = null;
+    let marker = null;
+    if (generic) {
+      stroke = 'risk';
+      badge = lensBadge(generic.policyId != null ? String(generic.policyId) : 'Violation', 'risk');
+    } else if (fan) {
+      hasFanLimit = true;
+      stroke = 'risk';
+      const counted = fan.kind === 'fan_out' ? 'source' : 'target';
+      const actual = lensRiskNodeCounts(parts, node.id, counted);
+      const limit = fan.policy && typeof fan.policy.max === 'number' ? fan.policy.max : 0;
+      const label = fan.kind === 'fan_out' ? 'fan-out' : 'fan-in';
+      badge = lensBadge(`${label} ${actual} / max ${limit}`, 'risk');
+    } else if (modes.length > 0) {
       hasFailure = true;
-      const text = `${modes.length} failure mode${modes.length === 1 ? '' : 's'}`;
-      nodes[node.id] = lensNodeEncoding({ stroke: 'warn', badge: lensBadge(text, 'warn') });
+      stroke = 'warn';
+      badge = lensBadge(`${modes.length} failure mode${modes.length === 1 ? '' : 's'}`, 'warn');
+    }
+    if (missingEvidence) {
+      hasRequiredEvidence = true;
+      marker = 'evidence-missing';
+    }
+    nodes[node.id] = lensNodeEncoding({ stroke: stroke, badge: badge, marker: marker });
+  });
+  return {
+    nodes: nodes,
+    hasFailure: hasFailure,
+    hasViolation: hasViolation,
+    hasFanLimit: hasFanLimit,
+    hasRequiredEvidence: hasRequiredEvidence,
+  };
+}
+
+// Layer-direction edges point against the layer order; cycle edges carry their position in the loop.
+// Both are addressed by the finding that names them, so the canvas needs no policy knowledge.
+function lensRiskEdgeMarks(parts) {
+  const byId = lensPolicyMap(parts);
+  const marks = {};
+  parts.findings.forEach((finding) => {
+    if (!finding) return;
+    const kind = lensFindingKind(byId, finding);
+    const edgeIds = lensArray(finding.edgeIds);
+    if (kind === 'layer_direction') {
+      edgeIds.forEach((edgeId) => {
+        if (edgeId == null) return;
+        if (!marks[edgeId]) marks[edgeId] = {};
+        marks[edgeId].marker = 'against-flow';
+      });
       return;
     }
-    nodes[node.id] = lensNodeEncoding();
+    if (kind !== 'cycle') return;
+    const cycleNodes = lensArray(finding.nodeIds);
+    const order = {};
+    cycleNodes.forEach((from, index) => {
+      const to = cycleNodes[(index + 1) % cycleNodes.length];
+      order[`${from}->${to}`] = index + 1;
+    });
+    parts.edges.forEach((edge) => {
+      if (!edge || edge.id == null || edgeIds.indexOf(edge.id) === -1) return;
+      const index = order[`${edge.source}->${edge.target}`];
+      if (index == null) return;
+      if (!marks[edge.id]) marks[edge.id] = {};
+      if (marks[edge.id].cycleIndex == null) marks[edge.id].cycleIndex = index;
+    });
   });
-  return { nodes: nodes, hasFailure: hasFailure, hasViolation: hasViolation };
+  return marks;
 }
 
 function lensRiskEdges(parts) {
   const edges = {};
   const required = parts.policies.filter((policy) => policy && policy.kind === 'required_dependency');
+  const marks = lensRiskEdgeMarks(parts);
   let hasRequired = false;
   let hasViolation = false;
+  let hasAgainstFlow = false;
+  let hasCycle = false;
   parts.edges.forEach((edge) => {
     if (!edge || edge.id == null) return;
+    const mark = marks[edge.id];
+    if (mark && mark.marker === 'against-flow') hasAgainstFlow = true;
+    if (mark && mark.cycleIndex != null) hasCycle = true;
     if (lensFirstFinding(parts.findings, 'edgeIds', edge.id)) {
       hasViolation = true;
-      edges[edge.id] = lensEdgeEncoding('risk', 'solid');
+      edges[edge.id] = Object.assign(lensEdgeEncoding('risk', 'solid'), mark || {});
       return;
     }
     const satisfies = required.some((policy) => policy.from === edge.source && policy.to === edge.target);
@@ -257,7 +359,13 @@ function lensRiskEdges(parts) {
     }
     edges[edge.id] = lensEdgeEncoding('edge', edge.communication !== 'async' ? 'solid' : 'dashed');
   });
-  return { edges: edges, hasRequired: hasRequired, hasViolation: hasViolation };
+  return {
+    edges: edges,
+    hasRequired: hasRequired,
+    hasViolation: hasViolation,
+    hasAgainstFlow: hasAgainstFlow,
+    hasCycle: hasCycle,
+  };
 }
 
 function lensRiskGhosts(parts, options) {
@@ -298,6 +406,18 @@ function lensRisk(spec, options) {
   }
   if (nodeResult.hasViolation || edgeResult.hasViolation) {
     keyItems.push(lensKeyItem('violation', 'Violation', 'risk', 'solid'));
+  }
+  if (edgeResult.hasAgainstFlow) {
+    keyItems.push(lensKeyItem('against-layer-order', 'Against the layer order', 'risk', 'solid'));
+  }
+  if (edgeResult.hasCycle) {
+    keyItems.push(lensKeyItem('cycle', 'Cycle', 'risk', 'solid'));
+  }
+  if (nodeResult.hasFanLimit) {
+    keyItems.push(lensKeyItem('fan-limit', 'Over its fan-in or fan-out limit', 'risk', 'solid'));
+  }
+  if (nodeResult.hasRequiredEvidence) {
+    keyItems.push(lensKeyItem('required-evidence', 'Missing required evidence', 'risk', 'solid'));
   }
   if (nodeResult.hasFailure) {
     keyItems.push(lensKeyItem('failure-modes', 'Failure modes', 'warn', 'solid'));

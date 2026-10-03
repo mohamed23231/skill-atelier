@@ -7,7 +7,7 @@ const { compileArchitecture, generateMarkdownReport } = require('../src/engine/c
 const { validateArchitecture } = require('../src/engine/validator.js');
 const { exportToMermaid } = require('../src/utils/mermaid-exporter.js');
 const { VALID_SPEC, clone } = require('./fixtures.js');
-const { assembleWorkbench, loadTemplate, WORKBENCH_DIR } = require('../src/workbench/assemble.js');
+const { assembleWorkbench, loadTemplate, compactSource, WORKBENCH_DIR } = require('../src/workbench/assemble.js');
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-test-'));
@@ -213,7 +213,8 @@ const cases = [
       const result = compileArchitecture(clone(VALID_SPEC));
 
       assert.ok(geometrySource.length > 0, 'geometry.js must exist');
-      assert.ok(result.html.includes(geometrySource), 'exact geometry.js source must be inlined');
+      // The page carries the compacted source: the same code without indentation or comment-only lines.
+      assert.ok(result.html.includes(compactSource(geometrySource)), 'exact geometry.js code must be inlined');
       assert.ok(!result.html.includes('/* __GEOMETRY_RUNTIME__ */'), 'geometry placeholder must be substituted');
       assert.ok(!result.html.includes('// Edge geometry mirrored from src/engine/layout.js'));
       assert.ok(!/src=["'][^"']*geometry\.js/.test(result.html), 'generated HTML must stay a single offline file');
@@ -221,6 +222,11 @@ const cases = [
       const ctx = { Math, String, Number, Array, JSON, console };
       vm.createContext(ctx);
       vm.runInContext(geometrySource, ctx);
+      const routerSource = fs.readFileSync(path.join(__dirname, '../src/engine/orthogonal.js'), 'utf8');
+      assert.ok(result.html.includes(compactSource(routerSource)), 'exact router runtime code must be inlined');
+      vm.runInContext(routerSource, ctx);
+      assert.strictEqual(typeof ctx.ArchVizOrthogonal.routeOrthogonal, 'function');
+      assert.strictEqual(typeof ctx.ArchVizOrthogonal.buildRouteGeometry, 'function');
       assert.ok(ctx.ArchVizGeometry, 'runtime must attach ArchVizGeometry');
       assert.strictEqual(typeof ctx.ArchVizGeometry.buildEdgeGeometry, 'function');
       assert.strictEqual(typeof ctx.ArchVizGeometry.resolveLabelCollisions, 'function');
@@ -562,5 +568,25 @@ function readEmbeddedSpec(html) {
   }
   throw new Error('Unterminated embedded ARCH_SPEC');
 }
+
+cases.push(['CLI build accepts both router modes and rejects unknown modes', () => {
+  const { execFileSync } = require('node:child_process');
+  const dir = tmpDir();
+  try {
+    const specPath = path.join(dir, 'spec.json');
+    fs.writeFileSync(specPath, JSON.stringify(VALID_SPEC));
+    const cli = path.join(__dirname, '../bin/arch-viz.js');
+    for (const router of ['orthogonal', 'curved']) {
+      const output = path.join(dir, router + '.html');
+      execFileSync(process.execPath, [cli, 'build', specPath, '-o', output, '--router', router, '--no-open'], { stdio: 'pipe' });
+      const html = fs.readFileSync(output, 'utf8');
+      assert.strictEqual(readEmbeddedSpec(html).layout.router, router);
+    }
+    assert.throws(() => execFileSync(process.execPath,
+      [cli, 'build', specPath, '--router', 'unknown', '--no-open'], { stdio: 'pipe' }), /--router must be curved or orthogonal/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}]);
 
 module.exports = { name: 'Compiler & Exporter', cases };

@@ -339,4 +339,81 @@ cases.push(['all architecture examples preserve routing invariants', () => {
   console.log(report.join('\n'));
 }]);
 
+cases.push(['integrated layouts preserve routes, slots, jumps and bounds across examples and adversarial fixtures', () => {
+  const specs = Object.entries(fixtures).filter(([name]) => name.startsWith('ADVERSARIAL_'));
+  const examples = path.join(__dirname, '../examples');
+  fs.readdirSync(examples).sort().forEach(name => {
+    const file = path.join(examples, name, 'architecture.json');
+    if (fs.existsSync(file)) specs.push([name, JSON.parse(fs.readFileSync(file, 'utf8'))]);
+  });
+  for (const [name, spec] of specs) {
+    for (const direction of ['LR', 'TB']) {
+      const layout = computeLayout(spec, { direction });
+      assert.deepEqual(layout, computeLayout(spec, { direction }), `${name} is deterministic`);
+      assert.equal(layout.routingStats.cardCrossings, 0);
+      if (direction === 'LR') verify(layout, routeOrthogonal(layout, { labelWidths: Object.fromEntries(layout.edges.map(e => [e.id, e.labelWidth])) }));
+      const labels = [];
+      for (const e of layout.edges) {
+        assert(!/[CQ]/.test(e.path), 'routing uses only lines and arcs');
+        if (e.labelWidth > 0) {
+          assert(e.labelSlot, `${name}/${direction}/${e.id} needs a label slot`);
+          layout.nodes.forEach(n => assert(!overlaps(e.labelBounds, cardBox(n))));
+          labels.forEach(box => assert(!overlaps(e.labelBounds, box)));
+          labels.push(e.labelBounds);
+        }
+        e.polyline.forEach(p => {
+          assert(p.x >= e.pathBounds.minX && p.x <= e.pathBounds.maxX);
+          assert(p.y >= e.pathBounds.minY && p.y <= e.pathBounds.maxY);
+        });
+        assert.equal(e.points.x2, e.endpoint.x);
+        assert.equal(e.points.y2, e.endpoint.y);
+        const target = layout.nodes.find(n => n.id === e.target);
+        const shape = require('../src/engine/geometry.js');
+        const face = e.points.targetFace;
+        const outline = face === 'left' ? shape.shapeLeftX(target, e.endpoint.y - target.y - target.height / 2)
+          : face === 'right' ? shape.shapeRightX(target, e.endpoint.y - target.y - target.height / 2)
+          : face === 'top' ? shape.shapeTopY(target, e.endpoint.x - target.x - target.width / 2)
+          : shape.shapeBottomY(target, e.endpoint.x - target.x - target.width / 2);
+        assert(Math.abs(Math.abs((face === 'left' || face === 'right' ? e.endpoint.x : e.endpoint.y) - outline) - shape.EDGE_END_GAP) < 1e-8);
+        const previous = e.polyline[e.polyline.length - 2];
+        assert.equal(e.terminalTangent.x, e.endpoint.x - previous.x);
+        assert.equal(e.terminalTangent.y, e.endpoint.y - previous.y);
+      }
+    }
+  }
+}]);
+
+cases.push(['browser drag reroutes all edges with the same geometry as Node', () => {
+  const layout = computeLayout(fixtures.clone(fixtures.ADVERSARIAL_DENSE_PORTS_SPEC));
+  const paths = new Map();
+  const ctx = {
+    LAYOUT_DATA: layout,
+    nodeById: new Map(layout.nodes.map(n => [n.id, n])),
+    document: { getElementById: id => id.startsWith('path-')
+      ? { setAttribute: (key, value) => paths.set(id, value) } : null }
+  };
+  vm.createContext(ctx);
+  for (const file of ['engine/geometry.js', 'engine/orthogonal.js', 'workbench/scripts/drag.js']) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), ctx);
+  }
+  ctx.estimateLabelWidth = ctx.ArchVizGeometry.estimateLabelWidth;
+  const before = layout.edges.map(e => e.path);
+  layout.nodes.find(n => n.id === 'hub').y += 35;
+  ctx.recalculateNodeEdges('hub');
+  assert.equal(layout.routingStats.cardCrossings, 0);
+  assert(layout.edges.some((e, i) => e.path !== before[i]));
+  assert.equal(paths.size, layout.edges.length, 'every edge path must update');
+  const widths = Object.fromEntries(layout.edges.map(e => [e.id, e.labelWidth]));
+  const result = routeOrthogonal(layout, { labelWidths: widths });
+  const geometry = require('../src/engine/geometry.js');
+  const { buildRouteGeometry } = require('../src/engine/orthogonal.js');
+  layout.edges.forEach(e => {
+    const expected = buildRouteGeometry(result.routes[e.id], widths[e.id], geometry,
+      { source: ctx.nodeById.get(e.source), target: ctx.nodeById.get(e.target) });
+    assert.equal(paths.get('path-' + e.id), expected.path);
+    assert.equal(JSON.stringify(e.polyline), JSON.stringify(expected.polyline));
+    assert.equal(JSON.stringify(e.labelBounds), JSON.stringify(expected.labelBounds));
+  });
+}]);
+
 module.exports = { name: 'Orthogonal router', cases };

@@ -24,7 +24,7 @@ const STROKES = ['line', 'ink', 'ok', 'warn', 'risk', 'edge'];
 const STROKE_STYLES = ['solid', 'dashed', 'dotted'];
 const FILLS = [null, 'ok-tint', 'surface-2'];
 const TONES = ['ok', 'warn', 'risk', 'neutral'];
-const MARKERS = [null, 'exception-ring'];
+const MARKERS = [null, 'exception-ring', 'evidence-missing'];
 const NODE_KEYS = ['badge', 'fill', 'marker', 'mutedText', 'strike', 'stroke', 'strokeStyle'];
 const EDGE_KEYS = ['stroke', 'strokeStyle'];
 
@@ -63,6 +63,26 @@ function edgeEnc(stroke, strokeStyle) {
 
 function encode(lens, spec, options) {
   return host(lensEncoding(lens, spec, options));
+}
+
+// The risk lens reads the same findings the validator publishes, so the policy cases below build a
+// real spec, compile it, and encode the embedded model rather than hand-writing findings.
+function compiled(spec) {
+  const result = compileArchitecture(spec);
+  const match = result.html.match(/const ARCH_SPEC = (\{[\s\S]*?\});\n/);
+  assert.ok(match, 'embedded ARCH_SPEC was not found');
+  return JSON.parse(match[1]);
+}
+
+function riskBase(overrides) {
+  return Object.assign(
+    { meta: { title: 'Risk audit', description: 'Risk lens fixture', grounding: 'illustrative' } },
+    overrides || {}
+  );
+}
+
+function service(id, boundary) {
+  return Object.assign({ id, label: id.toUpperCase(), type: 'service' }, boundary ? { boundary } : {});
 }
 
 function assertNoOpacity(value, where) {
@@ -592,6 +612,173 @@ const cases = [
     'risk: an empty model has no key items and no ghosts',
     () => {
       assert.deepStrictEqual(encode('risk', baseSpec()), { nodes: {}, edges: {}, ghosts: [], keyItems: [] });
+    },
+  ],
+
+  // --- risk: every policy kind the validator evaluates ---
+
+  [
+    'risk: a layer-direction violation marks its edge against the flow',
+    () => {
+      const spec = compiled(riskBase({
+        boundaries: [{ id: 'top', label: 'Top' }, { id: 'bottom', label: 'Bottom' }],
+        nodes: [service('upper', 'top'), service('lower', 'bottom')],
+        edges: [{ id: 'back', source: 'lower', target: 'upper', label: 'Back Up', communication: 'sync' }],
+        policies: [{ id: 'pol_dir', kind: 'layer_direction', layers: ['top', 'bottom'] }],
+      }));
+      const encoding = encode('risk', spec);
+      assert.deepStrictEqual(encoding.edges.back, { stroke: 'risk', strokeStyle: 'solid', marker: 'against-flow' });
+      assert.deepStrictEqual(encoding.keyItems.filter((item) => item.id === 'against-layer-order'), [
+        { id: 'against-layer-order', label: 'Against the layer order', stroke: 'risk', strokeStyle: 'solid' },
+      ]);
+    },
+  ],
+
+  [
+    'risk: a cycle numbers its edges in cycle order',
+    () => {
+      const spec = compiled(riskBase({
+        nodes: [service('a'), service('b'), service('c')],
+        edges: [
+          { id: 'ab', source: 'a', target: 'b', label: 'ab' },
+          { id: 'bc', source: 'b', target: 'c', label: 'bc' },
+          { id: 'ca', source: 'c', target: 'a', label: 'ca' },
+        ],
+        policies: [{ id: 'pol_cycle', kind: 'cycle' }],
+      }));
+      const encoding = encode('risk', spec);
+      assert.deepStrictEqual(encoding.edges.ab, { stroke: 'risk', strokeStyle: 'solid', cycleIndex: 1 });
+      assert.deepStrictEqual(encoding.edges.bc, { stroke: 'risk', strokeStyle: 'solid', cycleIndex: 2 });
+      assert.deepStrictEqual(encoding.edges.ca, { stroke: 'risk', strokeStyle: 'solid', cycleIndex: 3 });
+      assert.deepStrictEqual(encoding.keyItems.filter((item) => item.id === 'cycle'), [
+        { id: 'cycle', label: 'Cycle', stroke: 'risk', strokeStyle: 'solid' },
+      ]);
+    },
+  ],
+
+  [
+    'risk: a fan-in overload badges the count against the limit',
+    () => {
+      const spec = compiled(riskBase({
+        nodes: [service('hub'), service('s1'), service('s2'), service('s3')],
+        edges: [
+          { id: 'e1', source: 's1', target: 'hub', label: 'e1' },
+          { id: 'e2', source: 's2', target: 'hub', label: 'e2' },
+          { id: 'e3', source: 's3', target: 'hub', label: 'e3' },
+        ],
+        policies: [{ id: 'pol_fan_in', kind: 'fan_in', max: 2 }],
+      }));
+      const encoding = encode('risk', spec);
+      assert.deepStrictEqual(encoding.nodes.hub, nodeEnc({
+        stroke: 'risk',
+        badge: { text: 'fan-in 3 / max 2', tone: 'risk' },
+      }));
+      assert.deepStrictEqual(encoding.keyItems.filter((item) => item.id === 'fan-limit'), [
+        { id: 'fan-limit', label: 'Over its fan-in or fan-out limit', stroke: 'risk', strokeStyle: 'solid' },
+      ]);
+    },
+  ],
+
+  [
+    'risk: a fan-out overload badges the count against the limit',
+    () => {
+      const spec = compiled(riskBase({
+        nodes: [service('hub'), service('s1'), service('s2'), service('s3')],
+        edges: [
+          { id: 'e1', source: 'hub', target: 's1', label: 'e1' },
+          { id: 'e2', source: 'hub', target: 's2', label: 'e2' },
+          { id: 'e3', source: 'hub', target: 's3', label: 'e3' },
+        ],
+        policies: [{ id: 'pol_fan_out', kind: 'fan_out', max: 1 }],
+      }));
+      assert.deepStrictEqual(encode('risk', spec).nodes.hub.badge, { text: 'fan-out 3 / max 1', tone: 'risk' });
+    },
+  ],
+
+  [
+    'risk: a fan badge beats a failure mode',
+    () => {
+      const spec = compiled(riskBase({
+        nodes: [
+          Object.assign(service('hub'), { details: { failureModes: ['saturates'] } }),
+          service('s1'), service('s2'), service('s3'),
+        ],
+        edges: [
+          { id: 'e1', source: 's1', target: 'hub', label: 'e1' },
+          { id: 'e2', source: 's2', target: 'hub', label: 'e2' },
+          { id: 'e3', source: 's3', target: 'hub', label: 'e3' },
+        ],
+        policies: [{ id: 'pol_fan_in', kind: 'fan_in', max: 2 }],
+      }));
+      assert.deepStrictEqual(encode('risk', spec).nodes.hub, nodeEnc({
+        stroke: 'risk',
+        badge: { text: 'fan-in 3 / max 2', tone: 'risk' },
+      }));
+    },
+  ],
+
+  [
+    'risk: a policy-id badge from another finding beats the fan badge',
+    () => {
+      const spec = compiled(riskBase({
+        nodes: [service('hub'), service('s1'), service('s2'), service('s3'), service('source')],
+        edges: [
+          { id: 'e1', source: 's1', target: 'hub', label: 'e1' },
+          { id: 'e2', source: 's2', target: 'hub', label: 'e2' },
+          { id: 'e3', source: 's3', target: 'hub', label: 'e3' },
+          { id: 'e4', source: 'source', target: 'hub', label: 'e4' },
+        ],
+        policies: [
+          { id: 'pol_fan_in', kind: 'fan_in', max: 2 },
+          { id: 'pol_forbidden', kind: 'forbidden_dependency', from: 'source', to: 'hub' },
+        ],
+      }));
+      assert.deepStrictEqual(encode('risk', spec).nodes.hub, nodeEnc({
+        stroke: 'risk',
+        badge: { text: 'pol_forbidden', tone: 'risk' },
+      }));
+    },
+  ],
+
+  [
+    'risk: a required-evidence failure marks the node and keeps any badge',
+    () => {
+      const spec = compiled(riskBase({
+        nodes: [
+          Object.assign(service('hub'), { status: 'VERIFIED' }),
+          service('s1'), service('s2'), service('s3'),
+        ],
+        edges: [
+          { id: 'e1', source: 's1', target: 'hub', label: 'e1' },
+          { id: 'e2', source: 's2', target: 'hub', label: 'e2' },
+          { id: 'e3', source: 's3', target: 'hub', label: 'e3' },
+        ],
+        policies: [
+          { id: 'pol_fan_in', kind: 'fan_in', max: 2 },
+          { id: 'pol_evidence', kind: 'required_evidence', status: 'VERIFIED' },
+        ],
+      }));
+      const encoding = encode('risk', spec);
+      assert.deepStrictEqual(encoding.nodes.hub, nodeEnc({
+        stroke: 'risk',
+        badge: { text: 'fan-in 3 / max 2', tone: 'risk' },
+        marker: 'evidence-missing',
+      }));
+      assert.deepStrictEqual(encoding.keyItems.filter((item) => item.id === 'required-evidence'), [
+        { id: 'required-evidence', label: 'Missing required evidence', stroke: 'risk', strokeStyle: 'solid' },
+      ]);
+    },
+  ],
+
+  [
+    'risk: a required-evidence failure alone still marks the node',
+    () => {
+      const spec = compiled(riskBase({
+        nodes: [Object.assign(service('lonely'), { status: 'VERIFIED' })],
+        policies: [{ id: 'pol_evidence', kind: 'required_evidence', status: 'VERIFIED' }],
+      }));
+      const encoding = encode('risk', spec);
+      assert.deepStrictEqual(encoding.nodes.lonely, nodeEnc({ marker: 'evidence-missing' }));
     },
   ],
 

@@ -5,7 +5,7 @@ const { narrateInteraction, narrateStage } = require('./narrative.js');
 const { computeLayout } = require('./layout.js');
 const { exportToMermaid } = require('../utils/mermaid-exporter.js');
 const { displayRepoPath } = require('../utils/repo-inspector.js');
-const { loadTemplate } = require('../workbench/assemble.js');
+const { loadTemplate, compactSource } = require('../workbench/assemble.js');
 const { currentCommit, applyFreshness } = require('../utils/freshness.js');
 
 const FILE_LOCATOR_KEYS = ['path', 'file', 'document'];
@@ -42,6 +42,7 @@ function publishablePaths(source, repoRoot) {
 function compileArchitecture(inputSpec, options = {}) {
   const repoRoot = options.repoRoot ? path.resolve(options.repoRoot) : process.cwd();
   const spec = JSON.parse(JSON.stringify(inputSpec || {}));
+  if (options.layoutOverrides) spec.layout = { ...spec.layout, ...options.layoutOverrides };
 
   // Only a repository-grounded spec is tied to a commit; an illustrative one stays reproducible.
   if (spec && spec.meta && typeof spec.meta === 'object' && spec.meta.grounding !== 'illustrative') {
@@ -91,6 +92,7 @@ function compileArchitecture(inputSpec, options = {}) {
   const geometryPath = path.join(__dirname, 'geometry.js');
   let html = loadTemplate();
   const geometryRuntime = fs.readFileSync(geometryPath, 'utf8');
+  const orthogonalRuntime = fs.readFileSync(path.join(__dirname, 'orthogonal.js'), 'utf8');
 
   html = substitutePlaceholders(html, [
     ['__DOCUMENT_TITLE__', escapeHtml(spec.meta?.title || 'System Architecture')],
@@ -99,7 +101,7 @@ function compileArchitecture(inputSpec, options = {}) {
     ['/* __MERMAID_DATA__ */ {}', embedJson(mermaid)],
     ['/* __MARKDOWN_DATA__ */ ""', embedJson(markdown)],
     ['/* __QUALITY_GATE_DATA__ */ []', embedJson(validation.gate)],
-    ['/* __GEOMETRY_RUNTIME__ */', geometryRuntime],
+    ['/* __GEOMETRY_RUNTIME__ */', compactSource(geometryRuntime + '\n' + orthogonalRuntime)],
   ]);
 
   if (options.outputHtml) {

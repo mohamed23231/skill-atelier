@@ -54,7 +54,17 @@ function assembleWorkbench(dir = WORKBENCH_DIR) {
 // whitespace-sensitive text is authored in the workbench: multi-line template literals only build
 // HTML for innerHTML, and the shell has no <pre> or <textarea> content. A test guards both.
 function loadTemplate(dir = WORKBENCH_DIR) {
-  return assembleWorkbench(dir).html.replace(/^[ \t]+/gm, '');
+  return compactSource(assembleWorkbench(dir).html);
 }
 
-module.exports = { assembleWorkbench, loadTemplate, WORKBENCH_DIR };
+// Drops leading indentation, lines that are only a `//` comment, and lines that are only a one-line
+// `/* ... */` comment. Only whole lines go, so code, strings and markup on a line are never cut.
+function compactSource(text) {
+  return text
+    .replace(/^[ \t]+/gm, '')
+    .replace(/^\/\/[^\n]*\n/gm, '')
+    // Build placeholders such as /* __GEOMETRY_RUNTIME__ */ are comments too, and must survive.
+    .replace(/^\/\*(?![^\n]*__[A-Z_]+__)[^\n]*?\*\/[ \t]*\n/gm, '');
+}
+
+module.exports = { assembleWorkbench, loadTemplate, compactSource, WORKBENCH_DIR };

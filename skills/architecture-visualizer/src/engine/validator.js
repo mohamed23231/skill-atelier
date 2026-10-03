@@ -1215,9 +1215,18 @@ function measureEdgeCardCrossings(spec) {
   const ids = [];
 
   layout.edges.forEach((edge) => {
-    if (!edge.points || !edge.controls) return;
+    if (!edge.points) return;
     const hit = layout.nodes.some((node) => {
       if (node.id === edge.source || node.id === edge.target) return false;
+      if (edge.polyline) {
+        return edge.polyline.slice(1).some((b, i) => {
+          const a = edge.polyline[i];
+          return a.y === b.y
+            ? a.y > node.y && a.y < node.y + node.height && Math.min(a.x, b.x) < node.x + node.width && Math.max(a.x, b.x) > node.x
+            : a.x > node.x && a.x < node.x + node.width && Math.min(a.y, b.y) < node.y + node.height && Math.max(a.y, b.y) > node.y;
+        });
+      }
+      if (!edge.controls) return false;
       for (let i = 1; i < SAMPLES; i++) {
         const p = cubicPointAt(i / SAMPLES, edge.points, edge.controls);
         if (p.x > node.x && p.x < node.x + node.width && p.y > node.y && p.y < node.y + node.height) return true;
@@ -1227,7 +1236,12 @@ function measureEdgeCardCrossings(spec) {
     if (hit) ids.push(edge.id);
   });
 
-  return { count: ids.length, total: layout.edges.length, ids };
+  const slots = layout.edges.filter(e => e.labelWidth > 0);
+  const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  const labelIssues = layout.config.router === 'orthogonal' ? slots.filter((edge, i) => !edge.labelSlot ||
+    layout.nodes.some(n => overlaps(edge.labelBounds, { left: n.x, right: n.x + n.width, top: n.y, bottom: n.y + n.height })) ||
+    slots.slice(0, i).some(other => other.labelBounds && overlaps(edge.labelBounds, other.labelBounds))).map(e => e.id) : [];
+  return { count: ids.length, total: layout.edges.length, ids, labelIssues };
 }
 
 function runQualityGate(ctx) {
@@ -1311,7 +1325,9 @@ function runQualityGate(ctx) {
     const label = e.label || e.packetLabel || '';
     if (label.length > LIMITS.edgeLabelChars) longLabels.push(`edge ${e.id || `${e.source}->${e.target}`}`);
   });
-  if (longLabels.length > 0) {
+  if (crossing && crossing.labelIssues.length) {
+    add(6, 'Readable labels', GATE_STATUS.WARN, `Missing or overlapping label slots: ${crossing.labelIssues.join(', ')}.`);
+  } else if (longLabels.length > 0) {
     add(6, 'Readable labels', GATE_STATUS.WARN, `Truncated at default zoom: ${longLabels.slice(0, 5).join(', ')}${longLabels.length > 5 ? ` (+${longLabels.length - 5} more)` : ''}.`);
   } else {
     add(6, 'Readable labels', GATE_STATUS.PASS, 'All labels fit the node card at default zoom.');

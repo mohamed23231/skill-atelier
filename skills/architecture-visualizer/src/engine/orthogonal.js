@@ -188,6 +188,34 @@
   }
 
   function routeOrthogonal(input, options = {}) {
+    // Rotate the routing grid for TB, preserving horizontal label dimensions.
+    // Enter cards from below so their boundary headers remain clear.
+    if (options.direction === 'TB') {
+      const transpose = n => ({ ...n, x: n.y, y: n.x, width: n.height, height: n.width });
+      const labelWidths = Object.fromEntries((input.edges || []).map(e => [e.id, 18]));
+      const labelHeights = Object.fromEntries((input.edges || []).map(e => [e.id, options.labelWidths?.[e.id] ?? e.labelWidth ?? 80]));
+      const margin = options.margin ?? 14;
+      const headers = (input.boundaries || []).map(b => ({
+        left: b.y - margin, right: b.y + Math.min(HEADER_HEIGHT, b.height) + margin,
+        top: b.x - margin, bottom: b.x + b.width + margin
+      }));
+      const result = routeOrthogonal({ ...input, nodes: input.nodes.map(transpose), boundaries: (input.boundaries || []).map(transpose) },
+        { ...options, direction: 'LR', labelWidths, labelHeights, headers, targetFace: 'right' });
+      Object.values(result.routes).forEach(route => {
+        route.points = route.points.map(p => ({ x: p.y, y: p.x }));
+        if (route.labelSlot) {
+          const slot = route.labelSlot;
+          route.labelSlot = { ...slot, x: slot.y, y: slot.x, width: slot.height, height: slot.width,
+            orientation: slot.orientation === 'horizontal' ? 'vertical' : 'horizontal' };
+        }
+      });
+      result.stats.jumps = computeJumps(result.routes);
+      result.stats.crossings = result.stats.jumps;
+      Object.values(result.routes).forEach(route => {
+        route.path = makePath(route, options.cornerRadius ?? 6, options.jumpRadius ?? 5);
+      });
+      return result;
+    }
     const { cornerRadius = 6, jumpRadius = 5, portSpacing = null, trackSpacing = 10, margin = 14, labelWidths = {} } = options;
     if (![cornerRadius, jumpRadius, ...(portSpacing == null ? [] : [portSpacing]), margin].every(n => Number.isFinite(n) && n >= 0) || !Number.isFinite(trackSpacing) || trackSpacing <= 0) {
       throw new RangeError('Router spacing and radii must be finite and nonnegative; trackSpacing must be positive.');
@@ -197,7 +225,7 @@
     const edges = [...(input.edges || [])].sort(byId);
     const nodeMap = new Map(nodes.map(n => [n.id, n]));
     const boxes = nodes.map(n => ({ ...rect(n, margin), id: n.id }));
-    const headers = boundaries.flatMap(b => {
+    const headers = options.headers || boundaries.flatMap(b => {
       const members = nodes.filter(n => n.boundary === b.id);
       const headerBottom = b.y + Math.min(HEADER_HEIGHT, b.height);
       const bottom = Math.min(headerBottom, ...(members.length ? members.map(n => n.y) : [headerBottom])) + margin;
@@ -217,7 +245,7 @@
       const kind = source.id === target.id ? 'self' : target.rank > source.rank ? 'forward' : target.rank < source.rank ? 'backward' : 'same-column';
       if (ports.has(edge.id)) throw new Error(`Duplicate edge id ${edge.id}.`);
       ports.set(edge.id, { kind });
-      [['source', source, target, 'right'], ['target', target, source, kind === 'self' || kind === 'same-column' ? 'right' : 'left']].forEach(([end, node, other, face]) => {
+      [['source', source, target, 'right'], ['target', target, source, options.targetFace || (kind === 'self' || kind === 'same-column' ? 'right' : 'left')]].forEach(([end, node, other, face]) => {
         const key = `${node.id}:${face}`;
         if (!faceGroups.has(key)) faceGroups.set(key, []);
         faceGroups.get(key).push({ edge, end, node, other, face });
@@ -273,7 +301,7 @@
       const involved = nodes.filter(n => n.rank >= Math.min(source.rank, target.rank) && n.rank <= Math.max(source.rank, target.rank));
       const involvedHeaders = boundaries.filter(b => involved.some(n => n.boundary === b.id));
       const rule = {
-        forward: port.kind === 'forward',
+        forward: port.kind === 'forward' && port.target.face === 'left',
         backward: port.kind === 'backward',
         endDirection: port.target.face === 'left' ? 0 : 2,
         top: Math.min(...involved.map(n => n.y - margin), ...involvedHeaders.map(b => b.y - margin)),
@@ -302,6 +330,8 @@
       const capacity = Math.floor((gap.right - gap.left) / trackSpacing) + 1;
       if (segments.length > capacity) {
         if (!stats.gapDemand) stats.gapDemand = {};
+        if (!stats.gapAvailable) stats.gapAvailable = {};
+        stats.gapAvailable[gaps.indexOf(gap) - 1] = gap.right - gap.left + 2 * margin;
         stats.gapDemand[gaps.indexOf(gap) - 1] = (segments.length - 1) * trackSpacing + 2 * margin;
       }
       segments.forEach((segment, i) => {
@@ -317,6 +347,8 @@
       const route = routes[edge.id];
       const width = labelWidths[edge.id] == null ? (edge.labelWidth == null ? 80 : edge.labelWidth) : labelWidths[edge.id];
       if (!Number.isFinite(width) || width < 0) throw new RangeError(`Invalid label width for edge ${edge.id}.`);
+      const height = options.labelHeights?.[edge.id] ?? 18;
+      if (!Number.isFinite(height) || height < 0) throw new RangeError(`Invalid label height for edge ${edge.id}.`);
       const segments = [];
       for (let i = 0; i + 1 < route.points.length; i++) {
         const a = route.points[i];
@@ -331,11 +363,11 @@
         const fixed = horizontal ? segment.a.y : segment.a.x;
         const low = Math.min(horizontal ? segment.a.x : segment.a.y, horizontal ? segment.b.x : segment.b.y);
         const high = low + segment.length;
-        const half = horizontal ? width / 2 + 8 : 9;
+        const half = horizontal ? width / 2 + 8 : height / 2;
         // Prefer the midpoint, then the nearest exact collision boundary. The pill
         // may overhang a short segment, but its centre always remains on the line.
         const blockers = [...labelObstacles, ...slots].filter(box => horizontal
-          ? fixed - 9 < box.bottom && fixed + 9 > box.top
+          ? fixed - height / 2 < box.bottom && fixed + height / 2 > box.top
           : fixed - width / 2 - 8 < box.right && fixed + width / 2 + 8 > box.left);
         const center = (low + high) / 2;
         const positions = [...new Set([center, low, high, ...blockers.flatMap(box => horizontal
@@ -346,9 +378,9 @@
         for (const position of positions) {
           const x = horizontal ? position : fixed;
           const y = horizontal ? fixed : position;
-          const box = { left: x - width / 2 - 8, right: x + width / 2 + 8, top: y - 9, bottom: y + 9 };
+          const box = { left: x - width / 2 - 8, right: x + width / 2 + 8, top: y - height / 2, bottom: y + height / 2 };
           if (labelObstacles.some(card => overlap(box, card)) || slots.some(slot => overlap(box, slot))) continue;
-          placements.push({ slot: { x, y, width, height: 18, segment: segment.index, orientation: segment.orientation }, box });
+          placements.push({ slot: { x, y, width, height, segment: segment.index, orientation: segment.orientation }, box });
         }
       }
       return placements;
@@ -397,5 +429,63 @@
     return { routes, stats };
   }
 
-  return { routeOrthogonal, computeJumps };
+  // Adapt the router's polyline to the workbench's geometry contract in both runtimes.
+  function buildRouteGeometry(route, labelWidth, geometry, options = {}) {
+    const polyline = route.points.map(p => ({ ...p }));
+    const source = options.source;
+    const target = options.target;
+    const start = polyline[0];
+    const finish = polyline[polyline.length - 1];
+    const beforeFinish = polyline[polyline.length - 2];
+    // Preserve the workbench's shape-aware attachment and arrowhead clearance.
+    if (source) {
+      if (start.y === polyline[1].y) start.x = geometry.shapeRightX(source, start.y - source.y - source.height / 2);
+      else start.y = geometry.shapeBottomY(source, start.x - source.x - source.width / 2);
+    }
+    if (target) {
+      if (finish.y === beforeFinish.y) {
+        const offset = finish.y - target.y - target.height / 2;
+        finish.x = finish.x > beforeFinish.x ? geometry.shapeLeftX(target, offset) - geometry.EDGE_END_GAP
+          : geometry.shapeRightX(target, offset) + geometry.EDGE_END_GAP;
+      } else {
+        const offset = finish.x - target.x - target.width / 2;
+        finish.y = finish.y > beforeFinish.y ? geometry.shapeTopY(target, offset) - geometry.EDGE_END_GAP
+          : geometry.shapeBottomY(target, offset) + geometry.EDGE_END_GAP;
+      }
+    }
+    const first = polyline[0];
+    const endpoint = polyline[polyline.length - 1];
+    const previous = polyline[polyline.length - 2] || first;
+    const tangent = { x: endpoint.x - previous.x, y: endpoint.y - previous.y };
+    tangent.angle = Math.atan2(tangent.y, tangent.x) * 180 / Math.PI;
+    const bounds = (left, top, right, bottom) => ({
+      left, top, right, bottom, minX: left, minY: top, maxX: right, maxY: bottom,
+      width: right - left, height: bottom - top
+    });
+    const radius = route.jumps.length ? (options.jumpRadius ?? 5) : 0;
+    const pathBounds = bounds(
+      Math.min(...polyline.map(p => p.x)) - radius,
+      Math.min(...polyline.map(p => p.y)) - radius,
+      Math.max(...polyline.map(p => p.x)) + radius,
+      Math.max(...polyline.map(p => p.y)) + radius
+    );
+    const slot = route.labelSlot;
+    const labelX = slot ? slot.x : first.x;
+    const labelY = slot ? slot.y : first.y;
+    const labelBounds = slot ? bounds(slot.x - slot.width / 2, slot.y - slot.height / 2,
+      slot.x + slot.width / 2, slot.y + slot.height / 2) : null;
+    const markerBounds = geometry.calculateMarkerBounds(endpoint, tangent);
+    return {
+      path: makePath({ ...route, points: polyline }, options.cornerRadius ?? 6, options.jumpRadius ?? 5), polyline, jumps: route.jumps, kind: route.kind,
+      points: { x1: first.x, y1: first.y, x2: endpoint.x, y2: endpoint.y, kind: route.kind,
+        targetFace: tangent.x > 0 ? 'left' : tangent.x < 0 ? 'right' : tangent.y > 0 ? 'top' : 'bottom' },
+      controls: null, endpoint, terminalTangent: tangent,
+      segments: polyline.map((p, i) => ({ type: i ? 'L' : 'M', x: p.x, y: p.y })),
+      labelSlot: slot, labelX, labelY, labelWidth, labelAnchor: slot ? { x: slot.x, y: slot.y } : null,
+      labelBounds, labelTether: null, pathBounds, markerBounds,
+      totalVisualBounds: geometry.calculateEdgeVisualBounds(pathBounds, markerBounds, labelWidth > 0 ? labelBounds : null)
+    };
+  }
+
+  return { routeOrthogonal, computeJumps, buildRouteGeometry };
 });

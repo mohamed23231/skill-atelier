@@ -1,7 +1,7 @@
 /**
  * Deterministic hierarchical layout engine for architecture diagrams.
  * Boundaries become ranks, nodes are ordered inside a rank by iterative barycenter
- * sweeps, and every edge is routed as a cubic bezier with an on-curve label anchor.
+ * sweeps, and edges use orthogonal routes with on-line label slots by default.
  * No randomness: identical input always yields identical coordinates.
  */
 
@@ -22,7 +22,11 @@ const {
   round,
 } = require('./geometry.js');
 
+const geometry = require('./geometry.js');
+const { routeOrthogonal, buildRouteGeometry } = require('./orthogonal.js');
+
 const DEFAULT_CONFIG = {
+  router: 'orthogonal',
   direction: 'LR',
   nodeWidth: 200,
   nodeHeight: 96,
@@ -65,6 +69,7 @@ function computeLayout(spec, customConfig = {}) {
   }
 
   const config = { ...DEFAULT_CONFIG, ...(spec.layout || {}), ...customConfig };
+  if (!['curved', 'orthogonal'].includes(config.router)) throw new RangeError('router must be curved or orthogonal.');
   const isLR = config.direction !== 'TB';
 
   const nodeMap = new Map();
@@ -218,7 +223,8 @@ function computeLayout(spec, customConfig = {}) {
     directedPairs.add(`${e.source}->${e.target}`);
   });
 
-  const computedEdges = (spec.edges || []).map((edge, idx) => {
+  let routingStats;
+  let computedEdges = (spec.edges || []).map((edge, idx) => {
     const sourceNode = nodeMap.get(edge.source);
     const targetNode = nodeMap.get(edge.target);
     const id = edge.id || `edge_${edge.source}_${edge.target}_${idx}`;
@@ -237,7 +243,7 @@ function computeLayout(spec, customConfig = {}) {
       sourcePortOffset,
       targetPortOffset,
       isReciprocal,
-      ...buildEdgeGeometry(sourceNode, targetNode, isLR, {
+      ...(config.router === 'orthogonal' ? {} : buildEdgeGeometry(sourceNode, targetNode, isLR, {
         obstacles: [...computedNodes, ...boundaryHeaderBoxes, ...placedLabels],
         placedLabels,
         nodes: computedNodes,
@@ -246,14 +252,53 @@ function computeLayout(spec, customConfig = {}) {
         sourcePortOffset,
         targetPortOffset,
         isReciprocal,
-      }),
+      })),
     };
   });
 
-  resolveLabelCollisions(computedEdges, computedNodes, boundaryHeaderBoxes);
+  if (config.router === 'orthogonal') {
+    const labelWidths = Object.fromEntries(computedEdges.map(e => [e.id, estimateLabelWidth(e.label || e.packetLabel)]));
+    const input = { nodes: computedNodes, boundaries: computedBoundaries, edges: computedEdges.filter(e => nodeMap.has(e.source) && nodeMap.has(e.target)) };
+    let result;
+    for (let pass = 0; pass <= 3; pass++) {
+      result = routeOrthogonal(input, { labelWidths, direction: config.direction });
+      if (pass === 3 || !result.stats.gapDemand) break;
+      // Router gap indexes refer to merged occupied x slabs, including subcolumns.
+      const columns = [];
+      const axis = isLR ? 'x' : 'y';
+      const size = isLR ? 'width' : 'height';
+      computedNodes.map(n => ({ left: n[axis], right: n[axis] + n[size] })).sort((a, b) => a.left - b.left).forEach(box => {
+        const last = columns[columns.length - 1];
+        if (last && box.left - 14 <= last.right + 14) last.right = Math.max(last.right, box.right);
+        else columns.push({ ...box });
+      });
+      let widened = false;
+      Object.entries(result.stats.gapDemand).sort((a, b) => Number(b[0]) - Number(a[0])).forEach(([index, demand]) => {
+        const left = columns[Number(index)];
+        const right = columns[Number(index) + 1];
+        if (!left || !right) return;
+        const shift = Math.ceil(Math.max(0, demand - (result.stats.gapAvailable?.[index] ?? (right.left - left.right))) / 8) * 8;
+        if (!shift) return;
+        widened = true;
+        computedBoundaries.forEach(b => {
+          const members = computedNodes.filter(n => n.boundary === b.id);
+          if (members.every(n => n[axis] >= right.left)) b[axis] += shift;
+          else if (members.some(n => n[axis] >= right.left)) b[size] += shift;
+        });
+        computedNodes.forEach(n => { if (n[axis] >= right.left) n[axis] += shift; });
+      });
+      if (!widened) break;
+    }
+    routingStats = result.stats;
+    computedEdges = computedEdges.map(e => result.routes[e.id]
+      ? { ...e, ...buildRouteGeometry(result.routes[e.id], labelWidths[e.id], geometry, { source: nodeMap.get(e.source), target: nodeMap.get(e.target) }) } : e);
+    boundaryHeaderBoxes.forEach((box, i) => { box.x = computedBoundaries[i].x + 12; box.y = computedBoundaries[i].y + 8; });
+  } else {
+    resolveLabelCollisions(computedEdges, computedNodes, boundaryHeaderBoxes);
+  }
 
   computedEdges.forEach((edge) => {
-    if (!edge.points) return;
+    if (!edge.points || config.router === 'orthogonal') return;
     edge.labelAnchor = { x: edge.labelX, y: edge.labelY };
     edge.labelBounds = {
       left: round(edge.labelX - edge.labelWidth / 2),
@@ -333,6 +378,7 @@ function computeLayout(spec, customConfig = {}) {
       canvasHeight,
     },
     totalVisualBounds,
+    routingStats,
     config,
     boundaries: computedBoundaries,
     boundaryHeaderBoxes,

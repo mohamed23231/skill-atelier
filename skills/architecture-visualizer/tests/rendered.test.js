@@ -394,9 +394,9 @@ function runPhases(specRelOrSpec, phases, timeoutMs, options = {}) {
   let html;
   if (typeof specRelOrSpec === 'string') {
     const specPath = path.join(__dirname, '..', specRelOrSpec);
-    html = compileArchitecture(JSON.parse(fs.readFileSync(specPath, 'utf8'))).html;
+    html = compileArchitecture(JSON.parse(fs.readFileSync(specPath, 'utf8')), options.compileOptions || {}).html;
   } else {
-    html = compileArchitecture(specRelOrSpec).html;
+    html = compileArchitecture(specRelOrSpec, options.compileOptions || {}).html;
   }
 
   const pageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-page-'));
@@ -1167,7 +1167,64 @@ function assertLensBarBehavior(raw) {
   })));
 }
 
+function riskNode(id, boundary) {
+  return Object.assign({ id, label: id.toUpperCase(), type: 'service', status: 'VERIFIED' }, boundary ? { boundary } : {});
+}
+
+function riskFixture(overrides) {
+  return Object.assign(
+    { meta: { title: 'Risk lens fixture', description: 'Risk lens policy verification', grounding: 'illustrative' } },
+    overrides || {}
+  );
+}
+
+// Compile a small inline spec, select the Risk lens, and return whatever the script observed.
+function riskRender(spec, script) {
+  return JSON.parse(lastEvalValue(runPhases(spec, [{ width: 1440, height: 900, steps: [ev(script)] }])[0]));
+}
+
 const cases = [
+  [
+    'p2: orthogonal paths use lines and bounded arcs with arrowheads',
+    () => {
+      const phase = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`JSON.stringify({
+        paths: [...document.querySelectorAll('.edge-path')].map(p => ({ d: p.getAttribute('d'), marker: p.getAttribute('marker-end') })),
+        cardCrossings: LAYOUT_DATA.routingStats.cardCrossings,
+        jumps: LAYOUT_DATA.routingStats.jumps,
+        drawnJumps: LAYOUT_DATA.edges.reduce((sum, e) => sum + e.jumps.length, 0)
+      })`)] }])[0];
+      const result = JSON.parse(lastEvalValue(phase));
+      assert.ok(result.paths.length);
+      result.paths.forEach(p => {
+        assert.ok(!/[CQHVSTZ]/i.test(p.d), 'orthogonal path contains only M, L and A commands');
+        assert.ok(p.marker && /^url\(#arrow/.test(p.marker), 'arrowhead is present');
+        const arcs = [...p.d.matchAll(/A ([\d.]+) ([\d.]+)/g)];
+        arcs.forEach(a => assert.ok(Number(a[1]) <= 6 && Number(a[2]) <= 6, 'arc exceeds corner radius'));
+      });
+      assert.strictEqual(result.cardCrossings, 0);
+      assert.ok(result.jumps > 0);
+      assert.strictEqual(result.drawnJumps, result.jumps);
+    },
+  ],
+  [
+    'p2: orthogonal card dragging reroutes every edge without card crossings',
+    () => {
+      const spec = fixtures.clone(fixtures.ADVERSARIAL_DENSE_PORTS_SPEC);
+      const phase = runPhases(spec, [{ width: 1440, height: 900, steps: [
+        ev(`window.__before = LAYOUT_DATA.edges.map(e => e.path); 0`),
+        mouse({ action: 'drag', selector: '#node-hub', fromFx: 0.5, fromFy: 0.5, toFx: 0.65, toFy: 0.75, segments: 3 }),
+        ev(`JSON.stringify({ changed: LAYOUT_DATA.edges.some((e, i) => e.path !== window.__before[i]),
+          crossings: LAYOUT_DATA.routingStats.cardCrossings,
+          matches: LAYOUT_DATA.edges.every(e => document.getElementById('path-' + e.id).getAttribute('d') === e.path),
+          labels: LAYOUT_DATA.edges.every(e => !e.labelWidth || e.labelSlot) })`)
+      ] }])[0];
+      const result = JSON.parse(lastEvalValue(phase));
+      assert.ok(result.changed, 'drag must change routes');
+      assert.strictEqual(result.crossings, 0);
+      assert.ok(result.matches, 'all DOM paths reflect current routes');
+      assert.ok(result.labels, 'all labels retain slots');
+    },
+  ],
   [
     '1e: lens arrows wrap, Home and End select and announce without panning',
     () => {
@@ -1331,6 +1388,105 @@ const cases = [
       assert.ok(!spec.edges.some(edge => edge.source === policy.from && edge.target === policy.to), 'the forbidden dependency must be absent');
       const obs = JSON.parse(lastEvalValue(runPhases(spec, [{ width: 1440, height: 900, steps: [ev(`selectLens('risk'); const ghosts = [...document.querySelectorAll('#ghost-layer .policy-ghost')].map(group => [group.querySelector('text').textContent, group.querySelector('line').dataset.lensStroke, getComputedStyle(group.querySelector('line')).strokeDasharray]); selectLens('structure'); JSON.stringify([ghosts, document.querySelectorAll('#ghost-layer .policy-ghost').length])`)] }])[0]));
       assert.deepStrictEqual(obs, [[['Forbidden · absent', 'risk', '2px, 4px']], 0]);
+    },
+  ],
+
+  [
+    'p3: risk lens required_dependency draws a Required · missing ghost',
+    () => {
+      const spec = riskFixture({ nodes: [riskNode('a'), riskNode('b')], policies: [{ id: 'pol_req', kind: 'required_dependency', from: 'a', to: 'b' }] });
+      const obs = riskRender(spec, `selectLens('risk'); JSON.stringify([...document.querySelectorAll('#ghost-layer .policy-ghost')].map(group => [group.querySelector('text').textContent, group.querySelector('line').dataset.lensStroke]))`);
+      assert.deepStrictEqual(obs, [['Required · missing', 'warn']]);
+    },
+  ],
+
+  [
+    'p3: risk lens forbidden_dependency marks the offending edge risk',
+    () => {
+      const spec = riskFixture({
+        nodes: [riskNode('a'), riskNode('b')],
+        edges: [{ id: 'e1', source: 'a', target: 'b', label: 'Forbidden call', communication: 'sync' }],
+        policies: [{ id: 'pol_forbidden', kind: 'forbidden_dependency', from: 'a', to: 'b' }],
+      });
+      const obs = riskRender(spec, `selectLens('risk'); const path = document.getElementById('path-e1'); JSON.stringify([path.dataset.lensStroke, path.dataset.lensStyle])`);
+      assert.deepStrictEqual(obs, ['risk', 'solid']);
+    },
+  ],
+
+  [
+    'p3: risk lens layer_direction draws an against-flow chevron on the edge',
+    () => {
+      const spec = riskFixture({
+        boundaries: [{ id: 'top', label: 'Top tier' }, { id: 'bottom', label: 'Bottom tier' }],
+        nodes: [riskNode('upper', 'top'), riskNode('lower', 'bottom')],
+        edges: [{ id: 'e1', source: 'lower', target: 'upper', label: 'Back Up', communication: 'sync' }],
+        policies: [{ id: 'pol_dir', kind: 'layer_direction', layers: ['top', 'bottom'] }],
+      });
+      const obs = riskRender(spec, `selectLens('risk'); const path = document.getElementById('path-e1'); const chevron = document.querySelector('#edge-e1 .edge-chevron'); JSON.stringify({ stroke: path.dataset.lensStroke, chevron: Boolean(chevron), edgeId: chevron && chevron.dataset.edgeId })`);
+      assert.deepStrictEqual(obs, { stroke: 'risk', chevron: true, edgeId: 'e1' });
+    },
+  ],
+
+  [
+    'p3: risk lens cycle numbers the cycle edges in order',
+    () => {
+      const spec = riskFixture({
+        nodes: [riskNode('a'), riskNode('b'), riskNode('c')],
+        edges: [
+          { id: 'ab', source: 'a', target: 'b', label: 'ab' },
+          { id: 'bc', source: 'b', target: 'c', label: 'bc' },
+          { id: 'ca', source: 'c', target: 'a', label: 'ca' },
+        ],
+        policies: [{ id: 'pol_cycle', kind: 'cycle' }],
+      });
+      const obs = riskRender(spec, `selectLens('risk'); const marks = [...document.querySelectorAll('#edges-layer .edge-cycle-marker')].sort((x, y) => Number(x.dataset.cycleIndex) - Number(y.dataset.cycleIndex)).map(marker => [marker.dataset.cycleIndex, marker.querySelector('text').textContent]); const path = document.getElementById('path-ab'); JSON.stringify({ marks, stroke: path.dataset.lensStroke })`);
+      assert.deepStrictEqual(obs, { marks: [['1', '1'], ['2', '2'], ['3', '3']], stroke: 'risk' });
+    },
+  ],
+
+  [
+    'p3: risk lens fan_in badges the overloaded node with the count',
+    () => {
+      const spec = riskFixture({
+        nodes: [riskNode('hub'), riskNode('s1'), riskNode('s2'), riskNode('s3')],
+        edges: [
+          { id: 'e1', source: 's1', target: 'hub', label: 'e1' },
+          { id: 'e2', source: 's2', target: 'hub', label: 'e2' },
+          { id: 'e3', source: 's3', target: 'hub', label: 'e3' },
+        ],
+        policies: [{ id: 'pol_fan_in', kind: 'fan_in', max: 2 }],
+      });
+      const obs = riskRender(spec, `selectLens('risk'); const group = document.getElementById('node-hub'); const badge = group.querySelector('.node-badge text'); JSON.stringify([group.dataset.lensStroke, badge && badge.textContent])`);
+      assert.deepStrictEqual(obs, ['risk', 'fan-in 3 / max 2']);
+    },
+  ],
+
+  [
+    'p3: risk lens fan_out badges the overloaded node with the count',
+    () => {
+      const spec = riskFixture({
+        nodes: [riskNode('hub'), riskNode('s1'), riskNode('s2'), riskNode('s3')],
+        edges: [
+          { id: 'e1', source: 'hub', target: 's1', label: 'e1' },
+          { id: 'e2', source: 'hub', target: 's2', label: 'e2' },
+          { id: 'e3', source: 'hub', target: 's3', label: 'e3' },
+        ],
+        policies: [{ id: 'pol_fan_out', kind: 'fan_out', max: 1 }],
+      });
+      const obs = riskRender(spec, `selectLens('risk'); const group = document.getElementById('node-hub'); const badge = group.querySelector('.node-badge text'); JSON.stringify([group.dataset.lensStroke, badge && badge.textContent])`);
+      assert.deepStrictEqual(obs, ['risk', 'fan-out 3 / max 1']);
+    },
+  ],
+
+  [
+    'p3: risk lens required_evidence draws a missing-evidence marker',
+    () => {
+      const spec = riskFixture({
+        nodes: [riskNode('a')],
+        policies: [{ id: 'pol_evidence', kind: 'required_evidence', status: 'VERIFIED' }],
+      });
+      const obs = riskRender(spec, `selectLens('risk'); const group = document.getElementById('node-a'); const badge = group.querySelector('.node-badge text'); JSON.stringify({ marker: Boolean(group.querySelector('.node-evidence-marker')), badge: badge && badge.textContent || null })`);
+      assert.deepStrictEqual(obs, { marker: true, badge: null });
     },
   ],
 
@@ -1887,7 +2043,7 @@ const cases = [
           const leader = document.querySelector('#label-e_dlq_triage .edge-label-leader');
           return { leader: Boolean(leader), x1: leader && Number(leader.getAttribute('x1')), tetherX: edge.labelTether.x };
         })()`)],
-      }]);
+      }], undefined, { compileOptions: { layoutOverrides: { router: 'curved' } } });
       const value = lastEvalValue(results[0]);
       assert.ok(value.leader, 'the pushed-out "Consume Poison Message" label must have a leader back to its edge');
       assert.strictEqual(value.x1, value.tetherX);
