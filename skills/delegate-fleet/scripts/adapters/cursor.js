@@ -26,6 +26,11 @@ module.exports = {
     if (req.session) args.push('--resume', req.session);
     return { args };
   },
+  // `cursor-agent models` prints "id - Label" lines under a heading.
+  listModels: {
+    args: ['models'],
+    parse: (out) => out.split('\n').map((l) => l.split(' - ')[0].trim()).filter((id) => /^[\w.\[\]=-]+$/.test(id) && /\d/.test(id)),
+  },
   probe(help) {
     return {
       edit: /--force/.test(help) ? 'verified' : 'unknown',

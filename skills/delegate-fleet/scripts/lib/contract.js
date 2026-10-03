@@ -31,7 +31,7 @@ const STATUS = Object.freeze({
   ABORTED: 'aborted',                           // relay was killed and forwarded the kill
   PROCESS_FAILURE: 'process_failure',           // non-zero exit or fatal signal
   IMPLEMENTER_FAILURE: 'implementer_failure',   // exit 0, but the worker refused or could not auth
-  NOOP: 'noop',                                 // exit 0 on an edit run, tree unchanged
+  NOOP: 'noop',                                 // exit 0, but an edit run changed nothing or a read-only run said nothing
   COMPLETED: 'completed',                       // exit 0 and the run did something
 });
 
@@ -43,6 +43,7 @@ const FINDING = Object.freeze({
   WORKER_STASH: 'worker_stash',
   READ_ONLY_VIOLATION: 'read_only_violation',
   FRAMEWORK_STATE_MODIFIED: 'framework_state_modified',
+  BACKGROUND_PROCESS: 'background_process',     // worker exited, its group did not
 });
 
 /** Statuses where nothing was dispatched, so no repository facts exist. */

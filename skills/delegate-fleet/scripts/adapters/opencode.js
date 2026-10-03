@@ -44,6 +44,11 @@ module.exports = {
     if (req.session) args.push('--session', req.session);
     return { args };
   },
+  // `opencode models` prints one provider/model id per line.
+  listModels: {
+    args: ['models'],
+    parse: (out) => out.split('\n').map((l) => l.trim()).filter((id) => /^[\w.-]+\/[\w.:-]+$/.test(id)),
+  },
   probe(help, evidence = {}) {
     return {
       edit: /--auto/.test(help) ? 'verified' : 'unknown',

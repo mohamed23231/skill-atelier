@@ -12,9 +12,10 @@
  * belong to the orchestrator.
  *
  * Trust posture: no dependencies, no network calls of its own, no telemetry,
- * no credential handling. It spawns exactly two kinds of process — `git` for
- * read-only status, and the worker CLI you named — always with an argv array
- * and never through a shell.
+ * no credential handling. It spawns `git` (status, plus `hash-object -w`,
+ * which only adds blobs to the object store), the worker CLI you named
+ * (including its model list), and read-only `lsof`/`ps` to see what is left
+ * running in the workspace — always with an argv array, never through a shell.
  */
 
 const fs = require('node:fs');
@@ -32,8 +33,11 @@ const contract = require('./lib/contract.js');
 const report = require('./lib/report.js');
 const checksLib = require('./lib/checks.js');
 const ledger = require('./lib/ledger.js');
+const models = require('./lib/models.js');
+const slots = require('./lib/slots.js');
+const procs = require('./lib/procs.js');
 
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 /** Worker stdout larger than this is not parsed for a report; the log keeps it all. */
 const REPORT_READ_CAP_BYTES = 32 * 1024 * 1024;
 
@@ -60,6 +64,8 @@ Run shape
   --max-budget-usd <n>  Spend cap in USD. Rejected if the backend cannot cap budget.
   --timeout <seconds>   Watchdog, positive integer, default ${options.DEFAULT_TIMEOUT_SECONDS}, max ${options.MAX_TIMEOUT_SECONDS}.
   --workspace <dir>     Repository the worker runs in (default: cwd).
+  --label "<why>"       Why this run needs what it asks for. Required for any tier or
+                        effort listed in limits.requireReason; recorded in the result.
 
 Checks (edit runs only; run after the worker, only when it completed)
   --check "<command>"   A project gate to run in the workspace, e.g. --check "pnpm test".
@@ -120,6 +126,8 @@ function render(r) {
     lines.push(`[relay] FINDING ${f.type}: ${f.detail}`);
     for (const p of f.paths.slice(0, 20)) lines.push(`           ${p}`);
     if (f.paths.length > 20) lines.push(`           … ${f.paths.length - 20} more`);
+    for (const r2 of f.restore || []) lines.push(`           restore: ${r2.command}`);
+    for (const p of f.processes || []) lines.push(`           pid ${p.pid}: ${p.command}`);
   }
   const checks = (r.verification && r.verification.checks) || [];
   for (const c of checks) {
@@ -175,6 +183,15 @@ function planWorker({ adapter, opts, config, verification, routeEntry, quota, ru
   // effort supplied by config reaches the invocation without ever being
   // checked against what this backend can honour.
   const effective = options.applyDefaults(opts, view);
+  // A model family is resolved against the installed CLI's own list, so a
+  // route never pins a model that has since been replaced.
+  if (models.isSpec(effective.model)) {
+    const r = models.resolve(effective.model, adapter, view.cliPath, process.env);
+    if (r.error) return { view, errors: [r.error], warnings };
+    warnings.push(r.detail);
+    effective.modelSpec = models.describe(effective.model);
+    effective.model = r.model;
+  }
   let freshVerifiedReadOnly = false;
   if (effective.mode === 'read-only') {
     // verification.json lives in the worker's writable workspace and can be
@@ -200,11 +217,18 @@ function planWorker({ adapter, opts, config, verification, routeEntry, quota, ru
   if (capCheck.errors.length) return { view, errors: capCheck.errors, warnings };
   const limit = view.tier ? config.limits.runsPer24h[view.tier] : undefined;
   const used = limit !== undefined ? ledger.runsInLastDay(runs(), view.tier) : 0;
+  // Escalation needs a reason on the record.
+  const rr = config.limits.requireReason || { tiers: [], efforts: [] };
+  const needsReason = opts.label ? null
+    : view.tier && rr.tiers.includes(view.tier) ? `the ${view.tier} tier`
+      : effective.effort && rr.efforts.includes(effective.effort) ? `effort "${effective.effort}"` : null;
   return {
     view, effective, freshVerifiedReadOnly,
     warnings: [...warnings, ...capCheck.warnings],
     exhausted: ledger.exhaustedUntil(quota, adapter.id),
     overLimit: limit !== undefined && used >= limit ? { tier: view.tier, limit, used } : null,
+    needsReason,
+    busy: view.maxConcurrent ? slots.busy({ workspace: opts.workspace, stateRoot: opts.stateRoot || opts.workspace, backend: adapter.id, max: view.maxConcurrent }) : null,
   };
 }
 
@@ -218,7 +242,7 @@ async function main() {
     backend: opts.backend, route: opts.route, brief: opts.brief, mode: opts.mode,
     model: opts.model, effort: opts.effort, session: opts.session,
     maxTurns: opts.maxTurns, maxBudgetUsd: opts.maxBudgetUsd,
-    workspace: opts.workspace, readOnly: opts.readOnly,
+    workspace: opts.workspace, readOnly: opts.readOnly, label: opts.label,
   };
 
   const capWarnings = [];
@@ -264,6 +288,7 @@ async function main() {
     }
     const skipped = [];
     let allUnavailable = true;
+    let firstBusy = null;
     for (let i = 0; i < candidates.length; i++) {
       const entry = candidates[i];
       const a = registryLib.getAdapter(entry.backend, registry);
@@ -274,9 +299,21 @@ async function main() {
       if (p.errors) { skipped.push({ backend: a.id, reason: p.errors.join('; ') }); continue; }
       if (p.exhausted) { skipped.push({ backend: a.id, reason: `out of quota until ${p.exhausted.until}` }); continue; }
       if (p.overLimit) { skipped.push({ backend: a.id, reason: `${p.overLimit.tier} tier used ${p.overLimit.used} of ${p.overLimit.limit} runs in the last 24h` }); continue; }
+      if (p.needsReason) { skipped.push({ backend: a.id, reason: `${p.needsReason} requires --label "<why>"` }); continue; }
+      if (p.busy) {
+        skipped.push({ backend: a.id, reason: `all ${p.view.maxConcurrent} slot(s) in use (pid ${p.busy.map((h) => h.pid).join(', ')})` });
+        if (!firstBusy) firstBusy = { a, p, i, at: skipped.length - 1 };
+        continue;
+      }
       adapter = a; plan = p;
       routeInfo = { name: opts.route, chosen: a.id, candidate: i, skipped };
       break;
+    }
+    if (!adapter && firstBusy) {
+      // Every eligible candidate is busy: queue for the first one rather than fail.
+      adapter = firstBusy.a; plan = firstBusy.p;
+      skipped.splice(firstBusy.at, 1);
+      routeInfo = { name: opts.route, chosen: adapter.id, candidate: firstBusy.i, skipped };
     }
     if (!adapter) {
       const detail = skipped.map((x) => `${x.backend}: ${x.reason}`);
@@ -309,6 +346,9 @@ async function main() {
     if (plan.overLimit) {
       invalid(`the ${plan.overLimit.tier} tier has used ${plan.overLimit.used} of its ${plan.overLimit.limit} runs in the last 24 hours`,
         [`raise limits.runsPer24h.${plan.overLimit.tier} in .delegate-fleet/config.json, or pick a cheaper worker`]);
+    }
+    if (plan.needsReason) {
+      invalid(`${plan.needsReason} requires a reason`, ['pass --label "<why this run needs it>"; it is recorded in the result']);
     }
     if (plan.exhausted) {
       // Named explicitly, so it is the orchestrator's call; say what is known.
@@ -343,7 +383,9 @@ async function main() {
     cwd: effective.workspace, promptFile,
   });
   const command = view.cliPath;
-  const warnings = [...capWarnings, ...lint.warnings];
+  // An adapter may adjust a flag the chosen model rejects; it says so here.
+  const buildNotes = (buildFor(prompt, null).notes || []).map(String);
+  const warnings = [...capWarnings, ...lint.warnings, ...buildNotes];
 
   if (opts.dryRun) {
     const built = buildFor(prompt, delivery === 'file' ? path.join(os.tmpdir(), 'delegate-fleet-dry-run', 'brief.md') : null);
@@ -355,7 +397,7 @@ async function main() {
       capabilities: view.capabilities, declaredCapabilities: view.declaredCapabilities,
       localVerification: view.localVerification,
       effective: {
-        model: effective.model, effort: effective.effort, session: effective.session,
+        model: effective.model, modelSpec: effective.modelSpec || null, effort: effective.effort, session: effective.session,
         timeoutSeconds: effective.timeoutSeconds,
         maxTurns: effective.maxTurns, maxBudgetUsd: effective.maxBudgetUsd,
         fixAttempts: effective.fixAttempts,
@@ -376,6 +418,32 @@ async function main() {
   // pid keeps two concurrent runs of the same brief from sharing a directory.
   // runs/ is excluded from every snapshot, so writing here mid-run is safe.
   const outDir = effective.outDir || path.join(effective.workspace, environment.STATE_DIR, 'runs', `${stamp}-${adapter.id}-${slug}-${process.pid}`);
+
+  // At most maxConcurrent live runs of this worker, across every worktree.
+  if (view.maxConcurrent) {
+    const slot = await slots.acquire({
+      workspace: effective.workspace, stateRoot, backend: adapter.id, max: view.maxConcurrent,
+      waitSeconds: effective.timeoutSeconds, info: { brief: briefPath, label: opts.label || null },
+      onWait: (h) => { if (!opts.json) console.log(`[relay] waiting for a ${adapter.id} slot (${h.length}/${view.maxConcurrent} in use by pid ${h.map((x) => x.pid).join(', ')})`); },
+    });
+    if (!slot.ok) {
+      invalid(`no ${adapter.id} slot freed within ${slot.waitedSeconds}s (maxConcurrent ${view.maxConcurrent}; held by pid ${slot.holders.map((x) => x.pid).join(', ')})`);
+    }
+    if (slot.waitedSeconds > 0) warnings.push(`waited ${slot.waitedSeconds}s for a ${adapter.id} slot (maxConcurrent ${view.maxConcurrent})`);
+  }
+
+  // A read-only reviewer may be unable to run git; hand it the diff as a file.
+  let firstPrompt = prompt;
+  if (effective.mode === 'read-only') {
+    const text = repo.workspaceDiff(effective.workspace);
+    if (text) {
+      fs.mkdirSync(outDir, { recursive: true });
+      const diffPath = path.join(outDir, 'workspace.diff');
+      fs.writeFileSync(diffPath, text);
+      const withDiff = briefLib.buildPrompt({ briefText, mode: effective.mode, scope: lint.scope, diffPath });
+      if (!briefLib.promptTooLarge(withDiff)) firstPrompt = withDiff;
+    }
+  }
   const streamOut = (chunk) => { try { process.stderr.write(chunk); } catch { /* best effort */ } };
 
   /** One worker process: deliver the prompt, capture live logs, copy them to `dir`. */
@@ -426,6 +494,9 @@ async function main() {
   }
 
   const before = repo.snapshot(effective.workspace);
+  // The owner's uncommitted files, copied into git's object store so a worker
+  // that clobbers one leaves a one-command restore behind.
+  const preserved = before.ok ? repo.preserveBlobs(effective.workspace, [...before.entries.keys()]) : {};
   let prev = before;
   let findings = [];
   const attempts = [];
@@ -433,7 +504,11 @@ async function main() {
   let status; let reason; let execResult; let worker; let diff = null; let scopeReport = null;
   let checkResults = [];
   let attemptDir = outDir;
-  let currentPrompt = prompt;
+  let currentPrompt = firstPrompt;
+  let lingered = false;
+  // What already runs in the workspace (the owner's dev server, say) is not the worker's.
+  const procsBefore = procs.workingIn(effective.workspace);
+  const escaped = new Map();
   const observedAll = () => before.ok && prev.ok;
 
   for (let n = 0; n <= effective.fixAttempts; n++) {
@@ -441,6 +516,8 @@ async function main() {
     const ran = await runWorker(currentPrompt, attemptDir);
     execResult = ran.execResult;
     worker = ran.worker;
+    if (execResult.lingered) lingered = true;
+    for (const p of procs.newSince(procsBefore, effective.workspace, execResult.pid) || []) escaped.set(p.pid, p);
     const after = repo.snapshot(effective.workspace);
 
     // Cumulative facts are always measured against the ORIGINAL baseline, so
@@ -461,6 +538,11 @@ async function main() {
     const derived = contract.deriveStatus({ execResult, mode: effective.mode, diff: stepDiff, denyPatterns: adapter.denyPatterns });
     status = derived.status; reason = derived.reason;
     if (derived.warning) warnings.push(derived.warning);
+    // A read-only run exists to report. One that exited 0 and said nothing did no work.
+    if (effective.mode === 'read-only' && status === contract.STATUS.COMPLETED && !(worker && worker.summary)) {
+      status = contract.STATUS.NOOP;
+      reason = 'the read-only run exited 0 but produced no final message; read the log before retrying';
+    }
     for (const [k, v] of Object.entries((worker && worker.usage) || {})) if (typeof v === 'number') usageTotal[k] = (usageTotal[k] || 0) + v;
 
     // Out of quota is a fact about the account, not the task: remember it so
@@ -525,6 +607,22 @@ async function main() {
     currentPrompt = next;
   }
 
+  if (lingered || escaped.size) {
+    const parts = [];
+    if (lingered) parts.push('the worker exited but left processes running in its process group; they were killed, so any work they were still doing is incomplete');
+    if (escaped.size) parts.push(`${escaped.size} process(es) started during the run are still running in the workspace and were NOT killed (they may be yours); stop them if the worker started them: kill ${[...escaped.keys()].join(' ')}`);
+    findings.push({
+      type: contract.FINDING.BACKGROUND_PROCESS,
+      detail: parts.join('; '),
+      paths: [],
+      processes: [...escaped.values()],
+    });
+  }
+  const disturbed = findings.find((f) => f.type === contract.FINDING.UNEXPECTED_REPOSITORY_CHANGE);
+  if (disturbed) {
+    disturbed.restore = disturbed.paths.filter((p) => preserved[p]).map((p) => ({ path: p, sha: preserved[p], command: repo.restoreCommand(p, preserved[p]) }));
+  }
+
   const observed = observedAll();
   if (!observed) {
     warnings.push(`repository facts unavailable (${before.reason || prev.reason}); scope, noop and commit detection are all disabled for this run`);
@@ -539,6 +637,7 @@ async function main() {
       ...request, backend: adapter.id, mode: effective.mode, model: effective.model,
       effort: effective.effort, session: effective.session,
       maxTurns: effective.maxTurns, maxBudgetUsd: effective.maxBudgetUsd,
+      modelSpec: effective.modelSpec || null,
       timeoutSeconds: effective.timeoutSeconds, briefPath,
       checks: opts.checks.map((c) => c.command),
       fixAttempts: effective.fixAttempts,
@@ -555,6 +654,7 @@ async function main() {
       durationSeconds: attempts.reduce((sum, a) => sum + a.durationSeconds, 0),
       outputTruncated: execResult.truncated,
       attempts: attempts.length,
+      lingeringProcessesKilled: lingered,
     },
     attempts: attempts.map(({ startedAt, ...rest }) => rest),
     repository: observed && diff ? {

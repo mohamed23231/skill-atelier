@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Repository facts. READ ONLY, always.
+ * Repository facts. READ ONLY, always, with one additive exception.
  *
  * This module never writes, resets, checks out, stashes or cleans anything. It
  * takes a content-addressed snapshot of the dirty working tree before and
@@ -11,6 +11,12 @@
  * ` M` before the run and that the worker then edits further is STILL ` M`
  * afterwards. A status-code-only baseline cannot see that edit, which is
  * exactly the case where a worker quietly mangles the user's uncommitted work.
+ *
+ * The exception: preserveBlobs() copies the owner's pre-existing dirty files
+ * into git's object store (`git hash-object -w`). That touches no file in the
+ * working tree, no index entry and no ref; it only makes a clobbered edit
+ * recoverable with one command. Unreferenced objects are pruned by git gc
+ * after its usual grace period (two weeks by default).
  */
 
 const fs = require('node:fs');
@@ -338,7 +344,60 @@ function reconcileScope(paths, scope) {
   return { inScope, outOfScope, declared };
 }
 
+const PRESERVE_MAX_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Store each pre-existing dirty file as a git blob. Returns { path: sha }.
+ * Best effort: a path that is gone, not a regular file, or huge is skipped.
+ */
+function preserveBlobs(repoRoot, paths) {
+  const files = [];
+  for (const rel of paths) {
+    try {
+      const st = fs.lstatSync(path.join(repoRoot, rel));
+      if (st.isFile() && st.size <= PRESERVE_MAX_BYTES) files.push(rel);
+    } catch { /* deleted before dispatch: HEAD already has it */ }
+  }
+  if (!files.length) return {};
+  const res = spawnSync('git', ['hash-object', '-w', '--no-filters', '--stdin-paths'], {
+    cwd: repoRoot, input: `${files.join('\n')}\n`, encoding: 'utf8', timeout: 60_000, maxBuffer: 16 * 1024 * 1024,
+  });
+  if (res.status !== 0) return {};
+  const shas = (res.stdout || '').trim().split('\n');
+  if (shas.length !== files.length) return {};
+  const out = {};
+  files.forEach((f, i) => { if (/^[0-9a-f]{40,64}$/.test(shas[i])) out[f] = shas[i]; });
+  return out;
+}
+
+/** One-line restore command for a preserved file. */
+function restoreCommand(file, sha) {
+  const q = (x) => `'${String(x).replace(/'/g, `'\\''`)}'`;
+  return `git cat-file blob ${sha} > ${q(file)}`;
+}
+
+const DIFF_CAP_BYTES = 2 * 1024 * 1024;
+
+/**
+ * The workspace's uncommitted changes as text: `git diff HEAD` plus the list
+ * of untracked files. Null when there is nothing to show or git cannot say.
+ */
+function workspaceDiff(repoRoot) {
+  const d = git(repoRoot, ['diff', 'HEAD', '--no-color', '--no-ext-diff']);
+  const u = git(repoRoot, ['ls-files', '--others', '--exclude-standard']);
+  if (d.status !== 0 && u.status !== 0) return null;
+  const untracked = (u.stdout || '').split('\n').filter((p) => p && !isRelayRunArtifact(p));
+  let text = d.status === 0 ? (d.stdout || '') : '';
+  if (untracked.length) text += `\n# Untracked files (new, not shown above):\n${untracked.map((p) => `#   ${p}`).join('\n')}\n`;
+  if (!text.trim()) return null;
+  if (Buffer.byteLength(text) > DIFF_CAP_BYTES) text = `${Buffer.from(text).subarray(0, DIFF_CAP_BYTES).toString('utf8')}\n# [diff truncated at ${DIFF_CAP_BYTES} bytes]\n`;
+  return text;
+}
+
 module.exports = {
+  preserveBlobs,
+  restoreCommand,
+  workspaceDiff,
   UNREADABLE,
   snapshot,
   diffSnapshots,

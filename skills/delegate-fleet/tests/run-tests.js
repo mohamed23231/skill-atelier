@@ -849,7 +849,7 @@ test('--out-dir is honoured (every option must reach something)', () => {
 test('discover output carries no stray internal fields', () => {
   const repo = H.tmpRepo();
   const res = H.runFleet(['discover', '--workspace', repo, '--json'], { cwd: repo });
-  const allowed = new Set(['id', 'title', 'cli', 'cliPath', 'supported', 'availability', 'declaredCapabilities', 'capabilities', 'localVerification', 'staleVerification', 'defaults', 'docs', 'staticEvidence', 'tier']);
+  const allowed = new Set(['id', 'title', 'cli', 'cliPath', 'supported', 'availability', 'declaredCapabilities', 'capabilities', 'localVerification', 'staleVerification', 'defaults', 'docs', 'staticEvidence', 'tier', 'maxConcurrent']);
   for (const b of res.json.backends) {
     for (const k of Object.keys(b)) assert.ok(allowed.has(k), `unexpected field "${k}" in discover output`);
   }
@@ -937,7 +937,7 @@ test('e2e: a fresh successful probe authorizes read-only without a saved record'
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
   H.useStub(repo, 'cursor'); // cursor declares readOnly: verified, and no doctor ran
   const b = H.writeBrief(repo);
-  const res = H.runRelay(['--backend', 'cursor', '--read-only', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  const res = H.runRelay(['--backend', 'cursor', '--read-only', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_PRINT: 'no issues found' } });
   assert.strictEqual(res.json.status, 'completed');
   assert.strictEqual(res.json.request.mode, 'read-only');
 });
@@ -947,7 +947,7 @@ test('e2e: --allow-unverified is the explicit way past that refusal', () => {
   H.useStub(repo, 'grok');
   const b = H.writeBrief(repo);
   const res = H.runRelay(['--backend', 'grok', '--read-only', '--allow-unverified', '--brief', b, '--workspace', repo, '--json'], {
-    cwd: repo, env: { STUB_HELP_TEXT: '--sandbox <PROFILE>\n' },
+    cwd: repo, env: { STUB_HELP_TEXT: '--sandbox <PROFILE>\n', STUB_PRINT: 'no issues found' },
   });
   assert.strictEqual(res.json.status, 'completed');
   assert.ok(res.json.warnings.some((w) => /--allow-unverified/.test(w)), 'the risk must be stated in the result');
@@ -1677,7 +1677,7 @@ test('backend.capabilitiesVerifiedLocally is true in the result when the relay\'
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
   H.useStub(repo, 'claude');
   const b = H.writeBrief(repo);
-  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--read-only', '--json'], { cwd: repo });
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--read-only', '--json'], { cwd: repo, env: { STUB_PRINT: 'no issues found' } });
   assert.strictEqual(res.json.status, 'completed');
   assert.strictEqual(res.json.backend.capabilitiesVerifiedLocally, true);
 });
@@ -2410,6 +2410,306 @@ test('bench: cost per accepted run ignores unknown costs and never rewards a rej
   assert.strictEqual(s.solo.unknownCost, 1);
   assert.strictEqual(s.solo.accepted, 2);
 });
+
+/* ------------------------------------------------------------------ *
+ * 2.4: lessons from long-running production relays
+ * ------------------------------------------------------------------ */
+
+const modelsLib = require('../scripts/lib/models.js');
+const slotsLib = require('../scripts/lib/slots.js');
+const instructionsLib = require('../scripts/lib/instructions.js');
+
+const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+
+test('agy: exit 0 with "status":"ERROR" is implementer_failure, not a completed read-only run', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'agy');
+  const b = H.writeBrief(repo);
+  const err = JSON.stringify({ conversation_id: '', status: 'ERROR', response: '', error: 'invalid model selection', num_turns: 0 });
+  const res = H.runRelay(['--backend', 'agy', '--read-only', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_PRINT: err } });
+  assert.strictEqual(res.json.status, 'implementer_failure');
+  assert.strictEqual(res.json.blocked, true);
+});
+
+test('agy: --effort is dropped for a Claude model, with a warning, and kept for others', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'agy');
+  const b = H.writeBrief(repo);
+  const echo = path.join(repo, '..', `argv-agy-${process.pid}.json`);
+  const res = H.runRelay(['--backend', 'agy', '--model', 'claude-sonnet-4-6', '--effort', 'low', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_ECHO_ARGV: echo, STUB_MODIFY: 'src/a.js' } });
+  const argv = JSON.parse(fs.readFileSync(echo, 'utf8')).argv;
+  assert.ok(!argv.includes('--effort'), 'agy refuses the whole run when a Claude model gets --effort');
+  assert.ok(res.json.warnings.some((w) => /--effort low dropped/.test(w)));
+  const gem = registry.getAdapter('agy').build({ prompt: 'p', mode: 'edit', model: 'gemini-3.8-flash-low', effort: 'low' }).args;
+  assert.ok(gem.includes('--effort'));
+});
+
+test('read-only run that exits 0 and says nothing is noop, not completed', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  const res = H.runRelay(['--backend', 'claude', '--read-only', '--brief', H.writeBrief(repo), '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.json.status, 'noop');
+  assert.strictEqual(res.json.blocked, true);
+});
+
+test('worker.turns carries the CLI\'s own turn count', () => {
+  const r = report.extract(JSON.stringify({ status: 'SUCCESS', response: 'ok', num_turns: 0 }), null);
+  assert.strictEqual(r.turns, 0);
+});
+
+test('a process left in the worker\'s group is killed after exit and reported as background_process', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  const pidFile = path.join(repo, '..', `bg-${process.pid}-${Date.now()}`);
+  const t0 = Date.now();
+  const res = H.runRelay(['--backend', 'claude', '--brief', H.writeBrief(repo), '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_SPAWN_CHILD: '60000', STUB_CHILD_PIDFILE: pidFile },
+  });
+  assert.ok(Date.now() - t0 < 30000, 'the relay must not wait out a background process holding stdout');
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+  const deadline = Date.now() + 8000;
+  while (isAlive(pid) && Date.now() < deadline) spawnSync('sleep', ['0.2']);
+  assert.strictEqual(isAlive(pid), false, 'the leftover process must be killed');
+  assert.strictEqual(res.json.execution.lingeringProcessesKilled, true);
+  assert.ok(res.json.findings.some((f) => f.type === 'background_process'));
+  assert.strictEqual(res.json.blocked, true);
+});
+
+test('a detached process started during the run is reported with its pid, never killed', function detached() {
+  if (process.platform === 'win32' || !procsObservable()) return;
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  const pidFile = path.join(repo, '..', `det-${process.pid}-${Date.now()}`);
+  const res = H.runRelay(['--backend', 'claude', '--brief', H.writeBrief(repo), '--workspace', repo, '--json'], {
+    cwd: repo, env: { STUB_MODIFY: 'src/a.js', STUB_DETACH_CHILD: '20000', STUB_CHILD_PIDFILE: pidFile },
+  });
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+  try {
+    const f = res.json.findings.find((x) => x.type === 'background_process');
+    assert.ok(f, 'the escaped process must be a finding');
+    assert.ok(f.processes.some((p) => p.pid === pid), `pid ${pid} must be listed`);
+    assert.strictEqual(isAlive(pid), true, 'it may be the owner\'s process; the relay must not kill it');
+  } finally { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+});
+
+function procsObservable() {
+  return Boolean(require('../scripts/lib/procs.js').workingIn(os.tmpdir()));
+}
+
+test('a process the owner already had running in the workspace is not reported', () => {
+  if (process.platform === 'win32' || !procsObservable()) return;
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  const owner = require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(()=>{},20000)'], { cwd: repo, detached: true, stdio: 'ignore' });
+  owner.unref();
+  try {
+    const res = H.runRelay(['--backend', 'claude', '--brief', H.writeBrief(repo), '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+    assert.ok(!res.json.findings.some((f) => f.type === 'background_process'), JSON.stringify(res.json.findings));
+  } finally { try { process.kill(owner.pid, 'SIGKILL'); } catch { /* gone */ } }
+});
+
+test('workers.<id>.maxConcurrent serialises runs across processes and waits on PIDs', async () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude', { maxConcurrent: 1 });
+  const b = H.writeBrief(repo);
+  const start = () => new Promise((resolve) => {
+    const p = require('node:child_process').spawn(process.execPath, [H.RELAY, '--backend', 'claude', '--brief', b, '--workspace', repo, '--json'],
+      { cwd: repo, env: { ...process.env, STUB_SLEEP: '1500', STUB_MODIFY: 'src/a.js' } });
+    let s = ''; p.stdout.on('data', (d) => { s += d; }); p.on('close', () => resolve(JSON.parse(s)));
+  });
+  const t0 = Date.now();
+  const [a, c] = await Promise.all([start(), start()]);
+  assert.ok(Date.now() - t0 >= 3000, 'with one slot the two 1.5s runs cannot overlap');
+  assert.ok([a, c].some((r) => r.warnings.some((w) => /waited \d+s for a claude slot/.test(w))));
+  // Slots live in the git common dir and are released on exit.
+  const dir = path.join(slotsLib.slotRoot(repo, repo), 'claude');
+  assert.deepStrictEqual(fs.readdirSync(dir).filter((n) => n.endsWith('.json')), []);
+});
+
+test('a slot held by a dead PID is reclaimed, not waited on', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude', { maxConcurrent: 1 });
+  const dir = path.join(slotsLib.slotRoot(repo, repo), 'claude');
+  fs.mkdirSync(dir, { recursive: true });
+  const dead = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout;
+  fs.writeFileSync(path.join(dir, `${dead}.json`), '{}');
+  const t0 = Date.now();
+  const res = H.runRelay(['--backend', 'claude', '--brief', H.writeBrief(repo), '--workspace', repo, '--timeout', '5', '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(res.json.status, 'completed');
+  assert.ok(Date.now() - t0 < 5000);
+});
+
+test('slots are shared by every worktree of a repository', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  const wt = path.join(repo, '..', `wt-${process.pid}-${Date.now()}`);
+  spawnSync('git', ['worktree', 'add', '-q', '--detach', wt], { cwd: repo });
+  try {
+    const common = (d) => fs.realpathSync(path.dirname(path.dirname(slotsLib.slotRoot(d, d))));
+    assert.strictEqual(common(wt), common(repo));
+    assert.strictEqual(path.basename(common(repo)), '.git');
+  } finally { spawnSync('git', ['worktree', 'remove', '--force', wt], { cwd: repo }); }
+});
+
+test('maxConcurrent must be a positive integer', () => {
+  const repo = H.tmpRepo();
+  H.useStub(repo, 'claude', { maxConcurrent: 0 });
+  assert.ok(environment.loadConfig(repo).errors.some((e) => /maxConcurrent/.test(e)));
+});
+
+test('a route skips a busy candidate for a free one', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude', { maxConcurrent: 1 });
+  const cfg = H.useStub(repo, 'codex');
+  const c = JSON.parse(fs.readFileSync(cfg, 'utf8'));
+  c.routes = { impl: [{ backend: 'claude' }, { backend: 'codex' }] };
+  fs.writeFileSync(cfg, JSON.stringify(c));
+  const holder = require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(()=>{},20000)'], { detached: true, stdio: 'ignore' });
+  holder.unref();
+  const dir = path.join(slotsLib.slotRoot(repo, repo), 'claude');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${holder.pid}.json`), '{}');
+  try {
+    const res = H.runRelay(['--route', 'impl', '--brief', H.writeBrief(repo), '--workspace', repo, '--allow-unverified', '--dry-run', '--json'], { cwd: repo });
+    assert.strictEqual(res.json.backend, 'codex', res.stdout);
+    assert.ok(res.json.route.skipped.some((s) => s.backend === 'claude' && /slot/.test(s.reason)));
+  } finally { try { process.kill(holder.pid, 'SIGKILL'); } catch { /* gone */ } }
+});
+
+test('limits.requireReason: a premium run without --label is refused; with one it runs and is recorded', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  const cfg = H.useStub(repo, 'claude', { tier: 'premium' });
+  const c = JSON.parse(fs.readFileSync(cfg, 'utf8'));
+  c.limits = { requireReason: { tiers: ['premium'] } };
+  fs.writeFileSync(cfg, JSON.stringify(c));
+  const b = H.writeBrief(repo);
+  const no = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(no.json.status, 'invalid_request');
+  assert.match(no.json.reason, /--label/);
+  assert.strictEqual(no.status, 2);
+  const yes = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--label', 'cross-module refactor, cheap tier failed twice', '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js' } });
+  assert.strictEqual(yes.json.status, 'completed');
+  assert.strictEqual(H.readResult(repo).request.label, 'cross-module refactor, cheap tier failed twice');
+});
+
+test('limits.requireReason.efforts gates high effort, and a route falls through past it', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude');
+  const cfg = H.useStub(repo, 'codex');
+  const c = JSON.parse(fs.readFileSync(cfg, 'utf8'));
+  c.limits = { requireReason: { efforts: ['high'] } };
+  c.routes = { impl: [{ backend: 'claude', effort: 'high' }, { backend: 'codex' }] };
+  fs.writeFileSync(cfg, JSON.stringify(c));
+  const res = H.runRelay(['--route', 'impl', '--brief', H.writeBrief(repo), '--workspace', repo, '--allow-unverified', '--dry-run', '--json'], { cwd: repo });
+  assert.strictEqual(res.json.backend, 'codex', res.stdout);
+  assert.ok(res.json.route.skipped.some((s) => /effort "high" requires --label/.test(s.reason)));
+  assert.ok(environment.loadConfig(repo).errors.length === 0);
+  c.limits = { requireReason: { tiers: ['gold'] } };
+  fs.writeFileSync(cfg, JSON.stringify(c));
+  assert.ok(environment.loadConfig(repo).errors.some((e) => /requireReason\.tiers/.test(e)));
+});
+
+test('models.pick: newest by dotted version, with floor and denylist', () => {
+  const cat = ['gemini-3.9-flash-low', 'gemini-3.10-flash-low', 'gemini-3.6-flash-low', 'gemini-3.11-exp-flash-low', 'gemini-3.1-pro-low'];
+  assert.strictEqual(modelsLib.pick({ latest: 'gemini-*-flash-low' }, cat).model, 'gemini-3.11-exp-flash-low');
+  assert.strictEqual(modelsLib.pick({ latest: 'gemini-*-flash-low', deny: ['exp'] }, cat).model, 'gemini-3.10-flash-low', '3.10 is newer than 3.9');
+  assert.ok(modelsLib.pick({ latest: 'gemini-*-flash-low', min: '4' }, cat).error);
+  assert.ok(modelsLib.compareVersions('4.1', '4') > 0);
+});
+
+test('a model family in config is resolved from the live catalog and reaches the invocation', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'agy', { model: { latest: 'gemini-*-flash-low', min: '3.7', deny: ['exp'] } });
+  const echo = path.join(repo, '..', `argv-models-${process.pid}.json`);
+  const models = 'Fetching available models...\ngemini-3.9-flash-low\tGemini 3.9\ngemini-3.10-flash-low\tGemini 3.10\ngemini-4.0-exp-flash-low\tExp\nclaude-sonnet-4-6\tClaude\n';
+  const res = H.runRelay(['--backend', 'agy', '--brief', H.writeBrief(repo), '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODELS: models, STUB_ECHO_ARGV: echo, STUB_MODIFY: 'src/a.js' } });
+  const argv = JSON.parse(fs.readFileSync(echo, 'utf8')).argv;
+  assert.strictEqual(argv[argv.indexOf('--model') + 1], 'gemini-3.10-flash-low');
+  assert.strictEqual(res.json.request.model, 'gemini-3.10-flash-low');
+  assert.match(res.json.request.modelSpec, /gemini-\*-flash-low/);
+  assert.ok(res.json.warnings.some((w) => /resolved to gemini-3.10-flash-low/.test(w)));
+});
+
+test('an unresolvable model family refuses the run before dispatch', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'agy', { model: { latest: 'gemini-*-flash-low', min: '9' } });
+  const res = H.runRelay(['--backend', 'agy', '--brief', H.writeBrief(repo), '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODELS: 'gemini-3.9-flash-low\tx\n' } });
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.match(res.json.reason, /no model in the live catalog/);
+});
+
+test('a model family on a worker with no catalog command is a clear refusal; bad specs are config errors', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
+  H.useStub(repo, 'claude', { model: { latest: 'claude-*' } });
+  const res = H.runRelay(['--backend', 'claude', '--brief', H.writeBrief(repo), '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.json.status, 'invalid_request');
+  assert.match(res.json.reason, /cannot be resolved|no way to list/);
+  H.useStub(repo, 'claude', { model: { latest: 'a-*-b-*' } });
+  assert.ok(environment.loadConfig(repo).errors.some((e) => /exactly one "\*"/.test(e)));
+  H.useStub(repo, 'claude', { model: { latest: 'a-*', newest: true } });
+  assert.ok(environment.loadConfig(repo).errors.some((e) => /model\.newest: unknown option/.test(e)));
+});
+
+test('a clobbered pre-existing edit carries a one-command restore that really restores it', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n', 'notes.md': 'base\n' }, dirty: { 'notes.md': 'OWNER WORK\n' } });
+  H.useStub(repo, 'claude');
+  const b = H.writeBrief(repo);
+  const lines = () => new Set(spawnSync('git', ['status', '--porcelain', '-uall'], { cwd: repo, encoding: 'utf8' }).stdout.split('\n').filter((l) => l && !l.includes('.delegate-fleet')));
+  const statusBefore = lines();
+  const res = H.runRelay(['--backend', 'claude', '--brief', b, '--workspace', repo, '--json'], { cwd: repo, env: { STUB_MODIFY: 'src/a.js,notes.md' } });
+  const f = res.json.findings.find((x) => x.type === 'unexpected_repository_change');
+  assert.ok(f && f.restore && f.restore.length === 1, JSON.stringify(f));
+  assert.strictEqual(f.restore[0].path, 'notes.md');
+  spawnSync('sh', ['-c', f.restore[0].command], { cwd: repo });
+  assert.strictEqual(fs.readFileSync(path.join(repo, 'notes.md'), 'utf8'), 'OWNER WORK\n');
+  // Preserving blobs touched nothing git status can see: the only new entry is the worker's own edit.
+  const added = [...lines()].filter((l) => !statusBefore.has(l));
+  assert.deepStrictEqual(added, [' M src/a.js']);
+});
+
+test('a read-only run gets the workspace diff as a file named in its prompt', () => {
+  const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' }, dirty: { 'src/a.js': 'x\nchanged\n', 'src/new.js': 'n\n' } });
+  H.useStub(repo, 'claude');
+  const echo = path.join(repo, '..', `argv-ro-${process.pid}.json`);
+  const res = H.runRelay(['--backend', 'claude', '--read-only', '--brief', H.writeBrief(repo), '--workspace', repo, '--json'], { cwd: repo, env: { STUB_ECHO_ARGV: echo, STUB_PRINT: 'looks fine' } });
+  assert.strictEqual(res.json.status, 'completed');
+  const prompt = JSON.parse(fs.readFileSync(echo, 'utf8')).argv.join('\n');
+  const m = /saved at: (\S+workspace\.diff)/.exec(prompt);
+  assert.ok(m, 'the prompt must name the diff file');
+  const diff = fs.readFileSync(m[1], 'utf8');
+  assert.match(diff, /\+changed/);
+  assert.match(diff, /src\/new\.js/);
+  assert.ok(!res.json.findings.length, 'writing the diff under runs/ is not a read-only violation');
+});
+
+test('every prompt tells workers to keep context small and leave long-running processes alone', () => {
+  const p = brief.buildPrompt({ briefText: H.GOOD_BRIEF, mode: 'edit', scope: ['src/a.js'] });
+  assert.match(p, /read the files this brief names/);
+  assert.match(p, /AGENTS\.md, CLAUDE\.md/);
+  assert.match(p, /dev servers/);
+  assert.match(p, /do not kill processes or free ports/);
+});
+
+test('doctor warns when an instruction file makes every worker preload a large file', () => {
+  const big = Array.from({ length: 900 }, (_, i) => `line ${i}`).join('\n');
+  const repo = H.tmpRepo({ files: {
+    'AGENTS.md': '# Agents\nRead `docs/state.md` before starting any task.\nSee `docs/small.md` for style.\n',
+    'docs/state.md': big, 'docs/small.md': 'short\n',
+  } });
+  const w = instructionsLib.scanPreloads(repo);
+  assert.strictEqual(w.length, 1);
+  assert.strictEqual(w[0].target, path.join('docs', 'state.md'));
+  assert.strictEqual(w[0].line, 2);
+  const res = H.runFleet(['doctor', '--backend', 'claude', '--workspace', repo, '--json'], { cwd: repo });
+  assert.strictEqual(res.json.contextWarnings.length, 1);
+});
+
+test('batch accepts a label per slice and rejects an empty one', () => {
+  const dir = H.tmpRepo();
+  fs.writeFileSync(path.join(dir, 'b.md'), H.GOOD_BRIEF);
+  assert.deepStrictEqual(batchLib.validatePlan({ slices: [{ id: 'a', brief: 'b.md', backend: 'x', label: 'why' }] }, dir).errors, []);
+  assert.ok(batchLib.validatePlan({ slices: [{ id: 'a', brief: 'b.md', backend: 'x', label: '' }] }, dir).errors.some((e) => /label/.test(e)));
+});
+
 
 /* ---------------------------------- runner ---------------------------------- */
 

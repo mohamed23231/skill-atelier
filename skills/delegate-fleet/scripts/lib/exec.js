@@ -16,6 +16,9 @@ const { StringDecoder } = require('node:string_decoder');
 
 const OUTPUT_CAP_BYTES = 8 * 1024 * 1024;
 const SIGKILL_GRACE_MS = 5000;
+// After the worker exits, how long its stdio may stay open before whatever
+// still holds it is treated as a leftover background process and killed.
+const LINGER_GRACE_MS = 3000;
 const IS_WINDOWS = process.platform === 'win32';
 
 /** Bounded, append-only output buffer. Keeps the head and notes the loss. */
@@ -77,11 +80,20 @@ function killTree(child, signal) {
   }
 }
 
+/** Does any process in the child's group survive? POSIX only. */
+function groupAlive(child) {
+  if (IS_WINDOWS || !child || child.pid == null) return false;
+  try { process.kill(-child.pid, 0); return true; } catch (err) { return Boolean(err && err.code === 'EPERM'); }
+}
+
 /**
  * Run a command to completion under a watchdog.
  *
  * Resolves (never rejects) with:
- *   outcome  'exited' | 'timeout' | 'aborted' | 'launch_failure'
+ *   outcome   'exited' | 'timeout' | 'aborted' | 'launch_failure'
+ *   lingered  true when the worker exited but left processes running in its
+ *             group (a backgrounded command). They are killed: a process that
+ *             outlives the run can keep writing after the tree was measured.
  */
 function run({ command, args, cwd, env, timeoutSeconds, onStart, stdin, onStdout, onStderr }) {
   return new Promise((resolve) => {
@@ -121,12 +133,22 @@ function run({ command, args, cwd, env, timeoutSeconds, onStart, stdin, onStdout
     let timedOut = false;
     let aborted = false;
     let sigkillTimer = null;
+    let lingerTimer = null;
+    let lingered = false;
+
+    const reapLeftovers = () => {
+      lingered = true;
+      killTree(child, 'SIGTERM');
+      const t = setTimeout(() => killTree(child, 'SIGKILL'), SIGKILL_GRACE_MS);
+      t.unref();
+    };
 
     const finish = (outcome, extra = {}) => {
       if (settled) return;
       settled = true;
       clearTimeout(watchdog);
       if (sigkillTimer) clearTimeout(sigkillTimer);
+      if (lingerTimer) clearTimeout(lingerTimer);
       for (const sig of ['SIGINT', 'SIGTERM']) process.removeListener(sig, onRelaySignal);
       resolve({
         outcome,
@@ -138,6 +160,8 @@ function run({ command, args, cwd, env, timeoutSeconds, onStart, stdin, onStdout
         startedAt,
         durationMs: Date.now() - startedAt,
         error: extra.error ?? null,
+        lingered,
+        pid: child.pid ?? null,
       });
     };
 
@@ -178,7 +202,17 @@ function run({ command, args, cwd, env, timeoutSeconds, onStart, stdin, onStdout
       finish(missing ? 'launch_failure' : 'exited', { error: String(err && err.message ? err.message : err) });
     });
 
+    // The worker itself has exited, but a background process it started may
+    // still hold stdout open, and 'close' would wait for it indefinitely.
+    child.on('exit', () => {
+      if (timedOut || aborted) return;
+      lingerTimer = setTimeout(reapLeftovers, LINGER_GRACE_MS);
+      lingerTimer.unref();
+    });
+
     child.on('close', (exitCode, signal) => {
+      // stdio closed, but a detached-output background job can still be alive.
+      if (!timedOut && !aborted && !lingered && groupAlive(child)) reapLeftovers();
       if (timedOut) finish('timeout', { exitCode, signal });
       else if (aborted) finish('aborted', { exitCode, signal });
       else finish('exited', { exitCode, signal });
@@ -203,4 +237,4 @@ function probeCommand(command, args = ['--version'], timeoutMs = 10_000, env = p
   }
 }
 
-module.exports = { run, killTree, probeCommand, makeSink, OUTPUT_CAP_BYTES, IS_WINDOWS };
+module.exports = { run, killTree, groupAlive, probeCommand, makeSink, OUTPUT_CAP_BYTES, IS_WINDOWS, LINGER_GRACE_MS };

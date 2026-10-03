@@ -51,7 +51,7 @@ Exactly one, terminal.
 | `aborted` | The relay was killed and forwarded the kill | Same as timeout |
 | `process_failure` | Non-zero exit or fatal signal | Read `stderr.log` |
 | `implementer_failure` | Exit 0, but the worker refused or could not authenticate | Fix auth, or the permission mode |
-| `noop` | Exit 0 on an edit run, tree unchanged | Almost always the brief. Read the log before retrying |
+| `noop` | Exit 0, but an edit run left the tree unchanged, or a read-only run produced no final message | Almost always the brief. Read the log before retrying |
 | `completed` | Exit 0 and the run did something | Review the diff |
 
 `timeout` does **not** mean "retry". The worker may have half-finished an edit.
@@ -69,6 +69,13 @@ violated scope first.
 | `worker_stash` | The stash ref moved during the run | Report it before anything else |
 | `read_only_violation` | A read-only run changed the tree — the backend's claim is broken | Stop trusting that backend's read-only |
 | `framework_state_modified` | The worker modified framework state under `.delegate-fleet/` (outside `runs/`) | Inspect config and adapters before the next run loads them |
+| `background_process` | The worker exited but left processes behind. Those in its own process group were killed; ones that detached and now run in the workspace are listed in `processes` and **not** killed | Treat the diff as possibly incomplete. Stop listed processes only if the worker started them |
+
+`unexpected_repository_change` also carries `restore`: before dispatch the relay copies every
+pre-existing dirty file into git's object store (`git hash-object -w`, which touches no file, index
+entry or ref). Each entry gives a one-line `git cat-file blob <sha> > <path>` that puts the owner's
+version back. Run it only after you have read what the worker did to that file. Git prunes these
+unreferenced blobs after its usual grace period (two weeks by default).
 
 With a fix loop, findings accumulate across attempts against the **original** baseline: a violation
 made by attempt 1 and undone by attempt 2 is still reported.

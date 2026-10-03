@@ -23,8 +23,9 @@ const registryLib = require('./adapters/index.js');
 const environment = require('./lib/environment.js');
 const caps = require('./lib/capabilities.js');
 const ledger = require('./lib/ledger.js');
+const instructions = require('./lib/instructions.js');
 
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 
 const HELP = `
 delegate-fleet fleet ${VERSION}
@@ -187,7 +188,8 @@ function cmdDoctor(o) {
   }
 
   const file = environment.saveVerification(o.workspace, report);
-  if (o.json) { console.log(JSON.stringify({ file, rows }, null, 2)); return 0; }
+  const contextWarnings = instructions.scanPreloads(o.workspace);
+  if (o.json) { console.log(JSON.stringify({ file, rows, contextWarnings }, null, 2)); return 0; }
 
   console.log('delegate-fleet doctor — local capability verification\n');
   for (const r of rows) {
@@ -197,6 +199,10 @@ function cmdDoctor(o) {
     console.log(`  ${r.id.padEnd(9)} available   ${r.version || ''}`);
     console.log(`            ${caps.CAPABILITY_NAMES.map((n) => `${n}=${r.capabilities[n] || declared[n]}`).join('  ')}`);
     for (const n of changes) console.log(`            corrected ${n}: declared ${declared[n]} -> observed ${r.capabilities[n]}`);
+  }
+  if (contextWarnings.length) {
+    console.log('\ncontext cost — instruction files that make every worker preload a large file:');
+    for (const w of contextWarnings) console.log(`  warning: ${w.message}`);
   }
   console.log(`\nwrote ${file}`);
   return 0;

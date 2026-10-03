@@ -17,6 +17,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { probeCommand } = require('./exec.js');
 const { AVAILABILITY, applyLocalEvidence, clampToExpressible, CAPABILITY_NAMES } = require('./capabilities.js');
+const models = require('./models.js');
 
 const STATE_DIR = '.delegate-fleet';
 
@@ -41,7 +42,13 @@ const positiveInt = (v) => Number.isInteger(Number(v)) && Number(v) > 0 && typeo
  */
 function readRunFields(cfg, where, errors) {
   const entry = {};
+  // A model is an exact id, or a family resolved from the live catalog.
+  if (cfg.model !== undefined && cfg.model !== null && typeof cfg.model === 'object') {
+    const spec = models.readSpec(cfg.model, `${where}.model`, errors);
+    if (spec) entry.model = spec;
+  }
   for (const key of ['model', 'effort']) {
+    if (key === 'model' && entry.model) continue;
     if (cfg[key] === undefined) continue;
     if (typeof cfg[key] !== 'string' || !cfg[key].trim()) errors.push(`${where}.${key}: expected a non-empty string`);
     else entry[key] = cfg[key].trim();
@@ -98,15 +105,16 @@ function readRoutes(raw, errors) {
 
 /** Limits: how many runs each tier may start in any rolling 24 hours. */
 function readLimits(raw, errors) {
-  const limits = { runsPer24h: {} };
+  const limits = { runsPer24h: {}, requireReason: { tiers: [], efforts: [] } };
   if (raw === undefined) return limits;
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     errors.push(`${CONFIG_FILE}: "limits" must be an object`);
     return limits;
   }
   for (const key of Object.keys(raw)) {
-    if (key !== 'runsPer24h') errors.push(`limits.${key}: unknown option; this field would be silently ignored`);
+    if (key !== 'runsPer24h' && key !== 'requireReason') errors.push(`limits.${key}: unknown option; this field would be silently ignored`);
   }
+  limits.requireReason = readRequireReason(raw.requireReason, errors);
   const per = raw.runsPer24h;
   if (per === undefined) return limits;
   if (per === null || typeof per !== 'object' || Array.isArray(per)) {
@@ -120,6 +128,31 @@ function readLimits(raw, errors) {
   }
   return limits;
 }
+/**
+ * Escalation needs a reason: a run on one of these tiers, or at one of these
+ * efforts, is refused unless it carries `--label "<why>"`, which the ledger keeps.
+ */
+function readRequireReason(raw, errors) {
+  const out = { tiers: [], efforts: [] };
+  if (raw === undefined) return out;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    errors.push('limits.requireReason: expected { "tiers": [...], "efforts": [...] }');
+    return out;
+  }
+  for (const key of Object.keys(raw)) {
+    if (key !== 'tiers' && key !== 'efforts') errors.push(`limits.requireReason.${key}: unknown option; this field would be silently ignored`);
+  }
+  if (raw.tiers !== undefined) {
+    if (!Array.isArray(raw.tiers) || !raw.tiers.every((t) => TIERS.includes(t))) errors.push(`limits.requireReason.tiers: expected an array of ${TIERS.join(', ')}`);
+    else out.tiers = [...raw.tiers];
+  }
+  if (raw.efforts !== undefined) {
+    if (!Array.isArray(raw.efforts) || !raw.efforts.every((e) => typeof e === 'string' && e.trim())) errors.push('limits.requireReason.efforts: expected an array of effort names');
+    else out.efforts = raw.efforts.map((e) => e.trim());
+  }
+  return out;
+}
+
 const CONFIG_FILE = 'config.json';
 const VERIFICATION_FILE = 'verification.json';
 
@@ -217,7 +250,7 @@ function loadConfig(repoRoot) {
   const read = readJson(file);
   const workers = {};
   const errors = [];
-  const empty = { workers, routes: {}, limits: { runsPer24h: {} } };
+  const empty = { workers, routes: {}, limits: { runsPer24h: {}, requireReason: { tiers: [], efforts: [] } } };
   if (read.error) return { ...empty, errors: [`${CONFIG_FILE}: could not be read as JSON (${read.error})`] };
   const raw = read.value;
   if (read.present && (raw === null || typeof raw !== 'object' || Array.isArray(raw))) {
@@ -238,6 +271,10 @@ function loadConfig(repoRoot) {
       else entry.cli = cfg.cli.trim();
     }
     Object.assign(entry, readRunFields(cfg, `workers.${id}`, errors));
+    if (cfg.maxConcurrent !== undefined) {
+      if (!positiveInt(cfg.maxConcurrent)) errors.push(`workers.${id}.maxConcurrent: expected a positive integer`);
+      else entry.maxConcurrent = Number(cfg.maxConcurrent);
+    }
     if (cfg.tier !== undefined) {
       if (!TIERS.includes(cfg.tier)) errors.push(`workers.${id}.tier: expected one of ${TIERS.join(', ')}`);
       else entry.tier = cfg.tier;
@@ -245,7 +282,7 @@ function loadConfig(repoRoot) {
     // Any other key is a field with no consumer: reject it rather than let it
     // look meaningful. This is the class of bug that made v1 untrustworthy.
     for (const key of Object.keys(cfg)) {
-      if (!['cli', 'model', 'effort', 'timeoutSeconds', 'maxTurns', 'maxBudgetUsd', 'tier', 'fixAttempts'].includes(key)) {
+      if (!['cli', 'model', 'effort', 'timeoutSeconds', 'maxTurns', 'maxBudgetUsd', 'tier', 'fixAttempts', 'maxConcurrent'].includes(key)) {
         errors.push(`workers.${id}.${key}: unknown option; this field would be silently ignored`);
       }
     }
@@ -309,6 +346,7 @@ function inspect(adapter, { config, verification, env } = {}) {
     cliPath: resolved,
     supported: true, // always: the adapter exists in this framework
     tier: cfg.tier || null,
+    maxConcurrent: cfg.maxConcurrent || null,
     availability: resolved ? AVAILABILITY.available : AVAILABILITY.unavailable,
     declaredCapabilities: { ...adapter.capabilities },
     capabilities: applyLocalEvidence(adapter.capabilities, local && local.capabilities),

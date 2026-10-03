@@ -18,12 +18,21 @@ module.exports = {
   },
   build(req) {
     const args = ['--print', req.prompt, '--output-format', 'json'];
+    const notes = [];
     if (req.mode === 'read-only') args.push('--mode', 'plan');
     else args.push('--mode', 'accept-edits', '--dangerously-skip-permissions');
     if (req.model) args.push('--model', req.model);
-    if (req.effort) args.push('--effort', req.effort);
+    // agy refuses the whole run ("--effort is not supported for model ...")
+    // when a Claude model is paired with --effort. Drop the flag, and say so.
+    if (req.effort && /^claude-/i.test(req.model || '')) notes.push(`--effort ${req.effort} dropped: agy rejects --effort for Claude models`);
+    else if (req.effort) args.push('--effort', req.effort);
     if (req.session) args.push('--conversation', req.session);
-    return { args };
+    return { args, notes };
+  },
+  // `agy models` prints one "id<TAB>label" line per model it can run.
+  listModels: {
+    args: ['models'],
+    parse: (out) => out.split('\n').map((l) => l.split('\t')[0].trim()).filter((id) => /^[\w.-]+$/.test(id) && /\d/.test(id)),
   },
   probe(help) {
     return {
@@ -37,5 +46,8 @@ module.exports = {
       budgetLimit: 'unsupported',
     };
   },
-  denyPatterns: [/auto[- ]?denied/i, /not signed in/i, /permission denied/i, /not logged in/i, /please sign in/i],
+  // agy reports a rejected run (bad model, bad flag combination) with exit 0
+  // and `"status":"ERROR"` in its JSON, or a bare `error:` line on stderr.
+  denyPatterns: [/auto[- ]?denied/i, /not signed in/i, /permission denied/i, /not logged in/i, /please sign in/i,
+    /"status"\s*:\s*"ERROR"/, /^error: /m],
 };

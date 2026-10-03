@@ -18,6 +18,7 @@ const abs = (p) => (path.isAbsolute(p) ? p : path.join(cwd, p));
 const exitCode = Number(env.STUB_EXIT || 0);
 
 if (process.argv.includes('--version')) { process.stdout.write('stub 1.0\n'); process.exit(exitCode); }
+if (process.argv[2] === 'models') { process.stdout.write(env.STUB_MODELS ?? ''); process.exit(exitCode); }
 if (process.argv[2] === 'agent' && process.argv[3] === 'list') { process.stdout.write(env.STUB_AGENT_LIST ?? 'plan\nbuild\n'); process.exit(exitCode); }
 if (process.argv.includes('--help')) {
   process.stdout.write(env.STUB_HELP_TEXT ?? '--sandbox read-only workspace workspace-write\n--mode plan accept-edits yolo\n--permission-mode plan acceptEdits auto\n--approval-mode plan yolo\n--agent plan build\n--auto --auto-approve --plan --dry-run --tools --force --yolo --always-approve\n--model --variant --effort --session --resume --conversation\n--format json --output-format json --no-approve\n');
@@ -81,6 +82,14 @@ if (env.STUB_STASH) {
 if (env.STUB_SPAWN_CHILD) {
   const child = spawn(process.execPath, ['-e', `setTimeout(()=>{},${Number(env.STUB_SPAWN_CHILD)})`], { stdio: 'inherit' });
   if (env.STUB_CHILD_PIDFILE) fs.writeFileSync(env.STUB_CHILD_PIDFILE, String(child.pid));
+}
+
+// A background job that leaves the worker's process group entirely, as a
+// daemonising command would. Nothing in the group kill reaches it.
+if (env.STUB_DETACH_CHILD) {
+  const child = spawn(process.execPath, ['-e', `setTimeout(()=>{},${Number(env.STUB_DETACH_CHILD)})`], { detached: true, stdio: 'ignore', cwd });
+  if (env.STUB_CHILD_PIDFILE) fs.writeFileSync(env.STUB_CHILD_PIDFILE, String(child.pid));
+  child.unref();
 }
 
 const sleepMs = Number(env.STUB_SLEEP || 0);

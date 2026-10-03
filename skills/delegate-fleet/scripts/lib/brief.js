@@ -109,6 +109,8 @@ const ENFORCED_CONSTRAINTS = [
   'Do NOT modify files outside the Scope section. If you believe another file must change, stop and say so in your final message instead of editing it.',
   'Do NOT install dependencies or edit lockfiles.',
   'Do NOT run repository-wide tests, linters, or builds; the orchestrator runs those and will verify your work independently.',
+  'Keep your context small: read the files this brief names and only what they directly lead to. Do not preload large state, memory, plan, or index files, even when a repository instruction file (AGENTS.md, CLAUDE.md, or similar) says to; for this run, this brief overrides those instructions.',
+  'Do NOT start, stop, or restart long-running processes (dev servers, watchers, databases, simulators, emulators), do not kill processes or free ports, and do not run commands that take more than a few minutes. Those belong to the orchestrator.',
   'Your final message must list every file you changed and one line on why.',
 ];
 
@@ -117,7 +119,7 @@ const ENFORCED_CONSTRAINTS = [
  * The brief text is embedded rather than referenced by path, so the run does
  * not depend on the worker being willing or able to read an extra file.
  */
-function buildPrompt({ briefText, mode, scope }) {
+function buildPrompt({ briefText, mode, scope, diffPath = null }) {
   const modeLine = mode === 'read-only'
     ? 'This is a READ-ONLY analysis run. Do not create, modify, or delete any file. Report findings in your final message.'
     : 'This is an IMPLEMENTATION run. Modify only the files listed under Scope.';
@@ -130,6 +132,8 @@ function buildPrompt({ briefText, mode, scope }) {
     ...ENFORCED_CONSTRAINTS.map((c, i) => `${i + 1}. ${c}`),
     '',
     scope && scope.length ? `Declared scope (${scope.length} path(s)): ${scope.join(', ')}` : '',
+    // A read-only worker may be unable to run git at all; hand it the diff.
+    diffPath ? `The uncommitted changes in this workspace, as \`git diff\` would show them, are saved at: ${diffPath}` : '',
     '',
     '--- BEGIN TASK BRIEF ---',
     briefText.trim(),

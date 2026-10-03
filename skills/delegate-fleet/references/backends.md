@@ -65,7 +65,12 @@ for discovery; read-only dispatch and `select --verified` probe again before rel
   binary on PATH. Set `workers.commandcode.cli` to an absolute path if it does.
 - **`zcode` ships its CLI inside the desktop app** and only its `plan` and `yolo` modes work
   headlessly; the others exit 0 having changed nothing, which this framework reports as `noop`.
-- **Model ids rot.** Prefer the aliases a backend resolves itself, and record what actually ran.
+- **Model ids rot.** Prefer the aliases a backend resolves itself, or a model family resolved from
+  the live catalog (see routing.md), and record what actually ran.
+- **`agy` fails with exit 0.** A rejected run (an unknown model, a flag the model does not take)
+  prints `"status":"ERROR"` and exits 0. The adapter's deny patterns turn that into
+  `implementer_failure`. agy also rejects `--effort` for Claude models, so the adapter drops the flag
+  for them and records a warning.
 
 ## Providers are not backends
 

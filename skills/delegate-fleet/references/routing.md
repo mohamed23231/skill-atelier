@@ -47,7 +47,47 @@ hyphens. Any other key is a hard error.
 3. is under its tier's `limits.runsPer24h`;
 4. is not marked out of quota.
 
+5. does not need a reason it was not given (see below);
+6. has a free concurrency slot. When every otherwise eligible candidate is busy, the run waits for
+   the first of them instead of failing.
+
 `result.route` records the class, the chosen candidate, and every candidate that was skipped and why.
+
+## Model families
+
+A pinned model id goes stale when the vendor ships the next one. A worker or route may name a family
+instead, resolved at dispatch from the list the installed CLI itself prints:
+
+```json
+{ "workers": { "agy": { "model": { "latest": "gemini-*-flash-low", "min": "3.7", "deny": ["preview"] } } } }
+```
+
+`latest` has exactly one `*`, which stands for the version. The highest version wins, compared as
+dotted numbers, so `3.10` beats `3.9`. `min` is a floor, and `deny` drops any id containing one of its
+strings. The resolved id is what runs, and it is recorded in `result.request.model`, with the spec in
+`request.modelSpec`. Resolution needs an adapter with a model-list command (`agy`, `cursor` and
+`opencode` today). Anywhere else, or when nothing matches, the run is refused before dispatch.
+
+## Concurrency
+
+```json
+{ "workers": { "codex": { "maxConcurrent": 1 } } }
+```
+
+At most that many live runs of the worker at once. Slots live in `git rev-parse --git-common-dir`,
+so every worktree of the repository, and therefore every `batch.js` slice, shares them. A run
+waits for a slot up to its own `--timeout`. A holder is judged alive by its PID, never by a
+command-line match, and a slot left by a dead process is reclaimed.
+
+## Escalation needs a reason
+
+```json
+{ "limits": { "requireReason": { "tiers": ["premium"], "efforts": ["high", "max"] } } }
+```
+
+A run on a listed tier, or at a listed effort, is refused unless it carries `--label "<why>"` (or
+`label` on a batch slice). A route skips such a candidate instead. The label is recorded in
+`result.request.label`, so `runs/` shows why each expensive run happened.
 When no candidate is installed, the status is `backend_unavailable`. When candidates are installed
 but none qualifies, the request is refused as `invalid_request`. Either way nothing runs and nothing
 is spent.

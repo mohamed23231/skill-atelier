@@ -45,8 +45,14 @@ module.exports = {
     else args.push('--yes');
     if (req.model) args.push('--model', req.model);
     args.push(req.prompt);
-    return { args };
+    // `notes` (optional): say when a flag was adjusted for this model, e.g. a
+    // flag the CLI rejects for one model family. They become result warnings.
+    return { args, notes: [] };
   },
+
+  // Optional: how to list the models this CLI can run. Enables model
+  // families ({ "latest": "name-*" }) in config.
+  listModels: { args: ['models'], parse: (stdout) => stdout.split('\n').map((l) => l.trim()).filter(Boolean) },
 
   // Local verification: given the CLI's own --help, what is actually there?
   probe(help) {

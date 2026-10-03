@@ -131,6 +131,15 @@ function extractSession(objects) {
   return null;
 }
 
+/** Turns the CLI says the run took. Zero on an edit run is a strong hint nothing happened. */
+function extractTurns(objects) {
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const t = num(first(objects[i], ['num_turns', 'numTurns']));
+    if (t !== null) return t;
+  }
+  return null;
+}
+
 /** Keep the END of a long message: that is where workers list what they changed. */
 function cap(text) {
   const t = String(text).trim();
@@ -143,7 +152,7 @@ function cap(text) {
  * be read is `source: "none"`, and the full log is still in the artifacts.
  */
 function extract(stdout, adapter) {
-  const empty = { selfReported: true, source: 'none', summary: null, summaryTruncated: false, sessionId: null, usage: null };
+  const empty = { selfReported: true, source: 'none', summary: null, summaryTruncated: false, sessionId: null, usage: null, turns: null };
   try {
     if (adapter && typeof adapter.parseReport === 'function') {
       const r = adapter.parseReport(String(stdout || '')) || {};
@@ -159,6 +168,7 @@ function extract(stdout, adapter) {
         ...(text ? cap(text) : {}),
         sessionId: extractSession(objects),
         usage: extractUsage(objects),
+        turns: extractTurns(objects),
       };
     }
     const plain = String(stdout || '').trim();

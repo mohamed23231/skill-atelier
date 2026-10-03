@@ -31,9 +31,9 @@ const { spawn, spawnSync } = require('node:child_process');
 const checksLib = require('./lib/checks.js');
 const environment = require('./lib/environment.js');
 
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 const RELAY = path.join(__dirname, 'relay.js');
-const SLICE_KEYS = ['id', 'brief', 'backend', 'route', 'model', 'effort', 'checks', 'fixAttempts', 'timeoutSeconds', 'dependsOn'];
+const SLICE_KEYS = ['id', 'brief', 'backend', 'route', 'model', 'effort', 'checks', 'fixAttempts', 'timeoutSeconds', 'dependsOn', 'label'];
 const PLAN_KEYS = ['_readme', 'concurrency', 'slices', 'setup', 'link'];
 const MAX_CONCURRENCY = 8;
 const ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -159,6 +159,7 @@ function validatePlan(plan, planDir) {
     }
     if (s.fixAttempts > 0 && checks.length === 0) errors.push(`${where}.fixAttempts: needs checks to fix against`);
     if (s.dependsOn !== undefined && !Array.isArray(s.dependsOn)) errors.push(`${where}.dependsOn: expected an array of slice ids`);
+    if (s.label !== undefined && (typeof s.label !== 'string' || !s.label.trim())) errors.push(`${where}.label: expected a short reason string`);
     slices.push({ ...s, brief, checks, dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn : [] });
   });
   for (const s of slices) {
@@ -380,6 +381,7 @@ async function runBatch(o) {
       ];
       if (slice.model) args.push('--model', slice.model);
       if (slice.effort) args.push('--effort', slice.effort);
+      if (slice.label) args.push('--label', slice.label);
       if (slice.timeoutSeconds) args.push('--timeout', String(slice.timeoutSeconds));
       for (const c of slice.checks) args.push('--check', c);
       if (slice.fixAttempts) args.push('--fix-attempts', String(slice.fixAttempts));

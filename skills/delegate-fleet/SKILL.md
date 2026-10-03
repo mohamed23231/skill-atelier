@@ -3,7 +3,7 @@ name: delegate-fleet
 description: Plans on the orchestrator and dispatches bounded implementation slices to cheaper external coding-agent CLIs (Claude Code, Codex, OpenCode, Gemini and more), runs the project's checks, loops failures back to the same worker, and verifies every diff independently before landing. Use when asked to delegate or offload implementation to worker CLIs or cheaper models, to run independent slices in parallel worktrees, to route work by task class or cost tier, or to use delegate-fleet's relay, batch, select, report or doctor commands. Planning, review and git commits stay on the orchestrator.
 license: MIT
 metadata:
-  version: "2.3.0"
+  version: "2.4.0"
 ---
 
 # Delegate Fleet
@@ -61,8 +61,10 @@ candidates. You then name a class; the config decides backend, model and effort.
 
 A route takes its first candidate that is installed, has the capabilities the run needs, is under its
 tier's 24-hour limit, and is not marked out of quota. Workers whose output says they hit a usage
-limit are marked for an hour automatically (`fleet.js quota`). Details:
-[`references/routing.md`](references/routing.md).
+limit are marked for an hour automatically (`fleet.js quota`). A `model` may be a family resolved
+from the CLI's live catalog (`{ "latest": "gemini-*-flash", "min": "3.7" }`), `maxConcurrent` caps
+live runs of a worker across every worktree, and `limits.requireReason` refuses a premium tier or
+high effort without `--label "<why>"`. Details: [`references/routing.md`](references/routing.md).
 
 - **Mechanical** (renames, wiring, CRUD, tests from a spec) → a `cheap` route.
 - **Moderate** (a contained feature with a pattern to copy) → a `standard` route.
@@ -72,8 +74,10 @@ limit are marked for an hour automatically (`fleet.js quota`). Details:
 
 The worker starts with **zero** history; the brief is the whole contract. Required: `# Objective`,
 `## Scope` (backtick-quoted paths — scope violations are measured against them), `## Acceptance
-criteria`. Keep it a card, not an essay: 15–60 lines. Paste the project rules that apply; workers do
-not read your agent files. The relay injects the safety rules itself. Template:
+criteria`. Keep it a card, not an essay: 15–60 lines. Paste the project rules that apply; do not
+count on a worker reading your agent files. The relay injects the safety rules itself, including
+"read only what the brief names" and "leave long-running processes alone". `doctor` warns when an
+AGENTS.md or CLAUDE.md makes every worker preload a large file. Template:
 [`references/brief-format.md`](references/brief-format.md).
 
 ## 4. Dispatch
@@ -110,6 +114,8 @@ Announce each dispatch in one line so the user can veto it: *"Slice 2 → route 
 - `worker.summary` (the worker's final message, capped at 2 KB), `worker.usage` and
   `verification.checks` are all you usually need. Open `stdout.log` only when a failure is unexplained.
 - Everything under `worker` is self-reported. The diff is the fact.
+- `unexpected_repository_change` comes with a `restore` command per clobbered file. `background_process`
+  means the worker left processes behind: its own were killed, and any that detached are listed, not killed.
 
 Every status and finding, and what to do about each: [`references/result-contract.md`](references/result-contract.md).
 

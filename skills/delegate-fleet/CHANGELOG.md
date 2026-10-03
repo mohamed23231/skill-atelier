@@ -5,6 +5,47 @@ All notable changes to the `delegate-fleet` skill.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this skill
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-09-26
+
+### Fixed
+
+- **`agy` runs that failed with exit 0 were reported as `completed`.** agy prints `"status":"ERROR"`
+  and exits 0 when it rejects a run. A read-only run then read as `completed`, not blocked, and an
+  edit run read as `noop`. Both are now `implementer_failure`.
+- **`agy` with a Claude model and `--effort` failed every run.** agy rejects the flag for Claude
+  models. The adapter now drops it for them and records a warning. Adapters can return `notes` from
+  `build()` for adjustments like this.
+- **Leftover background processes.** A worker that exited while a process it started still held
+  stdout kept the relay waiting until the watchdog fired. A process that did not hold stdout kept
+  running and could write after the tree was measured. The relay now kills whatever is left in the
+  worker's process group after exit (`execution.lingeringProcessesKilled`). It also lists processes
+  that detached into the workspace during the run, without killing them. Either case is a
+  `background_process` finding.
+- **Silent read-only runs.** A read-only run that exits 0 without a final message is now `noop`
+  instead of `completed`.
+
+### Added
+
+- **Model families.** `model` in a worker or route can be `{ "latest": "<pattern with one *>", "min",
+  "deny" }`. It is resolved at dispatch from the installed CLI's own model list (`agy`, `cursor`,
+  `opencode`). The newest version wins, compared as dotted numbers. Adapters opt in with
+  `listModels`.
+- **`workers.<id>.maxConcurrent`.** Caps live runs of a worker. Slots live in the git common dir, so
+  every worktree and batch slice shares them. Liveness is judged by PID. Routes skip a busy candidate,
+  or queue for one when all are busy.
+- **`limits.requireReason` and `--label`.** Listed tiers or efforts are refused without a reason. The
+  reason is recorded in `result.request.label`. Batch slices take `label`.
+- **One-command restore of clobbered owner edits.** Pre-existing dirty files are stored as git
+  blobs before dispatch. `unexpected_repository_change` carries a `git cat-file blob … > path` per
+  file.
+- **Diff file for read-only reviewers.** A read-only run gets `workspace.diff` (`git diff HEAD` plus
+  untracked paths) in its run directory, named in the prompt. A reviewer that cannot run git can
+  still see the change.
+- **Context-cost guard.** Every prompt tells workers to read only what the brief names, and to
+  leave long-running processes, process kills and port freeing alone. `fleet.js doctor` warns when
+  an instruction file (AGENTS.md, CLAUDE.md, …) tells agents to read a large file up front.
+- `worker.turns`, the CLI's self-reported turn count, when it prints one.
+
 ## [2.3.0] - 2026-09-24
 
 ### Added

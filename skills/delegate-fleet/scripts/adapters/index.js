@@ -71,6 +71,12 @@ function assertShape(a, origin) {
       throw new Error(`${where}: evidenceArgs must be arrays of non-empty arrays of strings`);
     }
   }
+  if (a.listModels !== undefined) {
+    const lm = a.listModels;
+    if (!lm || !Array.isArray(lm.args) || !lm.args.length || !lm.args.every((x) => typeof x === 'string' && x.length > 0) || typeof lm.parse !== 'function') {
+      throw new Error(`${where}: listModels must be { args: [string, ...], parse(stdout) }`);
+    }
+  }
   if (!a.capabilities || typeof a.capabilities !== 'object') throw new Error(`${where}: must declare capabilities`);
   for (const name of CAPABILITY_NAMES) {
     const state = a.capabilities[name];
