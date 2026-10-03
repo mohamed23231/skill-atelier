@@ -150,7 +150,7 @@ const cases = [
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-cli-'));
     const html = path.join(dir, 'tb.html');
     assert.strictEqual(run(['build', EXAMPLE, '-o', html, '--direction', 'TB', '--no-open']).code, 0);
-    assert.ok(fs.readFileSync(html, 'utf8').includes('"direction": "TB"'));
+    assert.ok(fs.readFileSync(html, 'utf8').includes('"direction":"TB"'));
     fs.rmSync(dir, { recursive: true, force: true });
   }]
 ];

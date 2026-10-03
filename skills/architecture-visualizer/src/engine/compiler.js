@@ -143,7 +143,7 @@ function substitutePlaceholders(template, pairs) {
  * JSON safe to inline inside a <script> block.
  */
 function embedJson(value) {
-  return JSON.stringify(value, null, 2)
+  return JSON.stringify(value)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
     .replace(/\u2028/g, '\\u2028')

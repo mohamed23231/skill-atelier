@@ -158,7 +158,7 @@ const cases = [
     'embeds normalized review data in the architecture payload',
     () => {
       const result = compileArchitecture(clone(VALID_SPEC));
-      assert.ok(result.html.includes('"schemaVersion": 2'));
+      assert.ok(result.html.includes('"schemaVersion":2'));
       assert.ok(result.html.includes('"blastRadius"'));
       assert.ok(result.html.includes('"evidenceManifest"'));
       assert.ok(result.html.includes('"traceability"'));
@@ -247,7 +247,7 @@ const cases = [
           const text = fs.readFileSync(file, 'utf8');
           roots.forEach((root) => assert.ok(!text.includes(root), `${path.basename(file)} leaks ${root}`));
         });
-        assert.ok(fs.readFileSync(htmlPath, 'utf8').includes('"resolvedPath": "src/api/Api.ts"'));
+        assert.ok(fs.readFileSync(htmlPath, 'utf8').includes('"resolvedPath":"src/api/Api.ts"'));
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
@@ -258,7 +258,7 @@ const cases = [
     () => {
       const illustrative = compileArchitecture(clone(VALID_SPEC));
       assert.ok(illustrative.html.includes('id="doc-grounding"'));
-      assert.ok(/"grounding": "illustrative"/.test(illustrative.html));
+      assert.ok(/"grounding":"illustrative"/.test(illustrative.html));
       assert.ok(illustrative.html.includes("document.getElementById('doc-grounding').hidden = ARCH_SPEC.meta.grounding !== 'illustrative'"));
     },
   ],
@@ -285,11 +285,11 @@ const cases = [
           assert.ok(!text.includes(dir) && !text.includes(fs.realpathSync(dir)), 'repo root leaked');
           assert.ok(!text.includes(os.homedir()), 'home directory leaked');
         });
-        assert.ok(result.html.includes('"path": "src/api/Api.ts"'));
+        assert.ok(result.html.includes('"path":"src/api/Api.ts"'));
         assert.ok(result.markdown.includes('<outside repository>/secret.ts'));
         assert.ok(!result.html.includes('elsewhere/private') && !result.markdown.includes('elsewhere/private'), 'a ../ path outside the root leaked');
         assert.ok(result.markdown.includes('<outside repository>/notes.ts'));
-        assert.ok(result.html.includes('"path": "/api/orders"'), 'API routes are not file paths and stay as written');
+        assert.ok(result.html.includes('"path":"/api/orders"'), 'API routes are not file paths and stay as written');
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
