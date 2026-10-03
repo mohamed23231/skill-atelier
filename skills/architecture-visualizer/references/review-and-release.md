@@ -65,13 +65,13 @@ INSPECT → MODEL → VALIDATE → BUILD → REVIEW → RELEASE
 
 ## 2. Browser & Accessibility Implementation Truth
 
+### Evidence freshness
+
+Run `arch-viz validate <spec.json> --stamp` after clean validation to record the checked commit as `meta.groundedAt`. Builds record `meta.builtFrom` and mark evidence whose files changed since the stamp (or are untracked) with `stale` and `staleSince`. `arch-viz validate <spec.json> --fresh` lists stale records and exits 1 on drift. Illustrative specs are not stamped or freshness-checked.
+
 The generated HTML viewer is an offline single-page application built on standard HTML5, CSS3, and vanilla ES6.
 
-- **Responsive Four-Region Workbench**:
-  1. *Header Bar*: Title, metadata, scenario controls, view tabs, search, and export actions.
-  2. *Navigator Panel*: Searchable hierarchy of boundaries, nodes, and layers.
-  3. *Main Canvas*: Deterministic SVG canvas with pan, zoom, minimap, and edge routing.
-  4. *Inspector Drawer*: Component details, evidence, findings, tasks, and failure modes.
+- **Workbench regions**: Header, trust strip, canvas, and reading rail. The rail contains Overview, Walkthrough, Changes, Review, Evidence, Data, and Plan chapters plus a component sheet. See [`workbench-guide.md`](workbench-guide.md) for chapter, lens, key, and link details.
 - **Mobile Support & Focus Restoration**: Tested across viewports 320px (mobile), 768px (tablet), and 1440px (desktop). On mobile viewports, panels open as accessible modal drawers with focus trapping and automatic focus restoration to the trigger element on close.
 - **Search & Highlighting**: Live filtering across node labels, technologies, types, descriptions, and edge labels. Supports focus-neighbor and affected-path isolation.
 - **Canvas Controls**: Fullscreen presentation mode, URL state synchronization for shareable view anchors, and model-namespaced `localStorage` persistence for custom node layout positions.

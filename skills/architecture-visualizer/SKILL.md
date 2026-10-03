@@ -77,6 +77,10 @@ The output file is completely offline (no CDNs, no external runtime dependencies
 **Mandatory Approval Gate**: Always present the generated HTML artifact, ADRs, risk analysis, and phased implementation plan to the user. **Wait for explicit approval before creating or modifying application source code.**
 - See [`references/review-and-release.md`](references/review-and-release.md) for lifecycle gates, accessibility standards, and known limits.
 
+### Reading the workbench
+
+Use [`references/workbench-guide.md`](references/workbench-guide.md) for the header, trust strip, canvas, reading rail, chapters, lenses, keyboard shortcuts, and share links.
+
 ---
 
 ## Truthful CLI Reference
@@ -88,11 +92,13 @@ Run using Node.js 22+ (directly or via `bin/arch-viz.js`):
 ```bash
 arch-viz inspect [dir]                                                                      # Inspect repository frameworks and signatures
 arch-viz scaffold [-o spec.json] [--base <ref>] [--repo-root .] [--ignore <prefix>]        # Draft a starter spec from git diff & imports
-arch-viz validate <spec.json> [--strict] [--repo-root .] [--json]                          # Run 14-point quality gate and policy checks
+arch-viz validate <spec.json> [--strict] [--repo-root .] [--json] [--stamp|--fresh]        # Validate, stamp evidence, or check freshness
 arch-viz build <spec.json> [-o out.html] [--md out.md] [--strict] [--direction LR|TB]     # Compile offline HTML workbench & Markdown report
 arch-viz mermaid <spec.json> [--view flowchart|sequence|er]                                # Export to Mermaid diagram syntax
 arch-viz init [output.json]                                                                # Generate clean starter specification
 ```
+
+`validate --stamp` records the checked commit in `meta.groundedAt`; `validate --fresh` reports stale evidence and exits 1 when evidence has drifted. Builds record `meta.builtFrom` and mark drifted evidence with `staleSince`.
 
 ---
 
