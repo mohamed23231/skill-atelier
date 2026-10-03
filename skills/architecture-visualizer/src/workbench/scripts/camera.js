@@ -10,11 +10,10 @@ function clampZoom(value) {
 }
 
 function zoomAround(newZoom, cx, cy) {
-  state.userMovedView = true;
   const clamped = clampZoom(newZoom);
-  state.panX = cx - (cx - state.panX) * (clamped / state.zoom);
-  state.panY = cy - (cy - state.panY) * (clamped / state.zoom);
-  state.zoom = clamped;
+  const panX = cx - (cx - state.panX) * (clamped / state.zoom);
+  const panY = cy - (cy - state.panY) * (clamped / state.zoom);
+  actions.setCamera({ zoom: clamped, panX, panY, userMoved: true });
   updateTransform();
 }
 
@@ -41,10 +40,12 @@ function handleMouseDown(e) {
 
 function handleMouseMove(e) {
   if (state.isDraggingCanvas) {
-    state.panX = e.clientX - state.dragStartX;
-    state.panY = e.clientY - state.dragStartY;
+    actions.setCamera({
+      panX: e.clientX - state.dragStartX,
+      panY: e.clientY - state.dragStartY,
+      userMoved: true
+    });
     state.dragMoved = true;
-    state.userMovedView = true;
     updateTransform();
   } else if (state.draggingNodeId) {
     moveDraggedNode(e.clientX, e.clientY);
@@ -85,10 +86,12 @@ function handleTouchStart(e) {
 function handleTouchMove(e) {
   if (!state.isDraggingCanvas || e.touches.length !== 1) return;
   e.preventDefault();
-  state.userMovedView = true;
   const touch = e.touches[0];
-  state.panX = touch.clientX - state.dragStartX;
-  state.panY = touch.clientY - state.dragStartY;
+  actions.setCamera({
+    panX: touch.clientX - state.dragStartX,
+    panY: touch.clientY - state.dragStartY,
+    userMoved: true
+  });
   updateTransform();
 }
 

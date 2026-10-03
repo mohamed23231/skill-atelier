@@ -1,6 +1,6 @@
 // Node Selection & Inspector Drawer
 function selectNode(nodeId) {
-  state.selectedNodeId = nodeId;
+  actions.selectNode(nodeId);
   document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
 
   const nodeEl = document.getElementById(`node-${nodeId}`);
@@ -75,8 +75,7 @@ function renderDetailList(containerId, items, renderItem, emptyMessage) {
 function closeInspector() {
   setDrawerOpen('inspector', false);
   document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
-  state.selectedNodeId = null;
-  state.selectedEdgeId = null;
+  actions.clearSelection();
   state.highlightedChain = null;
   document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
   applyVisibility();

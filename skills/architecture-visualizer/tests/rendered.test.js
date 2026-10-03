@@ -1415,7 +1415,7 @@ const cases = [
         results.forEach((phase) => {
           const { box, width, height, hash } = lastEvalValue(phase);
           assert.ok(box.left >= -1 && box.top >= -1 && box.right <= width + 1 && box.bottom <= height + 1, `${spec}: diagram not fitted ${JSON.stringify({ box, width, height })}`);
-          assert.ok(!/[#&]z=1&x=0&y=0/.test(hash), `${spec}: init wrote a default camera into the URL: ${hash}`);
+          assert.ok(!/[#&](cam|z)=/.test(hash), `${spec}: an untouched fitted view must not pin a camera into the URL: ${hash}`);
         });
       });
     },
@@ -1443,10 +1443,11 @@ const cases = [
       assert.ok(single.dimmed > 0, 'non-participating edges should dim');
       assert.ok(/Publish to Kafka Event Bus/.test(single.text) && /Outbox Relay Worker/.test(single.text), single.text);
       assert.ok(!/stage_publish_order_created|outbox_poller/.test(single.text), `raw ids leaked into the stage panel: ${single.text}`);
-      assert.ok(/scenario=scenario_fulfillment_saga_dlq&stage=3/.test(single.hash), single.hash);
+      assert.ok(/[#&]s=scenario_fulfillment_saga_dlq&at=stage_publish_order_created(&|$)/.test(single.hash), single.hash);
+      assert.ok(!/cam=/.test(single.hash), `a link to a stage carries no camera: ${single.hash}`);
       assert.strictEqual(parallel.edges.length, 4, `parallel stage should light every branch: ${parallel.edges}`);
       assert.deepStrictEqual([cleared.edges.length, cleared.dimmed], [0, 0], 'Esc should end the walkthrough spotlight');
-      assert.ok(!/scenario=/.test(cleared.hash), cleared.hash);
+      assert.ok(!/[#&]s=/.test(cleared.hash), cleared.hash);
     },
   ],
 
@@ -1459,6 +1460,71 @@ const cases = [
         steps: [ev('JSON.stringify({ node: state.selectedNodeId, zoom: state.zoom, x: state.panX, y: state.panY })')],
       }], undefined, { hash: 'node=api&z=0.9&x=10&y=20' });
       assert.deepStrictEqual(JSON.parse(lastEvalValue(results[0])), { node: 'api', zoom: 0.9, x: 10, y: 20 });
+    },
+  ],
+
+  [
+    '1d: a version 2 link round-trips view, selection, filter, focus, step, presentation and camera',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const SNAP = `({ view: state.currentView, node: state.selectedNodeId, filter: state.activeFilter, focus: state.focusMode,
+        present: state.presentation, seq: state.sequenceIndex, world: cameraToWorld(state, canvasSize()) })`;
+      const [written] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [ev(`(function () {
+        switchView('sequence');
+        goToSequenceStep(4);
+        openInspectorForNode('saga_orchestrator');
+        document.querySelector('[data-filter="backend"]').click();
+        setFocusMode('neighbors');
+        setPresentation(true);
+        zoomAround(state.zoom * 1.3, 400, 300);
+        updateUrlState();
+        return JSON.stringify({ hash: location.hash, snap: ${SNAP} });
+      })()`)] }]);
+      const before = JSON.parse(lastEvalValue(written));
+      assert.ok(/^#v=2&view=sequence&n=saga_orchestrator&step=\d+&filter=backend&focus=neighbors&present=1&cam=-?[\d.]+,-?[\d.]+,[\d.]+$/.test(before.hash), before.hash);
+      const [restored] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [ev(`JSON.stringify(${SNAP})`)] }], undefined, { hash: before.hash.slice(1) });
+      const after = JSON.parse(lastEvalValue(restored));
+      const { world: worldBefore, ...restBefore } = before.snap;
+      const { world: worldAfter, ...restAfter } = after;
+      assert.deepStrictEqual(restAfter, restBefore);
+      ['x', 'y', 'w'].forEach((axis) => assert.ok(Math.abs(worldAfter[axis] - worldBefore[axis]) <= 0.1, `camera ${axis}: ${worldBefore[axis]} -> ${worldAfter[axis]}`));
+    },
+  ],
+
+  [
+    '1d: a version 2 camera frames the same world region on a different screen',
+    () => {
+      const WORLD = ev('JSON.stringify(cameraToWorld(state, canvasSize()))');
+      [[1440, 900], [1024, 768]].forEach(([width, height]) => {
+        const [phase] = runPhases(fixtures.VALID_SPEC, [{ width, height, steps: [WORLD] }], undefined, { hash: 'v=2&cam=600,400,1200' });
+        const world = JSON.parse(lastEvalValue(phase));
+        assert.ok(Math.abs(world.x - 600) < 0.01 && Math.abs(world.y - 400) < 0.01 && Math.abs(world.w - 1200) < 0.01, `${width}x${height}: ${JSON.stringify(world)}`);
+      });
+      const [moved] = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, steps: [ev('const held = holdsLinkedCamera(); zoomAround(state.zoom * 1.2, 100, 100); JSON.stringify([held, holdsLinkedCamera()])')] }], undefined, { hash: 'v=2&cam=600,400,1200' });
+      assert.deepStrictEqual(JSON.parse(lastEvalValue(moved)), [true, false], 'the reader zooming releases the linked camera, so a later resize leaves their view alone');
+    },
+  ],
+
+  [
+    '1d: stage links use stable ids, and stale ids or newer versions are dropped with a notice',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const PROBE = ev(`JSON.stringify({ node: state.selectedNodeId, active: state.scenarioActive, stage: state.scenarioStage,
+        edges: [...document.querySelectorAll('.edge-path.highlighted')].map((p) => p.id).sort(),
+        status: document.getElementById('workbench-status').textContent })`);
+      const probe = (hash) => JSON.parse(lastEvalValue(runPhases(SAGA, [{ width: 1440, height: 900, steps: [PROBE] }], undefined, { hash })[0]));
+
+      const byId = probe('v=2&s=scenario_fulfillment_saga_dlq&at=stage_publish_order_created');
+      assert.deepStrictEqual([byId.active, byId.stage, byId.edges], [true, 3, ['path-e_poller_kafka']]);
+
+      const stale = probe('v=2&n=ghost_component&s=scenario_fulfillment_saga_dlq&at=stage_gone');
+      assert.deepStrictEqual([stale.node, stale.active, stale.stage], [null, true, 0]);
+      assert.ok(/Component ghost_component no longer exists\./.test(stale.status), stale.status);
+      assert.ok(/Step stage_gone no longer exists; showing the walkthrough start\./.test(stale.status), stale.status);
+
+      const future = probe('v=3&n=saga_orchestrator');
+      assert.strictEqual(future.node, null, 'a newer link format must not be half-applied');
+      assert.ok(/newer format \(version 3\)/.test(future.status), future.status);
     },
   ],
 

@@ -15,7 +15,7 @@ function goToSequenceStep(index) {
   const steps = sequenceSteps();
   if (steps.length === 0) return;
 
-  state.sequenceIndex = Math.max(0, Math.min(index, steps.length - 1));
+  actions.setSequenceIndex(Math.max(0, Math.min(index, steps.length - 1)));
   const step = steps[state.sequenceIndex];
 
   const stepInfo = document.getElementById('seq-step-info');

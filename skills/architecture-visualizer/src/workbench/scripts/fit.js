@@ -68,14 +68,17 @@ function fitToScreen() {
   const contentHeight = bounds.maxY - bounds.minY + padding * 2;
 
   const fitZoom = Math.min(Math.min(rect.width / contentWidth, rect.height / contentHeight), 1.4);
-  state.zoom = clampZoom(fitZoom);
-  state.panX = (rect.width - contentWidth * state.zoom) / 2 - bounds.minX * state.zoom + padding * state.zoom;
-  state.panY = (rect.height - contentHeight * state.zoom) / 2 - bounds.minY * state.zoom + padding * state.zoom;
+  const zoom = clampZoom(fitZoom);
+  actions.setCamera({
+    zoom,
+    panX: (rect.width - contentWidth * zoom) / 2 - bounds.minX * zoom + padding * zoom,
+    panY: (rect.height - contentHeight * zoom) / 2 - bounds.minY * zoom + padding * zoom
+  });
   updateTransform();
 }
 
 function resetView() {
-  state.userMovedView = false;
+  actions.setCamera({ userMoved: false });
   state.selectedNode = null;
   state.highlightedChain = null;
   applyVisibility();

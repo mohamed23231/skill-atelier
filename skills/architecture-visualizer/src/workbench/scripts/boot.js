@@ -54,11 +54,12 @@ function init() {
   renderQualityGate();
   applyVisibility();
   fitToScreen();
-  restoreUrlState();
+  const linkNotices = restoreUrlState();
   viewStateReady = true;
+  if (window.ResizeObserver) new ResizeObserver(() => { if (holdsLinkedCamera()) applyLinkedCamera(); }).observe(container);
   applyFocusMode();
   document.body.setAttribute('data-ready-ms', String(Math.round(performance.now())));
-  announceStatus('Architecture workbench ready.');
+  announceStatus(['Architecture workbench ready.', ...linkNotices].join(' '));
 }
 
 function initTheme() {
@@ -69,9 +70,9 @@ function initTheme() {
     stored = null;
   }
   const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-  state.theme = stored === THEMES.LIGHT || stored === THEMES.DARK
+  actions.setTheme(stored === THEMES.LIGHT || stored === THEMES.DARK
     ? stored
-    : (prefersLight ? THEMES.LIGHT : THEMES.DARK);
+    : (prefersLight ? THEMES.LIGHT : THEMES.DARK));
   applyTheme();
 }
 
@@ -82,7 +83,7 @@ function applyTheme() {
 
 function setupEventListeners() {
   document.getElementById('btn-theme').addEventListener('click', () => {
-    state.theme = state.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK;
+    actions.setTheme(state.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK);
     applyTheme();
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
@@ -131,7 +132,7 @@ function setupEventListeners() {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.delta-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      state.deltaMode = btn.dataset.deltaMode;
+      actions.setDeltaMode(btn.dataset.deltaMode);
       applyVisibility();
     });
   });
@@ -139,7 +140,7 @@ function setupEventListeners() {
   document.getElementById('btn-zoom-in').addEventListener('click', () => zoomBy(1.2));
   document.getElementById('btn-zoom-out').addEventListener('click', () => zoomBy(0.8));
   document.getElementById('btn-fit').addEventListener('click', () => {
-    state.userMovedView = false;
+    actions.setCamera({ userMoved: false });
     fitToScreen();
   });
   document.getElementById('btn-reset').addEventListener('click', resetView);
@@ -178,10 +179,13 @@ function setupEventListeners() {
     document.body.setAttribute('data-fullscreen', String(enabled));
     document.getElementById('btn-fullscreen').setAttribute('aria-pressed', String(enabled));
   });
-  window.addEventListener('hashchange', restoreUrlState);
+  window.addEventListener('hashchange', () => {
+    const notices = restoreUrlState();
+    if (notices.length) announceStatus(notices.join(' '));
+  });
 
   document.getElementById('search-box').addEventListener('input', e => {
-    state.searchQuery = e.target.value.toLowerCase().trim();
+    actions.setSearchQuery(e.target.value.toLowerCase().trim());
     renderSearchResults(state.searchQuery);
     applyVisibility();
   });
@@ -190,7 +194,7 @@ function setupEventListeners() {
     chip.addEventListener('click', () => {
       document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      state.activeFilter = chip.dataset.filter;
+      actions.setFilter(chip.dataset.filter);
       applyVisibility();
       updateUrlState();
     });
@@ -282,13 +286,13 @@ function handleKeyDown(e) {
       toggleFlowAnimation();
       break;
     case 'ArrowLeft':
-      state.panX += 60; updateTransform(); e.preventDefault(); break;
+      actions.setCamera({ panX: state.panX + 60 }); updateTransform(); e.preventDefault(); break;
     case 'ArrowRight':
-      state.panX -= 60; updateTransform(); e.preventDefault(); break;
+      actions.setCamera({ panX: state.panX - 60 }); updateTransform(); e.preventDefault(); break;
     case 'ArrowUp':
-      state.panY += 60; updateTransform(); e.preventDefault(); break;
+      actions.setCamera({ panY: state.panY + 60 }); updateTransform(); e.preventDefault(); break;
     case 'ArrowDown':
-      state.panY -= 60; updateTransform(); e.preventDefault(); break;
+      actions.setCamera({ panY: state.panY - 60 }); updateTransform(); e.preventDefault(); break;
     default:
       break;
   }
@@ -296,8 +300,8 @@ function handleKeyDown(e) {
 
 function switchView(viewName) {
   if (viewName !== VIEWS.SEQUENCE) stopScenarioPlayback();
-  if (viewName !== VIEWS.ARCHITECTURE) state.scenarioActive = false;
-  state.currentView = viewName;
+  if (viewName !== VIEWS.ARCHITECTURE) actions.setScenarioActive(false);
+  actions.setView(viewName);
   document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
   document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
   document.getElementById('view-database-er').classList.toggle('active', viewName === VIEWS.DATABASE_ER);

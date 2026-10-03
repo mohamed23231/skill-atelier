@@ -26,7 +26,7 @@ function renderScenarioStage() {
   const scenario = selectedScenario();
   if (!target || !scenario) return;
   const stages = flattenScenarioStages(scenario.stages);
-  state.scenarioStage = Math.max(0, Math.min(state.scenarioStage, Math.max(stages.length - 1, 0)));
+  actions.setScenarioStage(Math.max(0, Math.min(state.scenarioStage, Math.max(stages.length - 1, 0))));
   const stage = stages[state.scenarioStage];
   target.replaceChildren();
   if (!stage) {
@@ -64,12 +64,12 @@ function stageInteractions(stage) {
 
 function activateScenario() {
   if (state.currentView !== VIEWS.ARCHITECTURE) switchView(VIEWS.ARCHITECTURE);
-  state.scenarioActive = true;
+  actions.setScenarioActive(true);
 }
 
 function deactivateScenario() {
   if (!state.scenarioActive) return;
-  state.scenarioActive = false;
+  actions.setScenarioActive(false);
   stopScenarioPlayback();
   clearSpotlight();
   updateUrlState();
@@ -79,14 +79,14 @@ function selectScenario(id) {
   const scenario = (ARCH_SPEC.scenarios || []).find(item => item.id === id);
   if (!scenario) return;
   activateScenario();
-  state.scenarioId = scenario.id;
-  state.scenarioStage = 0;
+  actions.setScenario(scenario.id);
+  actions.setScenarioStage(0);
   renderScenarioStage();
 }
 
 function stepScenario(delta) {
   activateScenario();
-  state.scenarioStage += delta;
+  actions.setScenarioStage(state.scenarioStage + delta);
   renderScenarioStage();
 }
 
@@ -106,7 +106,7 @@ function toggleScenarioPlayback() {
   document.querySelector('[data-scenario-play]').setAttribute('aria-pressed', 'true');
   state.scenarioTimer = window.setInterval(() => {
     const stages = flattenScenarioStages(selectedScenario()?.stages);
-    state.scenarioStage = stages.length ? (state.scenarioStage + 1) % stages.length : 0;
+    actions.setScenarioStage(stages.length ? (state.scenarioStage + 1) % stages.length : 0);
     renderScenarioStage();
   }, 1400);
 }
@@ -119,7 +119,7 @@ function renderScenarioNavigator() {
     target.textContent = 'No named scenarios in this model.';
     return;
   }
-  state.scenarioId = state.scenarioId || scenarios[0].id;
+  actions.setScenario(state.scenarioId || scenarios[0].id);
   const player = document.createElement('div');
   player.className = 'workbench-scenario-player';
   const select = document.createElement('select');
@@ -147,7 +147,7 @@ function renderScenarioNavigator() {
   next.addEventListener('click', () => stepScenario(1));
   const scrubber = document.createElement('input');
   scrubber.type = 'range'; scrubber.min = '0'; scrubber.value = '0'; scrubber.setAttribute('data-scenario-scrubber', ''); scrubber.setAttribute('aria-label', 'Scenario stage');
-  scrubber.addEventListener('input', () => { activateScenario(); state.scenarioStage = Number(scrubber.value); renderScenarioStage(); });
+  scrubber.addEventListener('input', () => { activateScenario(); actions.setScenarioStage(Number(scrubber.value)); renderScenarioStage(); });
   const stage = document.createElement('div');
   stage.setAttribute('data-scenario-stage', '');
   toolbar.append(previous, play, next, scrubber);

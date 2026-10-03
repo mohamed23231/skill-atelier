@@ -385,6 +385,42 @@ const cases = [
       assert.deepStrictEqual([...listed].sort(), [...defined].sort(), 'DESIGN_TOKENS must list every token so exports carry them');
     },
   ],
+  [
+    'view state changes only through named actions in store.js',
+    () => {
+      const scriptsDir = path.join(WORKBENCH_DIR, 'scripts');
+      const storeSource = fs.readFileSync(path.join(scriptsDir, 'store.js'), 'utf8');
+      const storeSandbox = { Object, state: {} };
+      vm.runInNewContext(storeSource + '; this.STORE_FIELDS = STORE_FIELDS;', storeSandbox);
+      const storeFields = storeSandbox.STORE_FIELDS;
+      assert.ok(Array.isArray(storeFields) && storeFields.length > 0, 'STORE_FIELDS must be a non-empty array');
+
+      const stateSource = fs.readFileSync(path.join(scriptsDir, 'state.js'), 'utf8');
+      const stateSandbox = { ArchVizGeometry: {} };
+      vm.runInNewContext(stateSource + '; this.state = state;', stateSandbox);
+      const stateKeys = Object.keys(stateSandbox.state || {});
+
+      storeFields.forEach((field) => {
+        assert.ok(
+          stateKeys.includes(field),
+          `every STORE_FIELDS name must be a key of the state object in state.js (${field} missing)`
+        );
+      });
+
+      const writePattern = new RegExp(`\\bstate\\.(${storeFields.join('|')})\\s*(=(?!=)|\\+=|-=|\\+\\+|--)`);
+      const scriptFiles = fs.readdirSync(scriptsDir).filter((file) => file.endsWith('.js') && file !== 'store.js');
+
+      scriptFiles.forEach((file) => {
+        const content = fs.readFileSync(path.join(scriptsDir, file), 'utf8');
+        const match = content.match(writePattern);
+        assert.strictEqual(
+          match,
+          null,
+          `Direct write to store field found in ${file}: ${match ? match[0] : ''}`
+        );
+      });
+    },
+  ],
 ];
 
 module.exports = { name: 'Compiler & Exporter', cases };

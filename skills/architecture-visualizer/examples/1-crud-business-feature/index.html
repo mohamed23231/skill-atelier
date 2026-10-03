@@ -5419,6 +5419,35 @@
       prefersReducedMotion: false
     };
 
+    // The only writer of view state. Reads stay as `state.x`; every write goes through an action here.
+    const STORE_FIELDS = Object.freeze(['theme', 'currentView', 'deltaMode', 'selectedNodeId', 'selectedEdgeId',
+      'activeFilter', 'searchQuery', 'focusMode', 'presentation', 'scenarioId', 'scenarioStage', 'scenarioActive',
+      'sequenceIndex', 'zoom', 'panX', 'panY', 'userMovedView']);
+
+    const actions = Object.freeze({
+      setTheme(theme) { state.theme = theme; },
+      setView(view) { state.currentView = view; },
+      setDeltaMode(mode) { state.deltaMode = mode; },
+      selectNode(id) { state.selectedNodeId = id; },        // id or null
+      selectEdge(id) { state.selectedEdgeId = id; },        // id or null
+      clearSelection() { state.selectedNodeId = null; state.selectedEdgeId = null; },
+      setFilter(filter) { state.activeFilter = filter; },
+      setSearchQuery(query) { state.searchQuery = query; },
+      setFocusMode(mode) { state.focusMode = mode; },       // mode or null; not a toggle
+      setPresentation(enabled) { state.presentation = enabled; },
+      setScenario(id) { state.scenarioId = id; },
+      setScenarioStage(index) { state.scenarioStage = index; },
+      setScenarioActive(active) { state.scenarioActive = active; },
+      setSequenceIndex(index) { state.sequenceIndex = index; },
+      // Any subset of { zoom, panX, panY, userMoved }; omitted keys are left as they are.
+      setCamera({ zoom, panX, panY, userMoved } = {}) {
+        if (zoom !== undefined) state.zoom = zoom;
+        if (panX !== undefined) state.panX = panX;
+        if (panY !== undefined) state.panY = panY;
+        if (userMoved !== undefined) state.userMovedView = userMoved;
+      }
+    });
+
     // DOM Elements
     const svg = document.getElementById('arch-svg');
     const viewport = document.getElementById('viewport-group');
@@ -5608,16 +5637,19 @@
 
     function focusModelPoint(x, y) {
       const rect = svg.getBoundingClientRect();
-      state.zoom = clampZoom(Math.max(state.zoom * 1.08, 0.85));
-      state.panX = rect.width / 2 - x * state.zoom;
-      state.panY = rect.height / 2 - y * state.zoom;
-      state.userMovedView = true;
+      const zoom = clampZoom(Math.max(state.zoom * 1.08, 0.85));
+      actions.setCamera({
+        zoom,
+        panX: rect.width / 2 - x * zoom,
+        panY: rect.height / 2 - y * zoom,
+        userMoved: true
+      });
       updateTransform();
     }
 
     function openInspectorForNode(nodeId) {
       showNodeInspector();
-      state.selectedEdgeId = null;
+      actions.selectEdge(null);
       document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
       selectNode(nodeId);
       const node = nodeById.get(nodeId);
@@ -5634,12 +5666,12 @@
       showNodeInspector();
       const edge = edgeById.get(edgeId);
       if (!edge) return;
-      state.selectedEdgeId = edgeId;
+      actions.selectEdge(edgeId);
       document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
       document.querySelectorAll('.node-group').forEach(item => item.classList.remove('selected'));
       const path = document.getElementById(`path-${edgeId}`);
       if (path) path.setAttribute('data-selected', 'true');
-      state.selectedNodeId = null;
+      actions.selectNode(null);
       inspector.setAttribute('data-inspector-kind', 'edge');
       document.getElementById('ins-title').textContent = edge.label || edge.packetLabel || edge.id;
       document.getElementById('ins-tech').textContent = `${edge.communication || 'sync'} relationship`;
@@ -5756,6 +5788,169 @@
       focusModelPoint(x, y);
     }
 
+    // Pure, DOM-free codec for the workbench URL hash. Nothing here touches the document: callers pass
+    // plain values in and get plain values out, so the same functions run under Node in the tests.
+    const URL_CODEC_DEFAULT_VIEW = 'architecture';
+
+    // A "set" value is anything that survives the round trip. 0, false and '' all mean "not set".
+    function urlSet(value) {
+      return value !== null && value !== undefined && value !== false && value !== '';
+    }
+
+    function urlFiniteNumber(value) {
+      return typeof value === 'number' && Number.isFinite(value);
+    }
+
+    function urlRound1(value) {
+      return Math.round(value * 10) / 10;
+    }
+
+    // Integer >= 0 from a string or number, or null when absent, malformed or negative.
+    function urlIndexOf(raw) {
+      if (!urlSet(raw)) return null;
+      const value = Number(raw);
+      return Number.isInteger(value) && value >= 0 ? value : null;
+    }
+
+    function urlParseCamera(raw) {
+      if (!urlSet(raw)) return null;
+      const parts = String(raw).split(',');
+      if (parts.length !== 3) return null;
+      const numbers = parts.map((part) => Number(part));
+      if (!numbers.every(Number.isFinite)) return null;
+      const [x, y, w] = numbers;
+      if (!(w > 0)) return null;
+      return { x, y, w };
+    }
+
+    // Version 1 keeps the stage and step as indices into the authored arrays; version 2 stores the
+    // authored stage id and step number instead. Both live on different keys so the caller can tell.
+    function urlParseV1(params) {
+      const result = { version: 1 };
+      const view = params.get('view');
+      if (urlSet(view)) result.view = view;
+      const node = params.get('node');
+      if (urlSet(node)) result.node = node;
+      const edge = params.get('edge');
+      if (urlSet(edge)) result.edge = edge;
+      const filter = params.get('filter');
+      if (urlSet(filter)) result.filter = filter;
+      const scenario = params.get('scenario');
+      if (urlSet(scenario)) result.scenario = scenario;
+      const focus = params.get('focus');
+      if (urlSet(focus)) result.focus = focus;
+      if (params.get('present') === '1') result.present = true;
+      const stepIndex = urlIndexOf(params.get('step'));
+      if (stepIndex !== null) result.stepIndex = stepIndex;
+      const stageIndex = urlIndexOf(params.get('stage'));
+      if (stageIndex !== null) result.stageIndex = stageIndex;
+      const screenCamera = {};
+      // Number(null) is 0, so a missing parameter must stay absent rather than read as the origin.
+      const z = params.has('z') ? Number(params.get('z')) : NaN;
+      if (Number.isFinite(z)) screenCamera.zoom = z;
+      const x = params.has('x') ? Number(params.get('x')) : NaN;
+      if (Number.isFinite(x)) screenCamera.panX = x;
+      const y = params.has('y') ? Number(params.get('y')) : NaN;
+      if (Number.isFinite(y)) screenCamera.panY = y;
+      if (Object.keys(screenCamera).length > 0) result.screenCamera = screenCamera;
+      return result;
+    }
+
+    function urlParseV2(params) {
+      const result = { version: 2 };
+      const view = params.get('view');
+      if (urlSet(view)) result.view = view;
+      const node = params.get('n');
+      if (urlSet(node)) result.node = node;
+      const edge = params.get('e');
+      if (urlSet(edge)) result.edge = edge;
+      const scenario = params.get('s');
+      if (urlSet(scenario)) result.scenario = scenario;
+      const stage = params.get('at');
+      if (urlSet(stage)) result.stage = stage;
+      const step = urlIndexOf(params.get('step'));
+      if (step !== null) result.step = step;
+      const filter = params.get('filter');
+      if (urlSet(filter)) result.filter = filter;
+      const focus = params.get('focus');
+      if (urlSet(focus)) result.focus = focus;
+      if (params.get('present') === '1') result.present = true;
+      const camera = urlParseCamera(params.get('cam'));
+      if (camera) result.camera = camera;
+      return result;
+    }
+
+    function encodeViewHash(snapshot) {
+      const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      const params = new URLSearchParams();
+      let camSuffix = '';
+      params.set('v', '2');
+      if (urlSet(source.view) && source.view !== URL_CODEC_DEFAULT_VIEW) params.set('view', String(source.view));
+      if (urlSet(source.node)) params.set('n', String(source.node));
+      if (urlSet(source.edge)) params.set('e', String(source.edge));
+      if (urlSet(source.scenario)) params.set('s', String(source.scenario));
+      if (urlSet(source.stage)) params.set('at', String(source.stage));
+      const step = urlIndexOf(source.step);
+      if (step !== null) params.set('step', String(step));
+      if (urlSet(source.filter)) params.set('filter', String(source.filter));
+      if (urlSet(source.focus)) params.set('focus', String(source.focus));
+      if (source.present === true) params.set('present', '1');
+      const camera = source.camera;
+      if (camera && typeof camera === 'object') {
+        const { x, y, w } = camera;
+        if (urlFiniteNumber(x) && urlFiniteNumber(y) && urlFiniteNumber(w) && w > 0) {
+          // The comma is part of the grammar, so it is appended unencoded rather than through `set`.
+          camSuffix = `&cam=${urlRound1(x)},${urlRound1(y)},${urlRound1(w)}`;
+        }
+      }
+      return params.toString() + camSuffix;
+    }
+
+    function parseViewHash(hash) {
+      const source = typeof hash === 'string' ? hash : '';
+      const raw = source.startsWith('#') ? source.slice(1) : source;
+      let params;
+      try {
+        params = new URLSearchParams(raw);
+      } catch (error) {
+        params = new URLSearchParams('');
+      }
+      const version = params.get('v');
+      if (version === null) return urlParseV1(params);
+      if (version === '2') return urlParseV2(params);
+      const numeric = Number(version);
+      return { version: Number.isFinite(numeric) ? numeric : version, unsupported: true };
+    }
+
+    // The SVG viewport is drawn with matrix(zoom 0 0 zoom panX panY), so the world point under the
+    // canvas centre is the inverse of that transform, and the visible width is the canvas width / zoom.
+    function cameraToWorld(camera, size) {
+      const zoom = camera && Number.isFinite(camera.zoom) && camera.zoom !== 0 ? camera.zoom : 1;
+      const panX = camera && Number.isFinite(camera.panX) ? camera.panX : 0;
+      const panY = camera && Number.isFinite(camera.panY) ? camera.panY : 0;
+      const width = size ? size.width : 0;
+      const height = size ? size.height : 0;
+      return {
+        x: (width / 2 - panX) / zoom,
+        y: (height / 2 - panY) / zoom,
+        w: width / zoom,
+      };
+    }
+
+    function worldToCamera(world, size) {
+      const x = world && Number.isFinite(world.x) ? world.x : 0;
+      const y = world && Number.isFinite(world.y) ? world.y : 0;
+      const w = world && Number.isFinite(world.w) && world.w !== 0 ? world.w : 1;
+      const width = size ? size.width : 0;
+      const height = size ? size.height : 0;
+      const zoom = width / w;
+      return {
+        zoom,
+        panX: width / 2 - x * zoom,
+        panY: height / 2 - y * zoom,
+      };
+    }
+
     const FOCUS_MODES = { NEIGHBORS: 'neighbors', AFFECTED: 'affected' };
     let restoringViewState = false;
     // Until init has read the incoming hash, nothing may write one: an early write would replace a shared
@@ -5852,13 +6047,13 @@
     }
 
     function setFocusMode(mode) {
-      state.focusMode = state.focusMode === mode ? null : mode;
+      actions.setFocusMode(state.focusMode === mode ? null : mode);
       applyFocusMode();
       updateUrlState();
     }
 
     function setPresentation(enabled) {
-      state.presentation = enabled;
+      actions.setPresentation(enabled);
       document.body.setAttribute('data-presentation', String(enabled));
       document.getElementById('btn-presentation').setAttribute('aria-pressed', String(enabled));
       window.requestAnimationFrame(() => {
@@ -5884,75 +6079,147 @@
       urlStateTimer = window.setTimeout(updateUrlState, 60);
     }
 
-    function updateUrlState() {
-      if (restoringViewState || !viewStateReady) return;
-      const params = new URLSearchParams();
-      params.set('view', state.currentView);
-      if (state.selectedNodeId) params.set('node', state.selectedNodeId);
-      if (state.selectedEdgeId) params.set('edge', state.selectedEdgeId);
-      if (state.activeFilter !== 'all') params.set('filter', state.activeFilter);
-      if (state.sequenceIndex) params.set('step', String(state.sequenceIndex));
-      if (state.scenarioActive && state.scenarioId) {
-        params.set('scenario', state.scenarioId);
-        if (state.scenarioStage) params.set('stage', String(state.scenarioStage));
-      }
-      if (state.focusMode) params.set('focus', state.focusMode);
-      if (state.presentation) params.set('present', '1');
-      params.set('z', String(Math.round(state.zoom * 1000) / 1000));
-      params.set('x', String(Math.round(state.panX * 10) / 10));
-      params.set('y', String(Math.round(state.panY * 10) / 10));
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${params}`);
+    function canvasSize() {
+      const rect = svg.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
     }
 
+    // A linked camera is a world region, so it is re-framed whenever the canvas changes size (the window
+    // settling after load, a panel docking) until the reader moves the camera themselves.
+    let linkedCamera = null;
+
+    function applyLinkedCamera() {
+      const size = canvasSize();
+      const { x, y, w } = linkedCamera.world;
+      // Keep the linked centre; a zoom past the limits on this screen is clamped around it.
+      const zoom = clampZoom(worldToCamera(linkedCamera.world, size).zoom);
+      actions.setCamera({ zoom, panX: size.width / 2 - x * zoom, panY: size.height / 2 - y * zoom, userMoved: true });
+      linkedCamera.applied = { zoom: state.zoom, panX: state.panX, panY: state.panY };
+      updateTransform();
+    }
+
+    function holdsLinkedCamera() {
+      return Boolean(linkedCamera?.applied) && ['zoom', 'panX', 'panY'].every(key => state[key] === linkedCamera.applied[key]);
+    }
+
+    // The share link is version 2 and names things by stable id. The camera is written in world space,
+    // so a link frames the same region on any screen, and only once the reader has moved it: an untouched
+    // view refits wherever it opens. A link to a scenario stage carries no camera for the same reason.
+    function viewSnapshot() {
+      const snapshot = {
+        view: state.currentView,
+        node: state.selectedNodeId,
+        edge: state.selectedEdgeId,
+        filter: state.activeFilter !== 'all' ? state.activeFilter : null,
+        focus: state.focusMode,
+        present: state.presentation
+      };
+      if (state.sequenceIndex) {
+        const step = sequenceSteps()[state.sequenceIndex];
+        snapshot.step = Number.isInteger(step?.step) ? step.step : state.sequenceIndex + 1;
+      }
+      if (state.scenarioActive && state.scenarioId) {
+        snapshot.scenario = state.scenarioId;
+        const stage = flattenScenarioStages(selectedScenario()?.stages)[state.scenarioStage];
+        if (stage?.id) snapshot.stage = stage.id;
+      }
+      if (state.userMovedView && !snapshot.scenario) snapshot.camera = cameraToWorld(state, canvasSize());
+      return snapshot;
+    }
+
+    function updateUrlState() {
+      if (restoringViewState || !viewStateReady) return;
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${encodeViewHash(viewSnapshot())}`);
+    }
+
+    // Sequence steps are linked by their authored number; a model without numbers falls back to position.
+    function sequenceIndexForStep(number) {
+      const steps = sequenceSteps();
+      if (!steps.some(step => Number.isInteger(step.step))) return number >= 1 && number <= steps.length ? number - 1 : -1;
+      return steps.findIndex(step => step.step === number);
+    }
+
+    // Reads version 1 and version 2 links. Anything the model no longer has is dropped, and the returned
+    // notices say what was dropped, one sentence each.
     function restoreUrlState() {
       restoringViewState = true;
+      const notices = [];
+      linkedCamera = null;
       try {
-        const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-        const view = params.get('view');
-        if (Object.values(VIEWS).includes(view)) switchView(view);
-        const filter = params.get('filter');
-        if (filter && document.querySelector(`[data-filter="${CSS.escape(filter)}"]`)) {
-          state.activeFilter = filter;
-          document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.toggle('active', chip.dataset.filter === filter));
-          applyVisibility();
+        const link = parseViewHash(window.location.hash);
+        if (link.unsupported) {
+          notices.push(`This link uses a newer format (version ${link.version}); showing the default view.`);
+          return notices;
         }
-        const node = params.get('node');
-        const edge = params.get('edge');
-        if (nodeById.has(node)) openInspectorForNode(node);
-        else if (edgeById.has(edge)) openInspectorForEdge(edge);
-        const scenario = params.get('scenario');
-        if ((ARCH_SPEC.scenarios || []).some(item => item.id === scenario)) {
-          state.scenarioId = scenario;
-          const scenarioStage = Number.parseInt(params.get('stage'), 10);
-          state.scenarioStage = Number.isInteger(scenarioStage) && scenarioStage >= 0 ? scenarioStage : 0;
-          state.scenarioActive = true;
-          renderScenarioNavigator();
+        if (link.view !== undefined) {
+          if (Object.values(VIEWS).includes(link.view)) switchView(link.view);
+          else notices.push(`View ${link.view} does not exist; showing the architecture.`);
         }
-        const focus = params.get('focus');
-        if (Object.values(FOCUS_MODES).includes(focus)) {
-          state.focusMode = focus;
-          applyFocusMode();
+        if (link.filter !== undefined) {
+          if (document.querySelector(`[data-filter="${CSS.escape(link.filter)}"]`)) {
+            actions.setFilter(link.filter);
+            document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.toggle('active', chip.dataset.filter === link.filter));
+            applyVisibility();
+          } else {
+            notices.push(`Filter ${link.filter} does not exist; showing everything.`);
+          }
         }
-        const step = Number.parseInt(params.get('step'), 10);
-        if (Number.isInteger(step) && step >= 0) goToSequenceStep(step);
-        if (params.get('present') === '1') setPresentation(true);
-        // Number(null) is 0, so a missing parameter must stay NaN rather than read as "pan to the origin".
-        const numberParam = name => (params.has(name) ? Number(params.get(name)) : NaN);
-        const zoom = numberParam('z');
-        const panX = numberParam('x');
-        const panY = numberParam('y');
-        if (Number.isFinite(zoom) && zoom >= 0.15 && zoom <= 4) state.zoom = zoom;
-        if (Number.isFinite(panX)) state.panX = panX;
-        if (Number.isFinite(panY)) state.panY = panY;
-        if (Number.isFinite(zoom) || Number.isFinite(panX) || Number.isFinite(panY)) {
-          state.userMovedView = true;
+        if (nodeById.has(link.node)) openInspectorForNode(link.node);
+        else if (edgeById.has(link.edge)) openInspectorForEdge(link.edge);
+        else if (link.node !== undefined) notices.push(`Component ${link.node} no longer exists.`);
+        else if (link.edge !== undefined) notices.push(`Connection ${link.edge} no longer exists.`);
+        if (link.scenario !== undefined) {
+          const scenario = (ARCH_SPEC.scenarios || []).find(item => item.id === link.scenario);
+          if (!scenario) {
+            notices.push(`Scenario ${link.scenario} no longer exists.`);
+          } else {
+            let stageIndex = link.stageIndex ?? 0;
+            if (link.stage !== undefined) {
+              stageIndex = flattenScenarioStages(scenario.stages).findIndex(stage => stage.id === link.stage);
+              if (stageIndex < 0) {
+                notices.push(`Step ${link.stage} no longer exists; showing the walkthrough start.`);
+                stageIndex = 0;
+              }
+            }
+            actions.setScenario(scenario.id);
+            actions.setScenarioStage(stageIndex);
+            actions.setScenarioActive(true);
+            renderScenarioNavigator();
+          }
+        }
+        if (link.focus !== undefined) {
+          if (Object.values(FOCUS_MODES).includes(link.focus)) {
+            actions.setFocusMode(link.focus);
+            applyFocusMode();
+          } else {
+            notices.push(`Focus ${link.focus} does not exist.`);
+          }
+        }
+        if (link.stepIndex !== undefined) goToSequenceStep(link.stepIndex);
+        if (link.step !== undefined) {
+          const index = sequenceIndexForStep(link.step);
+          if (index >= 0) goToSequenceStep(index);
+          else notices.push(`Sequence step ${link.step} no longer exists.`);
+        }
+        if (link.present) setPresentation(true);
+        if (link.screenCamera) {
+          const { zoom, panX, panY } = link.screenCamera;
+          if (Number.isFinite(zoom) && zoom >= 0.15 && zoom <= 4) actions.setCamera({ zoom });
+          if (Number.isFinite(panX)) actions.setCamera({ panX });
+          if (Number.isFinite(panY)) actions.setCamera({ panY });
+          actions.setCamera({ userMoved: true });
           updateTransform();
         }
+        if (link.camera) {
+          linkedCamera = { world: link.camera };
+          applyLinkedCamera();
+        }
       } catch (error) {
-        return;
+        return notices;
       } finally {
         restoringViewState = false;
       }
+      return notices;
     }
 
     function announceStatus(message) {
@@ -6059,7 +6326,7 @@
       const scenario = selectedScenario();
       if (!target || !scenario) return;
       const stages = flattenScenarioStages(scenario.stages);
-      state.scenarioStage = Math.max(0, Math.min(state.scenarioStage, Math.max(stages.length - 1, 0)));
+      actions.setScenarioStage(Math.max(0, Math.min(state.scenarioStage, Math.max(stages.length - 1, 0))));
       const stage = stages[state.scenarioStage];
       target.replaceChildren();
       if (!stage) {
@@ -6097,12 +6364,12 @@
 
     function activateScenario() {
       if (state.currentView !== VIEWS.ARCHITECTURE) switchView(VIEWS.ARCHITECTURE);
-      state.scenarioActive = true;
+      actions.setScenarioActive(true);
     }
 
     function deactivateScenario() {
       if (!state.scenarioActive) return;
-      state.scenarioActive = false;
+      actions.setScenarioActive(false);
       stopScenarioPlayback();
       clearSpotlight();
       updateUrlState();
@@ -6112,14 +6379,14 @@
       const scenario = (ARCH_SPEC.scenarios || []).find(item => item.id === id);
       if (!scenario) return;
       activateScenario();
-      state.scenarioId = scenario.id;
-      state.scenarioStage = 0;
+      actions.setScenario(scenario.id);
+      actions.setScenarioStage(0);
       renderScenarioStage();
     }
 
     function stepScenario(delta) {
       activateScenario();
-      state.scenarioStage += delta;
+      actions.setScenarioStage(state.scenarioStage + delta);
       renderScenarioStage();
     }
 
@@ -6139,7 +6406,7 @@
       document.querySelector('[data-scenario-play]').setAttribute('aria-pressed', 'true');
       state.scenarioTimer = window.setInterval(() => {
         const stages = flattenScenarioStages(selectedScenario()?.stages);
-        state.scenarioStage = stages.length ? (state.scenarioStage + 1) % stages.length : 0;
+        actions.setScenarioStage(stages.length ? (state.scenarioStage + 1) % stages.length : 0);
         renderScenarioStage();
       }, 1400);
     }
@@ -6152,7 +6419,7 @@
         target.textContent = 'No named scenarios in this model.';
         return;
       }
-      state.scenarioId = state.scenarioId || scenarios[0].id;
+      actions.setScenario(state.scenarioId || scenarios[0].id);
       const player = document.createElement('div');
       player.className = 'workbench-scenario-player';
       const select = document.createElement('select');
@@ -6180,7 +6447,7 @@
       next.addEventListener('click', () => stepScenario(1));
       const scrubber = document.createElement('input');
       scrubber.type = 'range'; scrubber.min = '0'; scrubber.value = '0'; scrubber.setAttribute('data-scenario-scrubber', ''); scrubber.setAttribute('aria-label', 'Scenario stage');
-      scrubber.addEventListener('input', () => { activateScenario(); state.scenarioStage = Number(scrubber.value); renderScenarioStage(); });
+      scrubber.addEventListener('input', () => { activateScenario(); actions.setScenarioStage(Number(scrubber.value)); renderScenarioStage(); });
       const stage = document.createElement('div');
       stage.setAttribute('data-scenario-stage', '');
       toolbar.append(previous, play, next, scrubber);
@@ -6245,11 +6512,12 @@
       renderQualityGate();
       applyVisibility();
       fitToScreen();
-      restoreUrlState();
+      const linkNotices = restoreUrlState();
       viewStateReady = true;
+      if (window.ResizeObserver) new ResizeObserver(() => { if (holdsLinkedCamera()) applyLinkedCamera(); }).observe(container);
       applyFocusMode();
       document.body.setAttribute('data-ready-ms', String(Math.round(performance.now())));
-      announceStatus('Architecture workbench ready.');
+      announceStatus(['Architecture workbench ready.', ...linkNotices].join(' '));
     }
 
     function initTheme() {
@@ -6260,9 +6528,9 @@
         stored = null;
       }
       const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-      state.theme = stored === THEMES.LIGHT || stored === THEMES.DARK
+      actions.setTheme(stored === THEMES.LIGHT || stored === THEMES.DARK
         ? stored
-        : (prefersLight ? THEMES.LIGHT : THEMES.DARK);
+        : (prefersLight ? THEMES.LIGHT : THEMES.DARK));
       applyTheme();
     }
 
@@ -6273,7 +6541,7 @@
 
     function setupEventListeners() {
       document.getElementById('btn-theme').addEventListener('click', () => {
-        state.theme = state.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK;
+        actions.setTheme(state.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK);
         applyTheme();
         try {
           window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
@@ -6322,7 +6590,7 @@
         btn.addEventListener('click', () => {
           document.querySelectorAll('.delta-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
-          state.deltaMode = btn.dataset.deltaMode;
+          actions.setDeltaMode(btn.dataset.deltaMode);
           applyVisibility();
         });
       });
@@ -6330,7 +6598,7 @@
       document.getElementById('btn-zoom-in').addEventListener('click', () => zoomBy(1.2));
       document.getElementById('btn-zoom-out').addEventListener('click', () => zoomBy(0.8));
       document.getElementById('btn-fit').addEventListener('click', () => {
-        state.userMovedView = false;
+        actions.setCamera({ userMoved: false });
         fitToScreen();
       });
       document.getElementById('btn-reset').addEventListener('click', resetView);
@@ -6369,10 +6637,13 @@
         document.body.setAttribute('data-fullscreen', String(enabled));
         document.getElementById('btn-fullscreen').setAttribute('aria-pressed', String(enabled));
       });
-      window.addEventListener('hashchange', restoreUrlState);
+      window.addEventListener('hashchange', () => {
+        const notices = restoreUrlState();
+        if (notices.length) announceStatus(notices.join(' '));
+      });
 
       document.getElementById('search-box').addEventListener('input', e => {
-        state.searchQuery = e.target.value.toLowerCase().trim();
+        actions.setSearchQuery(e.target.value.toLowerCase().trim());
         renderSearchResults(state.searchQuery);
         applyVisibility();
       });
@@ -6381,7 +6652,7 @@
         chip.addEventListener('click', () => {
           document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
           chip.classList.add('active');
-          state.activeFilter = chip.dataset.filter;
+          actions.setFilter(chip.dataset.filter);
           applyVisibility();
           updateUrlState();
         });
@@ -6473,13 +6744,13 @@
           toggleFlowAnimation();
           break;
         case 'ArrowLeft':
-          state.panX += 60; updateTransform(); e.preventDefault(); break;
+          actions.setCamera({ panX: state.panX + 60 }); updateTransform(); e.preventDefault(); break;
         case 'ArrowRight':
-          state.panX -= 60; updateTransform(); e.preventDefault(); break;
+          actions.setCamera({ panX: state.panX - 60 }); updateTransform(); e.preventDefault(); break;
         case 'ArrowUp':
-          state.panY += 60; updateTransform(); e.preventDefault(); break;
+          actions.setCamera({ panY: state.panY + 60 }); updateTransform(); e.preventDefault(); break;
         case 'ArrowDown':
-          state.panY -= 60; updateTransform(); e.preventDefault(); break;
+          actions.setCamera({ panY: state.panY - 60 }); updateTransform(); e.preventDefault(); break;
         default:
           break;
       }
@@ -6487,8 +6758,8 @@
 
     function switchView(viewName) {
       if (viewName !== VIEWS.SEQUENCE) stopScenarioPlayback();
-      if (viewName !== VIEWS.ARCHITECTURE) state.scenarioActive = false;
-      state.currentView = viewName;
+      if (viewName !== VIEWS.ARCHITECTURE) actions.setScenarioActive(false);
+      actions.setView(viewName);
       document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
       document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
       document.getElementById('view-database-er').classList.toggle('active', viewName === VIEWS.DATABASE_ER);
@@ -6884,7 +7155,7 @@
 
     // Node Selection & Inspector Drawer
     function selectNode(nodeId) {
-      state.selectedNodeId = nodeId;
+      actions.selectNode(nodeId);
       document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
 
       const nodeEl = document.getElementById(`node-${nodeId}`);
@@ -6959,8 +7230,7 @@
     function closeInspector() {
       setDrawerOpen('inspector', false);
       document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
-      state.selectedNodeId = null;
-      state.selectedEdgeId = null;
+      actions.clearSelection();
       state.highlightedChain = null;
       document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
       applyVisibility();
@@ -7062,7 +7332,7 @@
       const steps = sequenceSteps();
       if (steps.length === 0) return;
 
-      state.sequenceIndex = Math.max(0, Math.min(index, steps.length - 1));
+      actions.setSequenceIndex(Math.max(0, Math.min(index, steps.length - 1)));
       const step = steps[state.sequenceIndex];
 
       const stepInfo = document.getElementById('seq-step-info');
@@ -7251,11 +7521,10 @@
     }
 
     function zoomAround(newZoom, cx, cy) {
-      state.userMovedView = true;
       const clamped = clampZoom(newZoom);
-      state.panX = cx - (cx - state.panX) * (clamped / state.zoom);
-      state.panY = cy - (cy - state.panY) * (clamped / state.zoom);
-      state.zoom = clamped;
+      const panX = cx - (cx - state.panX) * (clamped / state.zoom);
+      const panY = cy - (cy - state.panY) * (clamped / state.zoom);
+      actions.setCamera({ zoom: clamped, panX, panY, userMoved: true });
       updateTransform();
     }
 
@@ -7282,10 +7551,12 @@
 
     function handleMouseMove(e) {
       if (state.isDraggingCanvas) {
-        state.panX = e.clientX - state.dragStartX;
-        state.panY = e.clientY - state.dragStartY;
+        actions.setCamera({
+          panX: e.clientX - state.dragStartX,
+          panY: e.clientY - state.dragStartY,
+          userMoved: true
+        });
         state.dragMoved = true;
-        state.userMovedView = true;
         updateTransform();
       } else if (state.draggingNodeId) {
         moveDraggedNode(e.clientX, e.clientY);
@@ -7326,10 +7597,12 @@
     function handleTouchMove(e) {
       if (!state.isDraggingCanvas || e.touches.length !== 1) return;
       e.preventDefault();
-      state.userMovedView = true;
       const touch = e.touches[0];
-      state.panX = touch.clientX - state.dragStartX;
-      state.panY = touch.clientY - state.dragStartY;
+      actions.setCamera({
+        panX: touch.clientX - state.dragStartX,
+        panY: touch.clientY - state.dragStartY,
+        userMoved: true
+      });
       updateTransform();
     }
 
@@ -7625,14 +7898,17 @@
       const contentHeight = bounds.maxY - bounds.minY + padding * 2;
 
       const fitZoom = Math.min(Math.min(rect.width / contentWidth, rect.height / contentHeight), 1.4);
-      state.zoom = clampZoom(fitZoom);
-      state.panX = (rect.width - contentWidth * state.zoom) / 2 - bounds.minX * state.zoom + padding * state.zoom;
-      state.panY = (rect.height - contentHeight * state.zoom) / 2 - bounds.minY * state.zoom + padding * state.zoom;
+      const zoom = clampZoom(fitZoom);
+      actions.setCamera({
+        zoom,
+        panX: (rect.width - contentWidth * zoom) / 2 - bounds.minX * zoom + padding * zoom,
+        panY: (rect.height - contentHeight * zoom) / 2 - bounds.minY * zoom + padding * zoom
+      });
       updateTransform();
     }
 
     function resetView() {
-      state.userMovedView = false;
+      actions.setCamera({ userMoved: false });
       state.selectedNode = null;
       state.highlightedChain = null;
       applyVisibility();

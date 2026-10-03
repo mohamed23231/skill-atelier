@@ -76,16 +76,19 @@ function trapDrawerFocus(event) {
 
 function focusModelPoint(x, y) {
   const rect = svg.getBoundingClientRect();
-  state.zoom = clampZoom(Math.max(state.zoom * 1.08, 0.85));
-  state.panX = rect.width / 2 - x * state.zoom;
-  state.panY = rect.height / 2 - y * state.zoom;
-  state.userMovedView = true;
+  const zoom = clampZoom(Math.max(state.zoom * 1.08, 0.85));
+  actions.setCamera({
+    zoom,
+    panX: rect.width / 2 - x * zoom,
+    panY: rect.height / 2 - y * zoom,
+    userMoved: true
+  });
   updateTransform();
 }
 
 function openInspectorForNode(nodeId) {
   showNodeInspector();
-  state.selectedEdgeId = null;
+  actions.selectEdge(null);
   document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
   selectNode(nodeId);
   const node = nodeById.get(nodeId);
@@ -102,12 +105,12 @@ function openInspectorForEdge(edgeId) {
   showNodeInspector();
   const edge = edgeById.get(edgeId);
   if (!edge) return;
-  state.selectedEdgeId = edgeId;
+  actions.selectEdge(edgeId);
   document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
   document.querySelectorAll('.node-group').forEach(item => item.classList.remove('selected'));
   const path = document.getElementById(`path-${edgeId}`);
   if (path) path.setAttribute('data-selected', 'true');
-  state.selectedNodeId = null;
+  actions.selectNode(null);
   inspector.setAttribute('data-inspector-kind', 'edge');
   document.getElementById('ins-title').textContent = edge.label || edge.packetLabel || edge.id;
   document.getElementById('ins-tech').textContent = `${edge.communication || 'sync'} relationship`;
