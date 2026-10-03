@@ -301,10 +301,17 @@ function renderWalkTrack() {
     walkTrackBound = true;
     ['mousedown', 'touchstart'].forEach((type) => track.addEventListener(type, (event) => event.stopPropagation()));
   }
+  const previousHeight = track.getBoundingClientRect().height;
+  const refitTrack = () => {
+    if (!state.userMovedView && track.getBoundingClientRect().height !== previousHeight) {
+      window.requestAnimationFrame(() => { if (!state.userMovedView) fitToScreen(); });
+    }
+  };
   const entries = state.scenarioActive ? walkEntries() : [];
   if (!state.scenarioActive || !entries.length) {
     track.hidden = true;
     track.replaceChildren();
+    refitTrack();
     return;
   }
   track.hidden = false;
@@ -362,6 +369,7 @@ function renderWalkTrack() {
     note.textContent = walkPlaybackNote();
     track.appendChild(note);
   }
+  refitTrack();
 }
 
 function walkChapterStep(entry) {

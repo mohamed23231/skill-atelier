@@ -136,15 +136,6 @@ function setupEventListeners() {
   });
   selectLens(state.lens, { explicit: false });
 
-  document.querySelectorAll('.delta-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.delta-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      actions.setDeltaMode(btn.dataset.deltaMode);
-      applyVisibility();
-    });
-  });
-
   document.getElementById('btn-zoom-in').addEventListener('click', () => zoomBy(1.2));
   document.getElementById('btn-zoom-out').addEventListener('click', () => zoomBy(0.8));
   document.getElementById('btn-fit').addEventListener('click', fitFromButton);
@@ -183,21 +174,6 @@ function setupEventListeners() {
   window.addEventListener('hashchange', () => {
     const notices = restoreUrlState();
     if (notices.length) announceStatus(notices.join(' '));
-  });
-
-  document.getElementById('search-box').addEventListener('input', e => {
-    actions.setSearchQuery(e.target.value.toLowerCase().trim());
-    applyVisibility();
-  });
-
-  document.querySelectorAll('.filter-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      actions.setFilter(chip.dataset.filter);
-      applyVisibility();
-      updateUrlState();
-    });
   });
 
   document.getElementById('ins-btn-highlight').addEventListener('click', () => {
@@ -337,7 +313,6 @@ function switchView(viewName) {
   // Before/After is the Change lens's canvas mode, and a lens must work during any walkthrough.
   if (viewName !== VIEWS.ARCHITECTURE && viewName !== VIEWS.BEFORE_AFTER) suspendWalkthrough();
   actions.setView(viewName);
-  document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
   document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
   document.getElementById('flow-hint').classList.toggle('visible', viewName === VIEWS.DATA_FLOW);
 

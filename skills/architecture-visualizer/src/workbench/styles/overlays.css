@@ -1,50 +1,3 @@
-/* Search & Filter Bar Overlay */
-.filter-bar {
-  position: absolute;
-  top: calc(var(--chrome-top) + 12px);
-  left: 16px;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  padding: 6px 12px;
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-}
-
-.search-input {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  padding: 5px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  width: 180px;
-  outline: none;
-}
-
-.search-input:focus {
-  border-color: var(--accent);
-}
-
-.filter-chip {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  padding: 4px 8px;
-  font-size: 11px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.filter-chip.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
-}
-
 /* Bottom Floating Controls: Zoom, Pan, Fit */
 .viewport-controls {
   position: absolute;
@@ -113,26 +66,6 @@ body { --canvas-left: 0px; --canvas-right: 0px; --overlay-clearance: 8px; --chro
   display: flex;
 }
 
-/* Before vs After Mode Switcher Bar */
-.delta-controls {
-  position: absolute;
-  top: calc(var(--chrome-top) + 60px);
-  left: calc(var(--canvas-left) + 16px);
-  z-index: 40;
-  display: none;
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 3px;
-  gap: 4px;
-  box-shadow: var(--shadow);
-}
-
-.delta-controls.visible {
-  display: flex;
-}
-
 body.presentation-mode #floating-bar {
   display: none;
 }
@@ -151,26 +84,10 @@ body.presentation-mode #floating-bar {
 .workbench-stage { padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
 .workbench-stage-group { display: grid; gap: 6px; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--line); }
 
-.delta-btn {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  padding: 5px 12px;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.delta-btn.active {
-  background: var(--surface-2);
-  color: var(--ink);
-}
-
-/* Lens key sits below the filter row and follows the docked rail's canvas inset. */
+/* Lens key follows the canvas inset. */
 .lens-key {
   position: absolute;
-  top: calc(var(--chrome-top) + 108px);
+  top: calc(var(--chrome-top) + 16px);
   right: calc(var(--canvas-right) + 16px);
   z-index: 40;
   max-width: 220px;
@@ -198,7 +115,7 @@ body.presentation-mode #floating-bar {
 }
 .lens-key button[aria-pressed="true"] { border-color: var(--ink); }
 @media (max-width: 767px) {
-  .lens-key { top: calc(var(--chrome-top) + 116px); max-width: 160px; }
+  .lens-key { top: calc(var(--chrome-top) + 16px); max-width: 160px; }
 }
 .lens-key-swatch[data-lens-stroke="line"] { border-top-color: var(--line); }
 .lens-key-swatch[data-lens-stroke="ink"] { border-top-color: var(--ink); }
@@ -206,3 +123,8 @@ body.presentation-mode #floating-bar {
 .lens-key-swatch[data-lens-stroke="warn"] { border-top-color: var(--warn); }
 .lens-key-swatch[data-lens-stroke="risk"] { border-top-color: var(--risk); }
 .lens-key-swatch[data-lens-stroke="edge"] { border-top-color: var(--edge); }
+
+.lens-key-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.lens-key-controls > span { flex-basis: 100%; color: var(--muted); }
+.lens-key-controls button { margin: 0; padding: 3px 6px; font-size: 11px; }
+.lens-key-controls button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }

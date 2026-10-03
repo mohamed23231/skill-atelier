@@ -209,44 +209,6 @@ body:not([data-ready-ms]) .rail { transition: none; }
   margin-bottom: 6px;
 }
 
-/* Legend Box */
-.legend-box {
-  position: absolute;
-  bottom: 20px;
-  left: 16px;
-  z-index: 40;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 11px;
-  box-shadow: var(--shadow);
-  max-width: 280px;
-  max-height: min(46vh, 320px);
-  overflow-y: auto;
-}
-.legend-box:not([open]) { padding: 6px 12px; }
-.legend-summary { cursor: pointer; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-.legend-box[open] .legend-summary { margin-bottom: 6px; }
-
-.legend-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-  color: var(--muted);
-}
-.legend-row:last-child { margin-bottom: 0; }
-
-.legend-icon {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-
 .er-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -309,14 +271,6 @@ body:not([data-ready-ms]) .rail { transition: none; }
 }
 
 /* Legend swatches: the same encodings the canvas draws. */
-.legend-icon .icon { width: 14px; height: 14px; }
-.legend-swatch { width: 18px; height: 10px; flex: none; border-radius: 3px; border: 1.5px solid var(--edge); background: var(--surface); }
-.legend-swatch.line { height: 0; border-width: 1.5px 0 0; border-radius: 0; background: none; }
-.legend-swatch.line.dashed { border-top-style: dashed; }
-.legend-swatch.ok { border-color: var(--ok); background: var(--ok-soft); }
-.legend-swatch.warn { border-color: var(--warn); background: var(--warn-soft); }
-.legend-swatch.risk { border-color: var(--risk); border-style: dashed; background: var(--risk-soft); }
-.legend-swatch.exception { width: 10px; height: 10px; border-radius: 50%; border: 1.5px dashed var(--warn); background: none; margin: 0 4px; }
 
 /* Rows that pair an icon with text: file paths, tables, failure modes, quality gate checks. */
 .detail-row, .file-link { display: flex; align-items: center; gap: 6px; min-width: 0; }

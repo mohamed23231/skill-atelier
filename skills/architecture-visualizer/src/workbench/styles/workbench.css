@@ -28,8 +28,7 @@
 
 .tab-btn:focus,
 .btn-icon:focus,
-.filter-chip:focus,
-.delta-btn:focus,
+.lens-key button:focus,
 .viewport-btn:focus,
 .export-menu button:focus {
   outline: none;
@@ -37,8 +36,7 @@
 
 .tab-btn:focus-visible,
 .btn-icon:focus-visible,
-.filter-chip:focus-visible,
-.delta-btn:focus-visible,
+.lens-key button:focus-visible,
 .export-menu button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -63,7 +61,6 @@
 .edge-path.write { stroke-width: 2.5; }
 .edge-path.event { stroke-dasharray: 10 4; }
 
-.legend-divider { height: 1px; background: var(--line); margin: 6px 0; }
 
 .flow-hint {
   position: absolute;
@@ -185,9 +182,7 @@
 [data-focus-member="false"] { opacity: 0.12 !important; }
 body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-affected { border-style: double; }
 body[data-presentation="true"] header,
-body[data-presentation="true"] .filter-bar,
-body[data-presentation="true"] .rail,
-body[data-presentation="true"] .legend-box { display: none !important; }
+body[data-presentation="true"] .rail { display: none !important; }
 body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }
 body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }
 .workbench-mobile-toggle { min-width: 32px; display: inline-flex; }

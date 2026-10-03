@@ -29,7 +29,6 @@ header {
 .header-actions { flex: none; }
 
 .badge-status[hidden] { display: none; }
-.filter-bar .badge-status { flex-shrink: 0; white-space: nowrap; }
 .badge-status {
   font-size: 11px;
   padding: 2px 7px;

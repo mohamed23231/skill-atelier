@@ -1,3 +1,11 @@
+const LAYER_FILTERS = ['all', 'frontend', 'backend', 'data', 'external'];
+
+function selectLayerFilter(layer) {
+  actions.setFilter(layer);
+  applyVisibility();
+  updateUrlState();
+}
+
 // Lens encoding changes marks, never visibility or spotlight state.
 function lensEdgePoint(edge, t) {
   if (edge && edge.points && edge.controls && typeof ArchVizGeometry !== 'undefined') {
@@ -95,8 +103,11 @@ function applyLens() {
 function renderLensKey(items) {
   const key = document.querySelector('.lens-key');
   if (!key) return;
-  const signature = JSON.stringify([state.lens, state.currentView, items]);
+  const signature = JSON.stringify([state.lens, state.currentView, state.activeFilter, state.deltaMode, items]);
   if (key.dataset.encoding === signature) return;
+  const focused = key.contains(document.activeElement) ? document.activeElement : null;
+  const focusAttribute = ['data-filter', 'data-delta-mode', 'data-action'].find(attribute => focused?.hasAttribute(attribute));
+  const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
   key.dataset.encoding = signature;
   key.replaceChildren();
   const title = document.createElement('strong');
@@ -123,6 +134,44 @@ function renderLensKey(items) {
     toggle.addEventListener('click', () => {
       switchView(state.currentView === VIEWS.DATA_FLOW ? VIEWS.ARCHITECTURE : VIEWS.DATA_FLOW);
     });
+    toggle.dataset.action = 'data-flow-toggle';
     key.appendChild(toggle);
+    const layers = document.createElement('div');
+    layers.className = 'lens-key-controls lens-key-layers';
+    layers.setAttribute('role', 'group');
+    layers.setAttribute('aria-label', 'Layers');
+    const label = document.createElement('span');
+    label.textContent = 'Layers';
+    layers.appendChild(label);
+    LAYER_FILTERS.forEach(layer => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.dataset.filter = layer;
+      chip.textContent = layer.charAt(0).toUpperCase() + layer.slice(1);
+      chip.setAttribute('aria-pressed', String(state.activeFilter === layer));
+      chip.addEventListener('click', () => selectLayerFilter(layer));
+      layers.appendChild(chip);
+    });
+    key.appendChild(layers);
   }
+  if (state.lens === 'change') {
+    const modes = document.createElement('div');
+    modes.className = 'lens-key-controls lens-key-delta';
+    modes.setAttribute('role', 'group');
+    modes.setAttribute('aria-label', 'Change mode');
+    ['current', 'proposed', 'diff'].forEach(mode => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.deltaMode = mode;
+      button.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+      button.setAttribute('aria-pressed', String(state.deltaMode === mode));
+      button.addEventListener('click', () => {
+        actions.setDeltaMode(mode);
+        applyVisibility();
+      });
+      modes.appendChild(button);
+    });
+    key.appendChild(modes);
+  }
+  if (focusAttribute) key.querySelector(`[${focusAttribute}="${focusValue}"]`)?.focus();
 }

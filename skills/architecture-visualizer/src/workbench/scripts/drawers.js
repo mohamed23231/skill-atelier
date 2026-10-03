@@ -75,12 +75,12 @@ function trapDrawerFocus(event) {
 }
 
 function focusModelPoint(x, y) {
-  const rect = svg.getBoundingClientRect();
+  const safe = canvasSafeArea();
   const zoom = clampZoom(Math.max(state.zoom * 1.08, 0.85));
   actions.setCamera({
     zoom,
-    panX: rect.width / 2 - x * zoom,
-    panY: rect.height / 2 - y * zoom,
+    panX: safe.left + safe.width / 2 - x * zoom,
+    panY: safe.top + safe.height / 2 - y * zoom,
     userMoved: true
   });
   updateTransform();

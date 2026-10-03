@@ -117,6 +117,14 @@ function paletteBuildAllItems() {
       }
     );
   }
+  commands.push(...LAYER_FILTERS.map(layer => ({
+    id: `layer-${layer}`,
+    group: 'Commands',
+    label: `Show layer: ${layer.charAt(0).toUpperCase() + layer.slice(1)}`,
+    hint: 'Layer',
+    icon: 'ui-architecture',
+    run: () => selectLayerFilter(layer)
+  })));
   items.push(...commands);
 
   // Lenses follow Commands; the remaining Views are canvas playback modes.

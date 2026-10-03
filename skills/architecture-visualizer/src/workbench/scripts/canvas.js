@@ -258,15 +258,6 @@ function isNodeHidden(node) {
   return false;
 }
 
-function matchesSearch(node) {
-  const q = state.searchQuery;
-  if (!q) return true;
-  const files = (node.details?.files || []).map(f => (typeof f === 'string' ? f : f.path));
-  return [node.label, node.technology, node.type, node.description, ...files]
-    .filter(Boolean)
-    .some(value => String(value).toLowerCase().includes(q));
-}
-
 function matchesLayerFilter(node) {
   switch (state.activeFilter) {
     case 'frontend': return node.type === 'frontend' || node.type === 'mobile' || node.type === 'actor';
@@ -307,7 +298,6 @@ function applyVisibility() {
     if (isHidden) hidden.add(n.id);
 
     const isDimmed = !isHidden && (
-      !matchesSearch(n) ||
       !matchesLayerFilter(n) ||
       (chain ? !chain.has(n.id) : false)
     );

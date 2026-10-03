@@ -1344,12 +1344,12 @@ const cases = [
     },
   ],
   [
-    '1e: lens keys 1–4 select explicitly and Change alone shows the delta bar',
+    '1e: lens keys 1–4 select explicitly and Change alone shows the mode control',
     () => {
       const steps = [ev('window.__visits = []; document.activeElement.blur(); 0')];
       [3, 1, 3, 2, 3, 4].forEach(number => {
         steps.push(key(String(number), { code: `Digit${number}`, windowsVirtualKeyCode: 48 + number }));
-        steps.push(ev(`window.__visits.push([state.lens, state.lensExplicit, state.currentView, document.getElementById('delta-bar').classList.contains('visible'), document.body.dataset.lens, document.querySelector('.lens-select').value]); 0`));
+        steps.push(ev(`window.__visits.push([state.lens, state.lensExplicit, state.currentView, !!document.querySelector('.lens-key [data-delta-mode]'), document.body.dataset.lens, document.querySelector('.lens-select').value]); 0`));
       });
       steps.push(ev('JSON.stringify(window.__visits)'));
       const visits = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1024, height: 900, steps }])[0]));
@@ -1393,7 +1393,7 @@ const cases = [
   [
     '1e: lens mobile select at 390 changes and synchronizes the lens',
     () => {
-      const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 390, height: 844, steps: [ev(`const select = document.querySelector('.lens-select'); const visible = select.getBoundingClientRect().width > 0; const radiosHidden = document.querySelector('.lens-switcher').getBoundingClientRect().width === 0; select.value = 'change'; select.dispatchEvent(new Event('change', { bubbles: true })); JSON.stringify([visible, radiosHidden, state.lens, state.lensExplicit, document.querySelector('.lens-switcher [data-lens="change"]').getAttribute('aria-checked'), document.getElementById('delta-bar').classList.contains('visible')])`)] }])[0]));
+      const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 390, height: 844, steps: [ev(`const select = document.querySelector('.lens-select'); const visible = select.getBoundingClientRect().width > 0; const radiosHidden = document.querySelector('.lens-switcher').getBoundingClientRect().width === 0; select.value = 'change'; select.dispatchEvent(new Event('change', { bubbles: true })); JSON.stringify([visible, radiosHidden, state.lens, state.lensExplicit, document.querySelector('.lens-switcher [data-lens="change"]').getAttribute('aria-checked'), !!document.querySelector('.lens-key [data-delta-mode]')])`)] }])[0]));
       assert.deepStrictEqual(obs, [true, true, 'change', true, 'true', true]);
     },
   ],
@@ -1401,7 +1401,7 @@ const cases = [
     '1e: lens remains selected in playback views and text fields ignore numeric shortcuts',
     () => {
       const steps = [
-        ev(`selectLens('risk'); switchView(VIEWS.DATA_FLOW); window.__flowLens = state.lens; switchView(VIEWS.SEQUENCE); window.__sequenceLens = state.lens; document.getElementById('search-box').focus(); 0`),
+        ev(`selectLens('risk'); switchView(VIEWS.DATA_FLOW); window.__flowLens = state.lens; switchView(VIEWS.SEQUENCE); window.__sequenceLens = state.lens; openPalette(); document.getElementById('palette-input').focus(); 0`),
         key('1', { code: 'Digit1', windowsVirtualKeyCode: 49 }),
         ev('JSON.stringify([window.__flowLens, window.__sequenceLens, state.lens])'),
       ];
@@ -1469,7 +1469,7 @@ const cases = [
         }
         deactivateScenario();
         selectLens('structure');
-        const toggle = () => document.querySelector('.lens-key button');
+        const toggle = () => document.querySelector('.lens-key [data-action="data-flow-toggle"]');
         toggle().click();
         const flow = [state.currentView, toggle().getAttribute('aria-pressed')];
         toggle().click();
@@ -2088,12 +2088,12 @@ const cases = [
     () => {
       const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
       const SNAP = `({ view: state.currentView, node: state.selectedNodeId, filter: state.activeFilter, focus: state.focusMode,
-        present: state.presentation, seq: state.sequenceIndex, world: cameraToWorld(state, canvasSize()) })`;
+        present: state.presentation, seq: state.sequenceIndex, world: canvasCameraWorld() })`;
       const [written] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [ev(`(function () {
         switchView('sequence');
         goToSequenceStep(4);
         openInspectorForNode('saga_orchestrator');
-        document.querySelector('[data-filter="backend"]').click();
+        paletteBuildAllItems().find(item => item.id === 'layer-backend').run();
         setFocusMode('neighbors');
         setPresentation(true);
         zoomAround(state.zoom * 1.3, 400, 300);
@@ -2114,7 +2114,7 @@ const cases = [
   [
     '1d: a version 2 camera frames the same world region on a different screen',
     () => {
-      const WORLD = ev('JSON.stringify(cameraToWorld(state, canvasSize()))');
+      const WORLD = ev('JSON.stringify(canvasCameraWorld())');
       [[1440, 900], [1024, 768]].forEach(([width, height]) => {
         const [phase] = runPhases(fixtures.VALID_SPEC, [{ width, height, steps: [WORLD] }], undefined, { hash: 'v=2&cam=600,400,1200' });
         const world = JSON.parse(lastEvalValue(phase));
@@ -2149,10 +2149,10 @@ const cases = [
   ],
 
   [
-    'Phase 0: playback, delta and gate overlays never sit under each other or a docked panel at 1440 and 1600',
+    'Phase 0: canvas and playback overlays never sit under each other or a docked panel at 1440 and 1600',
     () => {
       const OVERLAPS = ev(`(function () {
-        const sel = ['.filter-bar', '#delta-bar', '#sequence-bar', '.legend-box', '.workbench-minimap', '.viewport-controls', '#rail'];
+        const sel = ['.lens-key', '.workbench-minimap', '.viewport-controls', '.walk-track', '#rail'];
         const vis = sel.map((s) => [s, document.querySelector(s)])
           .filter(([, e]) => e && e.getAttribute('data-open') !== 'false' && getComputedStyle(e).display !== 'none')
           .map(([s, e]) => [s, e.getBoundingClientRect()])
@@ -3155,6 +3155,76 @@ const cases = [
       assert.ok(results[3].paletteOpened, 'palette command did not open the sheet');
     },
   ],
+  [
+    'p4: canvas overlays move layer and Change controls into the lens key',
+    () => {
+      const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`
+        selectLens('structure');
+        const absent = !document.querySelector('.filter-bar, #delta-bar, .legend-box');
+        document.querySelector('.lens-key [data-filter="backend"]').click();
+        const backend = state.activeFilter === 'backend' && LAYOUT_DATA.nodes.every(node =>
+          document.getElementById('node-' + node.id).classList.contains('dimmed') === !matchesLayerFilter(node));
+        const pressed = document.querySelector('.lens-key [data-filter="backend"]').getAttribute('aria-pressed');
+        const filterLink = parseViewHash(location.hash).filter;
+        selectLens('change');
+        document.querySelector('.lens-key [data-delta-mode="current"]').click();
+        const added = LAYOUT_DATA.nodes.filter(node => node.delta === DELTA.ADDED);
+        JSON.stringify({ absent, backend, pressed, filterLink, mode: state.deltaMode,
+          added: added.length, hidden: added.every(node => document.getElementById('node-' + node.id).classList.contains('hidden')) });
+      `)] }])[0]));
+      assert.ok(obs.absent && obs.backend && obs.hidden);
+      assert.ok(obs.added > 0);
+      assert.deepStrictEqual([obs.pressed, obs.filterLink, obs.mode], ['true', 'backend', 'current']);
+    },
+  ],
+  [
+    'p4: canvas overlays keep palette search independent and layer links valid in every lens',
+    () => {
+      const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1024, height: 768, steps: [ev(`
+        const before = [...document.querySelectorAll('.node-group')].map(node => node.classList.contains('dimmed'));
+        openPalette(); const input = document.getElementById('palette-input');
+        input.value = 'no matching component'; input.dispatchEvent(new Event('input'));
+        actions.setSearchQuery('legacy query'); applyVisibility();
+        const after = [...document.querySelectorAll('.node-group')].map(node => node.classList.contains('dimmed'));
+        const commands = paletteBuildAllItems().filter(item => item.id.startsWith('layer-'));
+        commands.find(item => item.id === 'layer-data').run();
+        const selected = state.activeFilter;
+        closePalette(); location.hash = 'v=2&l=risk&filter=backend'; restoreUrlState();
+        JSON.stringify({ before, after, labels: commands.map(item => item.label), selected, lens: state.lens, filter: state.activeFilter });
+      `)] }])[0]));
+      assert.deepStrictEqual(obs.after, obs.before);
+      assert.deepStrictEqual(obs.labels, ['All', 'Frontend', 'Backend', 'Data', 'External'].map(layer => 'Show layer: ' + layer));
+      assert.deepStrictEqual([obs.selected, obs.lens, obs.filter], ['data', 'risk', 'backend']);
+    },
+  ],
+  [
+    'p4: canvas overlays leave every example card clear after load and fit at 1440 and 1024',
+    () => {
+      const probe = ev(`JSON.stringify({ zoom: state.zoom, hits: (() => {
+        const overlays = ['.lens-key', '.workbench-minimap', '.viewport-controls', '.walk-track']
+          .map(selector => [selector, document.querySelector(selector)])
+          .filter(([, element]) => element && !element.hidden && getComputedStyle(element).display !== 'none')
+          .map(([selector, element]) => [selector, element.getBoundingClientRect()]);
+        return [...document.querySelectorAll('.node-group .node-rect, .edge-label-bg')].filter(node => node.getBoundingClientRect().width > 0).flatMap(node => {
+          const a = node.getBoundingClientRect();
+          return overlays.filter(([, b]) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top)
+            .map(([selector]) => node.parentNode.id + ' x ' + selector);
+        });
+      })() })`);
+      for (const name of fs.readdirSync(path.join(__dirname, '../examples'))) {
+        const results = runPhases('examples/' + name + '/architecture.json', [
+          { width: 1440, height: 900, steps: [probe, ev('fitFromButton(); 0'), probe] },
+          { width: 1024, height: 768, steps: [probe, ev('fitFromButton(); 0'), probe] },
+        ]);
+        results.forEach((phase, index) => phase.filter(step => step.kind === 'eval' && typeof step.value === 'string')
+          .map(step => JSON.parse(step.value)).forEach(obs => {
+            assert.deepStrictEqual(obs.hits, [], name + ' at viewport ' + index);
+            if (index === 0) assert.ok(obs.zoom >= 0.75, name + ': fit zoom ' + obs.zoom);
+          }));
+      }
+    },
+  ],
+
 ];
 
 module.exports = { name: 'Rendered DOM Verification', cases };

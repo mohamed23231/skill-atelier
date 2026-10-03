@@ -59,21 +59,72 @@ function computeTotalVisualBounds() {
   };
 }
 
+// Overlay rectangles are canvas-local and include a 16px breathing room.
+function canvasOverlayRects() {
+  const canvas = svg.getBoundingClientRect();
+  return ['.lens-key', '.viewport-controls', '.workbench-minimap', '.walk-track', '#sequence-bar']
+    .map(selector => document.querySelector(selector))
+    .filter(element => element && !element.hidden && getComputedStyle(element).display !== 'none')
+    .map(element => ({ rect: element.getBoundingClientRect(), isKey: element.matches('.lens-key') }))
+    .filter(({ rect }) => rect.width > 0 && rect.height > 0)
+    .map(({ rect, isKey }) => ({ isKey, left: rect.left - canvas.left - 16, right: rect.right - canvas.left + 16,
+      top: rect.top - canvas.top - 16, bottom: rect.bottom - canvas.top + 16 }));
+}
+
+function canvasSafeArea() {
+  const rect = svg.getBoundingClientRect();
+  const overlays = canvasOverlayRects();
+  const key = document.querySelector('.lens-key')?.getBoundingClientRect();
+  const right = key?.width ? key.width + 32 : 16;
+  const bottom = Math.max(16, ...overlays.filter(item => !item.isKey && item.top > rect.height / 2)
+    .map(item => rect.height - item.top));
+  return { left: 16, top: 16, width: Math.max(1, rect.width - 16 - right),
+    height: Math.max(1, rect.height - 16 - bottom) };
+}
+
 function fitToScreen() {
   const bounds = computeTotalVisualBounds();
   if (!bounds || !isFinite(bounds.minX)) return;
   const rect = svg.getBoundingClientRect();
-  const padding = 24;
-  const contentWidth = bounds.maxX - bounds.minX + padding * 2;
-  const contentHeight = bounds.maxY - bounds.minY + padding * 2;
-
-  const fitZoom = Math.min(Math.min(rect.width / contentWidth, rect.height / contentHeight), 1.4);
-  const zoom = clampZoom(fitZoom);
-  actions.setCamera({
-    zoom,
-    panX: (rect.width - contentWidth * zoom) / 2 - bounds.minX * zoom + padding * zoom,
-    panY: (rect.height - contentHeight * zoom) / 2 - bounds.minY * zoom + padding * zoom
-  });
+  const overlays = canvasOverlayRects();
+  const nodes = (LAYOUT_DATA.nodes || []).filter(node => !isNodeHidden(node));
+  const marks = nodes.concat((LAYOUT_DATA.edges || []).filter(edge => edge.labelBounds)
+    .map(edge => ({ x: edge.labelBounds.left, y: edge.labelBounds.top,
+      width: edge.labelBounds.width, height: edge.labelBounds.height })));
+  const initialZoom = Math.min((rect.width - 32) / Math.max(1, bounds.width),
+    (rect.height - 32) / Math.max(1, bounds.height), 1.4);
+  // Keep the whole drawing on-screen, but reserve overlay bands only where cards or labels cross them.
+  // Candidate translations touch an inset or an overlay edge; prefer the centred solution.
+  for (let zoom = clampZoom(initialZoom); ; zoom = Math.max(0.15, zoom * 0.98)) {
+    const minX = 16 - bounds.minX * zoom, maxX = rect.width - 16 - bounds.maxX * zoom;
+    const minY = 16 - bounds.minY * zoom, maxY = rect.height - 16 - bounds.maxY * zoom;
+    const centreX = (minX + maxX) / 2, centreY = (minY + maxY) / 2;
+    const xs = [centreX, minX, maxX], ys = [centreY, minY, maxY];
+    overlays.forEach(overlay => marks.forEach(node => {
+      xs.push(overlay.left - (node.x + node.width) * zoom, overlay.right - node.x * zoom);
+      ys.push(overlay.top - (node.y + node.height) * zoom, overlay.bottom - node.y * zoom);
+    }));
+    const candidates = (values, min, max, centre) => [...new Set(values)]
+      .filter(value => value >= min - 0.01 && value <= max + 0.01)
+      .sort((a, b) => Math.abs(a - centre) - Math.abs(b - centre));
+    for (const panY of candidates(ys, minY, maxY, centreY)) {
+      for (const panX of candidates(xs, minX, maxX, centreX)) {
+        const blocked = marks.some(node => overlays.some(overlay =>
+          panX + node.x * zoom < overlay.right - 0.01 && panX + (node.x + node.width) * zoom > overlay.left + 0.01 &&
+          panY + node.y * zoom < overlay.bottom - 0.01 && panY + (node.y + node.height) * zoom > overlay.top + 0.01));
+        if (!blocked) {
+          actions.setCamera({ zoom, panX, panY });
+          updateTransform();
+          return;
+        }
+      }
+    }
+    if (zoom <= 0.15) break;
+  }
+  const safe = canvasSafeArea();
+  const zoom = clampZoom(Math.min(safe.width / Math.max(1, bounds.width), safe.height / Math.max(1, bounds.height), 1.4));
+  actions.setCamera({ zoom, panX: safe.left + safe.width / 2 - (bounds.minX + bounds.maxX) * zoom / 2,
+    panY: safe.top + safe.height / 2 - (bounds.minY + bounds.maxY) * zoom / 2 });
   updateTransform();
 }
 

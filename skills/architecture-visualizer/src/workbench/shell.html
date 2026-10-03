@@ -114,23 +114,6 @@
   </header>
   <nav class="trust-strip" aria-label="Trust summary"><span class="trust-lead">Trust</span><div class="trust-pills" data-trust-pills></div></nav>
 
-  <!-- Filter & Search Bar -->
-  <div class="filter-bar">
-    <input type="text" id="search-box" data-action="search-input" class="search-input" placeholder="Search components, files..." />
-    <button class="filter-chip active" data-filter="all">All Layers</button>
-    <button class="filter-chip" data-filter="frontend">Frontend</button>
-    <button class="filter-chip" data-filter="backend">Backend</button>
-    <button class="filter-chip" data-filter="data">Data/Storage</button>
-    <button class="filter-chip" data-filter="external">External</button>
-  </div>
-
-  <!-- Delta View Controls -->
-  <div id="delta-bar" class="delta-controls">
-    <button class="delta-btn" data-delta-mode="current">Current State</button>
-    <button class="delta-btn" data-delta-mode="proposed">Proposed State</button>
-    <button class="delta-btn active" data-delta-mode="diff">Delta Diff (+ / ~ / -)</button>
-  </div>
-
   <!-- Sequence Playback Bar -->
   <div id="sequence-bar" class="sequence-controls">
     <button id="seq-prev" class="btn-icon" style="height: 28px;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-prev"></use></svg><span>Prev</span></button>
@@ -148,17 +131,8 @@
     <button id="btn-reset" class="viewport-btn" title="Reset View" aria-label="Reset view"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-reset"></use></svg></button>
   </div>
 
-  <!-- Legend Box -->
+  <!-- Lens encodings and controls -->
   <div class="lens-key" aria-live="polite" aria-label="Lens key"></div>
-
-  <details class="legend-box">
-    <summary class="legend-summary">Legend</summary>
-    <div class="legend-divider"></div>
-    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-database"></use></svg></span><span>The icon tile shows the kind</span></div>
-    <div class="legend-divider"></div>
-    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-keyboard"></use></svg></span><span>F fit · 0 reset · +/− zoom · A animate · Esc close</span></div>
-    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-collapse"></use></svg></span><span>Click a boundary title to collapse it</span></div>
-  </details>
 
   <!-- Data-flow hint -->
   <div id="flow-hint" class="flow-hint">Data Flow view: read / write / event / replication paths only. Request-response control edges are dimmed.</div>

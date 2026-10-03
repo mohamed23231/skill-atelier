@@ -589,12 +589,14 @@ cases.push(['CLI build accepts both router modes and rejects unknown modes', () 
   }
 }]);
 
-cases.push(['compact cards and the kind legend ship in every example', () => {
+cases.push(['compact cards and lens keys ship in every example', () => {
   const examples = path.join(__dirname, '../examples');
   for (const name of fs.readdirSync(examples)) {
     const spec = JSON.parse(fs.readFileSync(path.join(examples, name, 'architecture.json'), 'utf8'));
     const { html, layout } = compileArchitecture(spec);
-    assert.ok(html.includes('The icon tile shows the kind'));
+    assert.ok(html.includes('aria-label="Lens key"'));
+    assert.ok(!/class="filter-bar"|id="delta-bar"|class="legend-box"/.test(html));
+    assert.ok(html.includes('data-flow-toggle'));
     assert.ok(!/Cylinder: datastore|Chevron:|Pill:|Dashed border: external system/.test(html));
     layout.nodes.forEach(n => assert.deepStrictEqual([n.width, n.height], [220, 72]));
     const b = layout.totalVisualBounds;

@@ -151,16 +151,21 @@ function canvasSize() {
   return { width: rect.width, height: rect.height };
 }
 
+function canvasCameraWorld() {
+  const safe = canvasSafeArea();
+  return cameraToWorld({ ...state, panX: state.panX - safe.left, panY: state.panY - safe.top }, safe);
+}
+
 // A linked camera is a world region, so it is re-framed whenever the canvas changes size (the window
 // settling after load, a panel docking) until the reader moves the camera themselves.
 let linkedCamera = null;
 
 function applyLinkedCamera() {
-  const size = canvasSize();
-  const { x, y, w } = linkedCamera.world;
+  const size = canvasSafeArea();
+  const { x, y } = linkedCamera.world;
   // Keep the linked centre; a zoom past the limits on this screen is clamped around it.
   const zoom = clampZoom(worldToCamera(linkedCamera.world, size).zoom);
-  actions.setCamera({ zoom, panX: size.width / 2 - x * zoom, panY: size.height / 2 - y * zoom, userMoved: true });
+  actions.setCamera({ zoom, panX: size.left + size.width / 2 - x * zoom, panY: size.top + size.height / 2 - y * zoom, userMoved: true });
   linkedCamera.applied = { zoom: state.zoom, panX: state.panX, panY: state.panY };
   updateTransform();
 }
@@ -198,7 +203,7 @@ function viewSnapshot() {
     });
     if (Object.keys(outcomes).length) snapshot.outcomes = outcomes;
   }
-  if (state.userMovedView && !snapshot.scenario) snapshot.camera = cameraToWorld(state, canvasSize());
+  if (state.userMovedView && !snapshot.scenario) snapshot.camera = canvasCameraWorld();
   return snapshot;
 }
 
@@ -255,9 +260,8 @@ function restoreUrlState() {
       else notices.push(`Lens ${link.lens} does not exist; keeping the suggested lens.`);
     }
     if (link.filter !== undefined) {
-      if (document.querySelector(`[data-filter="${CSS.escape(link.filter)}"]`)) {
+      if (LAYER_FILTERS.includes(link.filter)) {
         actions.setFilter(link.filter);
-        document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.toggle('active', chip.dataset.filter === link.filter));
         applyVisibility();
       } else {
         notices.push(`Filter ${link.filter} does not exist; showing everything.`);

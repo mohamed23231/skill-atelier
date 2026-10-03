@@ -473,7 +473,8 @@ const cases = [
       assert.ok(html.includes('height: calc(100vh - var(--chrome-top));\nheight: calc(100dvh - var(--chrome-top));'), 'canvas-container should use dvh fallback below the header and trust strip');
       assert.ok(html.includes('width: min(400px, calc(100vw - 48px));'), 'rail drawer width should use min(400px, calc(100vw - 48px))');
       assert.ok(html.includes('transform: translateX(105%);'), 'rail drawer parked position should be responsive');
-      assert.ok(html.includes('max-height: min(46vh, 320px);'), 'legend-box max-height should be clamped');
+      assert.ok(html.includes('top: calc(var(--chrome-top) + 16px);'), 'lens key should sit below the chrome without a filter offset');
+      assert.ok(html.includes('function canvasSafeArea()'), 'camera framing should measure overlay insets');
       assert.ok(html.includes("window.addEventListener('resize'"), 'resize listener should be registered');
       assert.ok(html.includes('!state.userMovedView'), 'resize listener should check userMovedView latch before fitToScreen');
     },
@@ -979,6 +980,44 @@ const cases = [
       });
     },
   ],
+  [
+    'p4: band-aware fit clears cards and labels without shrinking desktop examples below 0.75',
+    () => {
+      const { compileArchitecture } = require('../src/engine/compiler.js');
+      const source = fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/fit.js'), 'utf8');
+      for (const name of fs.readdirSync(path.join(__dirname, '../examples'))) {
+        const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8'));
+        const { layout } = compileArchitecture(spec);
+        for (const [width, height] of [[1040, 806], [1024, 674]]) {
+          const overlay = (left, top, w, h, isKey = false) => ({ hidden: false,
+            matches: () => isKey, getBoundingClientRect: () => ({ left, top, right: left + w, bottom: top + h, width: w, height: h }) });
+          const elements = {
+            '.lens-key': overlay(width - 262, 16, 246, 190, true),
+            '.workbench-minimap': overlay(16, height - 132, 176, 116),
+            '.viewport-controls': overlay(width - 58, height - 166, 38, 146),
+          };
+          const state = { collapsedBoundaries: new Set() };
+          const context = vm.createContext({ LAYOUT_DATA: layout, ArchVizGeometry: geometry, state,
+            svg: { getBoundingClientRect: () => ({ left: 0, top: 0, width, height }) },
+            document: { querySelector: selector => elements[selector] }, getComputedStyle: () => ({ display: 'block' }),
+            isNodeHidden: () => false, clampZoom: zoom => Math.max(0.15, Math.min(4, zoom)),
+            actions: { setCamera: camera => Object.assign(state, camera) }, updateTransform() {} });
+          vm.runInContext(source + '\nfitToScreen();', context);
+          if (width === 1040) assert.ok(state.zoom >= 0.75, name + ': ' + state.zoom);
+          const marks = layout.nodes.concat(layout.edges.filter(edge => edge.labelBounds)
+            .map(edge => ({ x: edge.labelBounds.left, y: edge.labelBounds.top, width: edge.labelBounds.width, height: edge.labelBounds.height })));
+          marks.forEach(mark => Object.values(elements).forEach(element => {
+            const b = element.getBoundingClientRect();
+            const a = { left: state.panX + mark.x * state.zoom, top: state.panY + mark.y * state.zoom };
+            a.right = a.left + mark.width * state.zoom; a.bottom = a.top + mark.height * state.zoom;
+            assert.ok(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom,
+              name + ': a card or label overlaps an overlay');
+          }));
+        }
+      }
+    },
+  ],
+
 ];
 
 cases.push(['orthogonal layout is the default and widens overfull column gaps', () => {

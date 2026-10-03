@@ -117,7 +117,6 @@ flex: 1 1 auto;
 .header-actions { flex: none; }
 
 .badge-status[hidden] { display: none; }
-.filter-bar .badge-status { flex-shrink: 0; white-space: nowrap; }
 .badge-status {
 font-size: 11px;
 padding: 2px 7px;
@@ -261,52 +260,6 @@ cursor: pointer;
 .trust-pill[data-state="risk"] .trust-dot { background: var(--risk); }
 .trust-pill[data-state="unchecked"] .trust-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
 
-.filter-bar {
-position: absolute;
-top: calc(var(--chrome-top) + 12px);
-left: 16px;
-z-index: 40;
-display: flex;
-align-items: center;
-gap: 8px;
-background: var(--surface);
-border: 1px solid var(--line);
-padding: 6px 12px;
-border-radius: 8px;
-box-shadow: var(--shadow);
-}
-
-.search-input {
-background: var(--bg);
-border: 1px solid var(--line);
-color: var(--ink);
-padding: 5px 10px;
-border-radius: 6px;
-font-size: 12px;
-width: 180px;
-outline: none;
-}
-
-.search-input:focus {
-border-color: var(--accent);
-}
-
-.filter-chip {
-background: var(--bg);
-border: 1px solid var(--line);
-color: var(--muted);
-padding: 4px 8px;
-font-size: 11px;
-border-radius: 6px;
-cursor: pointer;
-}
-
-.filter-chip.active {
-background: var(--accent);
-color: var(--accent-ink);
-border-color: var(--accent);
-}
-
 .viewport-controls {
 position: absolute;
 bottom: 20px;
@@ -371,25 +324,6 @@ box-shadow: var(--shadow);
 display: flex;
 }
 
-.delta-controls {
-position: absolute;
-top: calc(var(--chrome-top) + 60px);
-left: calc(var(--canvas-left) + 16px);
-z-index: 40;
-display: none;
-align-items: center;
-background: var(--surface);
-border: 1px solid var(--line);
-border-radius: 8px;
-padding: 3px;
-gap: 4px;
-box-shadow: var(--shadow);
-}
-
-.delta-controls.visible {
-display: flex;
-}
-
 body.presentation-mode #floating-bar {
 display: none;
 }
@@ -408,25 +342,9 @@ display: none;
 .workbench-stage { padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
 .workbench-stage-group { display: grid; gap: 6px; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--line); }
 
-.delta-btn {
-background: transparent;
-border: none;
-color: var(--muted);
-padding: 5px 12px;
-font-size: 11px;
-font-weight: 600;
-border-radius: 6px;
-cursor: pointer;
-}
-
-.delta-btn.active {
-background: var(--surface-2);
-color: var(--ink);
-}
-
 .lens-key {
 position: absolute;
-top: calc(var(--chrome-top) + 108px);
+top: calc(var(--chrome-top) + 16px);
 right: calc(var(--canvas-right) + 16px);
 z-index: 40;
 max-width: 220px;
@@ -454,7 +372,7 @@ cursor: pointer;
 }
 .lens-key button[aria-pressed="true"] { border-color: var(--ink); }
 @media (max-width: 767px) {
-.lens-key { top: calc(var(--chrome-top) + 116px); max-width: 160px; }
+.lens-key { top: calc(var(--chrome-top) + 16px); max-width: 160px; }
 }
 .lens-key-swatch[data-lens-stroke="line"] { border-top-color: var(--line); }
 .lens-key-swatch[data-lens-stroke="ink"] { border-top-color: var(--ink); }
@@ -462,6 +380,11 @@ cursor: pointer;
 .lens-key-swatch[data-lens-stroke="warn"] { border-top-color: var(--warn); }
 .lens-key-swatch[data-lens-stroke="risk"] { border-top-color: var(--risk); }
 .lens-key-swatch[data-lens-stroke="edge"] { border-top-color: var(--edge); }
+
+.lens-key-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.lens-key-controls > span { flex-basis: 100%; color: var(--muted); }
+.lens-key-controls button { margin: 0; padding: 3px 6px; font-size: 11px; }
+.lens-key-controls button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
 #canvas-container {
 width: 100%;
@@ -922,43 +845,6 @@ gap: 8px;
 margin-bottom: 6px;
 }
 
-.legend-box {
-position: absolute;
-bottom: 20px;
-left: 16px;
-z-index: 40;
-background: var(--surface);
-border: 1px solid var(--line);
-border-radius: 8px;
-padding: 10px 14px;
-font-size: 11px;
-box-shadow: var(--shadow);
-max-width: 280px;
-max-height: min(46vh, 320px);
-overflow-y: auto;
-}
-.legend-box:not([open]) { padding: 6px 12px; }
-.legend-summary { cursor: pointer; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-.legend-box[open] .legend-summary { margin-bottom: 6px; }
-
-.legend-row {
-display: flex;
-align-items: center;
-gap: 8px;
-margin-bottom: 4px;
-color: var(--muted);
-}
-.legend-row:last-child { margin-bottom: 0; }
-
-.legend-icon {
-width: 16px;
-height: 16px;
-display: inline-flex;
-align-items: center;
-justify-content: center;
-}
-
-
 .er-grid {
 display: grid;
 grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -1020,14 +906,6 @@ border-bottom: 1px solid var(--line);
 padding-bottom: 10px;
 }
 
-.legend-icon .icon { width: 14px; height: 14px; }
-.legend-swatch { width: 18px; height: 10px; flex: none; border-radius: 3px; border: 1.5px solid var(--edge); background: var(--surface); }
-.legend-swatch.line { height: 0; border-width: 1.5px 0 0; border-radius: 0; background: none; }
-.legend-swatch.line.dashed { border-top-style: dashed; }
-.legend-swatch.ok { border-color: var(--ok); background: var(--ok-soft); }
-.legend-swatch.warn { border-color: var(--warn); background: var(--warn-soft); }
-.legend-swatch.risk { border-color: var(--risk); border-style: dashed; background: var(--risk-soft); }
-.legend-swatch.exception { width: 10px; height: 10px; border-radius: 50%; border: 1.5px dashed var(--warn); background: none; margin: 0 4px; }
 
 .detail-row, .file-link { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .detail-row > span, .file-link > span { min-width: 0; overflow-wrap: anywhere; }
@@ -1410,8 +1288,7 @@ fill: var(--accent);
 
 .tab-btn:focus,
 .btn-icon:focus,
-.filter-chip:focus,
-.delta-btn:focus,
+.lens-key button:focus,
 .viewport-btn:focus,
 .export-menu button:focus {
 outline: none;
@@ -1419,8 +1296,7 @@ outline: none;
 
 .tab-btn:focus-visible,
 .btn-icon:focus-visible,
-.filter-chip:focus-visible,
-.delta-btn:focus-visible,
+.lens-key button:focus-visible,
 .export-menu button:focus-visible {
 outline: 2px solid var(--accent);
 outline-offset: 2px;
@@ -1445,7 +1321,6 @@ box-shadow: 0 0 0 2px var(--accent-soft);
 .edge-path.write { stroke-width: 2.5; }
 .edge-path.event { stroke-dasharray: 10 4; }
 
-.legend-divider { height: 1px; background: var(--line); margin: 6px 0; }
 
 .flow-hint {
 position: absolute;
@@ -1566,9 +1441,7 @@ white-space: pre-wrap;
 [data-focus-member="false"] { opacity: 0.12 !important; }
 body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-affected { border-style: double; }
 body[data-presentation="true"] header,
-body[data-presentation="true"] .filter-bar,
-body[data-presentation="true"] .rail,
-body[data-presentation="true"] .legend-box { display: none !important; }
+body[data-presentation="true"] .rail { display: none !important; }
 body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }
 body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }
 .workbench-mobile-toggle { min-width: 32px; display: inline-flex; }
@@ -1595,10 +1468,6 @@ body:has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 400px);
 body:has(.rail[data-open="true"]) .viewport-controls { right: 420px; }
 }
 
-@media (min-width: 1100px) {
-.legend-box { left: calc(var(--canvas-left) + 16px); bottom: 140px; }
-}
-
 @media (min-width: 768px) and (max-width: 1099px) {
 #btn-palette span, #btn-palette kbd { display: none; }
 .workbench-minimap { left: 8px; width: 112px; height: 76px; }
@@ -1607,7 +1476,6 @@ body:has(.rail[data-open="true"]) .viewport-controls { right: 420px; }
 @media (max-width: 1099px) {
 body:has(.rail[data-open="true"]) .workbench-backdrop { display: block; }
 .viewport-controls { right: 8px; }
-.legend-box { display: none; }
 }
 
 @media (max-width: 767px) {
@@ -1616,11 +1484,8 @@ header { overflow: hidden; }
 .lens-select { display: block; }
 #btn-palette span, #btn-palette kbd { display: none; }
 .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme):not(#btn-palette) { display: none; }
-.filter-bar { top: calc(var(--chrome-top) + 8px); left: 8px; right: 8px; overflow-x: auto; }
-.search-input { min-width: 140px; width: 140px; }
 .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
 .viewport-controls { right: 8px; bottom: 8px; }
-.legend-box { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1901,23 +1766,6 @@ margin-left: 2px;
 </header>
 <nav class="trust-strip" aria-label="Trust summary"><span class="trust-lead">Trust</span><div class="trust-pills" data-trust-pills></div></nav>
 
-<!-- Filter & Search Bar -->
-<div class="filter-bar">
-<input type="text" id="search-box" data-action="search-input" class="search-input" placeholder="Search components, files..." />
-<button class="filter-chip active" data-filter="all">All Layers</button>
-<button class="filter-chip" data-filter="frontend">Frontend</button>
-<button class="filter-chip" data-filter="backend">Backend</button>
-<button class="filter-chip" data-filter="data">Data/Storage</button>
-<button class="filter-chip" data-filter="external">External</button>
-</div>
-
-<!-- Delta View Controls -->
-<div id="delta-bar" class="delta-controls">
-<button class="delta-btn" data-delta-mode="current">Current State</button>
-<button class="delta-btn" data-delta-mode="proposed">Proposed State</button>
-<button class="delta-btn active" data-delta-mode="diff">Delta Diff (+ / ~ / -)</button>
-</div>
-
 <!-- Sequence Playback Bar -->
 <div id="sequence-bar" class="sequence-controls">
 <button id="seq-prev" class="btn-icon" style="height: 28px;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-prev"></use></svg><span>Prev</span></button>
@@ -1935,17 +1783,8 @@ margin-left: 2px;
 <button id="btn-reset" class="viewport-btn" title="Reset View" aria-label="Reset view"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-reset"></use></svg></button>
 </div>
 
-<!-- Legend Box -->
+<!-- Lens encodings and controls -->
 <div class="lens-key" aria-live="polite" aria-label="Lens key"></div>
-
-<details class="legend-box">
-<summary class="legend-summary">Legend</summary>
-<div class="legend-divider"></div>
-<div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-database"></use></svg></span><span>The icon tile shows the kind</span></div>
-<div class="legend-divider"></div>
-<div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-keyboard"></use></svg></span><span>F fit · 0 reset · +/− zoom · A animate · Esc close</span></div>
-<div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-collapse"></use></svg></span><span>Click a boundary title to collapse it</span></div>
-</details>
 
 <!-- Data-flow hint -->
 <div id="flow-hint" class="flow-hint">Data Flow view: read / write / event / replication paths only. Request-response control edges are dimmed.</div>
@@ -3779,12 +3618,12 @@ first.focus();
 }
 
 function focusModelPoint(x, y) {
-const rect = svg.getBoundingClientRect();
+const safe = canvasSafeArea();
 const zoom = clampZoom(Math.max(state.zoom * 1.08, 0.85));
 actions.setCamera({
 zoom,
-panX: rect.width / 2 - x * zoom,
-panY: rect.height / 2 - y * zoom,
+panX: safe.left + safe.width / 2 - x * zoom,
+panY: safe.top + safe.height / 2 - y * zoom,
 userMoved: true
 });
 updateTransform();
@@ -4976,13 +4815,18 @@ const rect = svg.getBoundingClientRect();
 return { width: rect.width, height: rect.height };
 }
 
+function canvasCameraWorld() {
+const safe = canvasSafeArea();
+return cameraToWorld({ ...state, panX: state.panX - safe.left, panY: state.panY - safe.top }, safe);
+}
+
 let linkedCamera = null;
 
 function applyLinkedCamera() {
-const size = canvasSize();
-const { x, y, w } = linkedCamera.world;
+const size = canvasSafeArea();
+const { x, y } = linkedCamera.world;
 const zoom = clampZoom(worldToCamera(linkedCamera.world, size).zoom);
-actions.setCamera({ zoom, panX: size.width / 2 - x * zoom, panY: size.height / 2 - y * zoom, userMoved: true });
+actions.setCamera({ zoom, panX: size.left + size.width / 2 - x * zoom, panY: size.top + size.height / 2 - y * zoom, userMoved: true });
 linkedCamera.applied = { zoom: state.zoom, panX: state.panX, panY: state.panY };
 updateTransform();
 }
@@ -5017,7 +4861,7 @@ outcomes[entry.id] = entry.chosen;
 });
 if (Object.keys(outcomes).length) snapshot.outcomes = outcomes;
 }
-if (state.userMovedView && !snapshot.scenario) snapshot.camera = cameraToWorld(state, canvasSize());
+if (state.userMovedView && !snapshot.scenario) snapshot.camera = canvasCameraWorld();
 return snapshot;
 }
 
@@ -5071,9 +4915,8 @@ if (LENSES.includes(link.lens)) selectLens(link.lens, { explicit: true });
 else notices.push(`Lens ${link.lens} does not exist; keeping the suggested lens.`);
 }
 if (link.filter !== undefined) {
-if (document.querySelector(`[data-filter="${CSS.escape(link.filter)}"]`)) {
+if (LAYER_FILTERS.includes(link.filter)) {
 actions.setFilter(link.filter);
-document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.toggle('active', chip.dataset.filter === link.filter));
 applyVisibility();
 } else {
 notices.push(`Filter ${link.filter} does not exist; showing everything.`);
@@ -5589,10 +5432,17 @@ if (!walkTrackBound) {
 walkTrackBound = true;
 ['mousedown', 'touchstart'].forEach((type) => track.addEventListener(type, (event) => event.stopPropagation()));
 }
+const previousHeight = track.getBoundingClientRect().height;
+const refitTrack = () => {
+if (!state.userMovedView && track.getBoundingClientRect().height !== previousHeight) {
+window.requestAnimationFrame(() => { if (!state.userMovedView) fitToScreen(); });
+}
+};
 const entries = state.scenarioActive ? walkEntries() : [];
 if (!state.scenarioActive || !entries.length) {
 track.hidden = true;
 track.replaceChildren();
+refitTrack();
 return;
 }
 track.hidden = false;
@@ -5650,6 +5500,7 @@ note.className = 'walk-note';
 note.textContent = walkPlaybackNote();
 track.appendChild(note);
 }
+refitTrack();
 }
 
 function walkChapterStep(entry) {
@@ -5926,15 +5777,6 @@ selectLens(event.target.value, { explicit: true });
 });
 selectLens(state.lens, { explicit: false });
 
-document.querySelectorAll('.delta-btn').forEach(btn => {
-btn.addEventListener('click', () => {
-document.querySelectorAll('.delta-btn').forEach(b => b.classList.remove('active'));
-btn.classList.add('active');
-actions.setDeltaMode(btn.dataset.deltaMode);
-applyVisibility();
-});
-});
-
 document.getElementById('btn-zoom-in').addEventListener('click', () => zoomBy(1.2));
 document.getElementById('btn-zoom-out').addEventListener('click', () => zoomBy(0.8));
 document.getElementById('btn-fit').addEventListener('click', fitFromButton);
@@ -5973,21 +5815,6 @@ document.body.setAttribute('data-fullscreen', String(enabled));
 window.addEventListener('hashchange', () => {
 const notices = restoreUrlState();
 if (notices.length) announceStatus(notices.join(' '));
-});
-
-document.getElementById('search-box').addEventListener('input', e => {
-actions.setSearchQuery(e.target.value.toLowerCase().trim());
-applyVisibility();
-});
-
-document.querySelectorAll('.filter-chip').forEach(chip => {
-chip.addEventListener('click', () => {
-document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-chip.classList.add('active');
-actions.setFilter(chip.dataset.filter);
-applyVisibility();
-updateUrlState();
-});
 });
 
 document.getElementById('ins-btn-highlight').addEventListener('click', () => {
@@ -6126,7 +5953,6 @@ return;
 if (viewName !== VIEWS.SEQUENCE) stopScenarioPlayback();
 if (viewName !== VIEWS.ARCHITECTURE && viewName !== VIEWS.BEFORE_AFTER) suspendWalkthrough();
 actions.setView(viewName);
-document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
 document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
 document.getElementById('flow-hint').classList.toggle('visible', viewName === VIEWS.DATA_FLOW);
 
@@ -6402,15 +6228,6 @@ if (state.deltaMode === DELTA_MODES.PROPOSED && node.delta === DELTA.REMOVED) re
 return false;
 }
 
-function matchesSearch(node) {
-const q = state.searchQuery;
-if (!q) return true;
-const files = (node.details?.files || []).map(f => (typeof f === 'string' ? f : f.path));
-return [node.label, node.technology, node.type, node.description, ...files]
-.filter(Boolean)
-.some(value => String(value).toLowerCase().includes(q));
-}
-
 function matchesLayerFilter(node) {
 switch (state.activeFilter) {
 case 'frontend': return node.type === 'frontend' || node.type === 'mobile' || node.type === 'actor';
@@ -6451,7 +6268,6 @@ const isHidden = isNodeHidden(n);
 if (isHidden) hidden.add(n.id);
 
 const isDimmed = !isHidden && (
-!matchesSearch(n) ||
 !matchesLayerFilter(n) ||
 (chain ? !chain.has(n.id) : false)
 );
@@ -6487,6 +6303,14 @@ syncEdgeMarker(path);
 });
 
 if (state.animatingFlow) startFlowParticles();
+}
+
+const LAYER_FILTERS = ['all', 'frontend', 'backend', 'data', 'external'];
+
+function selectLayerFilter(layer) {
+actions.setFilter(layer);
+applyVisibility();
+updateUrlState();
 }
 
 function lensEdgePoint(edge, t) {
@@ -6584,8 +6408,11 @@ renderLensKey(encoding.keyItems);
 function renderLensKey(items) {
 const key = document.querySelector('.lens-key');
 if (!key) return;
-const signature = JSON.stringify([state.lens, state.currentView, items]);
+const signature = JSON.stringify([state.lens, state.currentView, state.activeFilter, state.deltaMode, items]);
 if (key.dataset.encoding === signature) return;
+const focused = key.contains(document.activeElement) ? document.activeElement : null;
+const focusAttribute = ['data-filter', 'data-delta-mode', 'data-action'].find(attribute => focused?.hasAttribute(attribute));
+const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
 key.dataset.encoding = signature;
 key.replaceChildren();
 const title = document.createElement('strong');
@@ -6612,8 +6439,46 @@ toggle.setAttribute('aria-pressed', String(state.currentView === VIEWS.DATA_FLOW
 toggle.addEventListener('click', () => {
 switchView(state.currentView === VIEWS.DATA_FLOW ? VIEWS.ARCHITECTURE : VIEWS.DATA_FLOW);
 });
+toggle.dataset.action = 'data-flow-toggle';
 key.appendChild(toggle);
+const layers = document.createElement('div');
+layers.className = 'lens-key-controls lens-key-layers';
+layers.setAttribute('role', 'group');
+layers.setAttribute('aria-label', 'Layers');
+const label = document.createElement('span');
+label.textContent = 'Layers';
+layers.appendChild(label);
+LAYER_FILTERS.forEach(layer => {
+const chip = document.createElement('button');
+chip.type = 'button';
+chip.dataset.filter = layer;
+chip.textContent = layer.charAt(0).toUpperCase() + layer.slice(1);
+chip.setAttribute('aria-pressed', String(state.activeFilter === layer));
+chip.addEventListener('click', () => selectLayerFilter(layer));
+layers.appendChild(chip);
+});
+key.appendChild(layers);
 }
+if (state.lens === 'change') {
+const modes = document.createElement('div');
+modes.className = 'lens-key-controls lens-key-delta';
+modes.setAttribute('role', 'group');
+modes.setAttribute('aria-label', 'Change mode');
+['current', 'proposed', 'diff'].forEach(mode => {
+const button = document.createElement('button');
+button.type = 'button';
+button.dataset.deltaMode = mode;
+button.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+button.setAttribute('aria-pressed', String(state.deltaMode === mode));
+button.addEventListener('click', () => {
+actions.setDeltaMode(mode);
+applyVisibility();
+});
+modes.appendChild(button);
+});
+key.appendChild(modes);
+}
+if (focusAttribute) key.querySelector(`[${focusAttribute}="${focusValue}"]`)?.focus();
 }
 
 function selectNode(nodeId) {
@@ -7910,21 +7775,69 @@ height: ArchVizGeometry.round(maxY - minY),
 };
 }
 
+function canvasOverlayRects() {
+const canvas = svg.getBoundingClientRect();
+return ['.lens-key', '.viewport-controls', '.workbench-minimap', '.walk-track', '#sequence-bar']
+.map(selector => document.querySelector(selector))
+.filter(element => element && !element.hidden && getComputedStyle(element).display !== 'none')
+.map(element => ({ rect: element.getBoundingClientRect(), isKey: element.matches('.lens-key') }))
+.filter(({ rect }) => rect.width > 0 && rect.height > 0)
+.map(({ rect, isKey }) => ({ isKey, left: rect.left - canvas.left - 16, right: rect.right - canvas.left + 16,
+top: rect.top - canvas.top - 16, bottom: rect.bottom - canvas.top + 16 }));
+}
+
+function canvasSafeArea() {
+const rect = svg.getBoundingClientRect();
+const overlays = canvasOverlayRects();
+const key = document.querySelector('.lens-key')?.getBoundingClientRect();
+const right = key?.width ? key.width + 32 : 16;
+const bottom = Math.max(16, ...overlays.filter(item => !item.isKey && item.top > rect.height / 2)
+.map(item => rect.height - item.top));
+return { left: 16, top: 16, width: Math.max(1, rect.width - 16 - right),
+height: Math.max(1, rect.height - 16 - bottom) };
+}
+
 function fitToScreen() {
 const bounds = computeTotalVisualBounds();
 if (!bounds || !isFinite(bounds.minX)) return;
 const rect = svg.getBoundingClientRect();
-const padding = 24;
-const contentWidth = bounds.maxX - bounds.minX + padding * 2;
-const contentHeight = bounds.maxY - bounds.minY + padding * 2;
-
-const fitZoom = Math.min(Math.min(rect.width / contentWidth, rect.height / contentHeight), 1.4);
-const zoom = clampZoom(fitZoom);
-actions.setCamera({
-zoom,
-panX: (rect.width - contentWidth * zoom) / 2 - bounds.minX * zoom + padding * zoom,
-panY: (rect.height - contentHeight * zoom) / 2 - bounds.minY * zoom + padding * zoom
-});
+const overlays = canvasOverlayRects();
+const nodes = (LAYOUT_DATA.nodes || []).filter(node => !isNodeHidden(node));
+const marks = nodes.concat((LAYOUT_DATA.edges || []).filter(edge => edge.labelBounds)
+.map(edge => ({ x: edge.labelBounds.left, y: edge.labelBounds.top,
+width: edge.labelBounds.width, height: edge.labelBounds.height })));
+const initialZoom = Math.min((rect.width - 32) / Math.max(1, bounds.width),
+(rect.height - 32) / Math.max(1, bounds.height), 1.4);
+for (let zoom = clampZoom(initialZoom); ; zoom = Math.max(0.15, zoom * 0.98)) {
+const minX = 16 - bounds.minX * zoom, maxX = rect.width - 16 - bounds.maxX * zoom;
+const minY = 16 - bounds.minY * zoom, maxY = rect.height - 16 - bounds.maxY * zoom;
+const centreX = (minX + maxX) / 2, centreY = (minY + maxY) / 2;
+const xs = [centreX, minX, maxX], ys = [centreY, minY, maxY];
+overlays.forEach(overlay => marks.forEach(node => {
+xs.push(overlay.left - (node.x + node.width) * zoom, overlay.right - node.x * zoom);
+ys.push(overlay.top - (node.y + node.height) * zoom, overlay.bottom - node.y * zoom);
+}));
+const candidates = (values, min, max, centre) => [...new Set(values)]
+.filter(value => value >= min - 0.01 && value <= max + 0.01)
+.sort((a, b) => Math.abs(a - centre) - Math.abs(b - centre));
+for (const panY of candidates(ys, minY, maxY, centreY)) {
+for (const panX of candidates(xs, minX, maxX, centreX)) {
+const blocked = marks.some(node => overlays.some(overlay =>
+panX + node.x * zoom < overlay.right - 0.01 && panX + (node.x + node.width) * zoom > overlay.left + 0.01 &&
+panY + node.y * zoom < overlay.bottom - 0.01 && panY + (node.y + node.height) * zoom > overlay.top + 0.01));
+if (!blocked) {
+actions.setCamera({ zoom, panX, panY });
+updateTransform();
+return;
+}
+}
+}
+if (zoom <= 0.15) break;
+}
+const safe = canvasSafeArea();
+const zoom = clampZoom(Math.min(safe.width / Math.max(1, bounds.width), safe.height / Math.max(1, bounds.height), 1.4));
+actions.setCamera({ zoom, panX: safe.left + safe.width / 2 - (bounds.minX + bounds.maxX) * zoom / 2,
+panY: safe.top + safe.height / 2 - (bounds.minY + bounds.maxY) * zoom / 2 });
 updateTransform();
 }
 
@@ -8183,6 +8096,14 @@ run: () => setFocusMode(FOCUS_MODES.AFFECTED)
 }
 );
 }
+commands.push(...LAYER_FILTERS.map(layer => ({
+id: `layer-${layer}`,
+group: 'Commands',
+label: `Show layer: ${layer.charAt(0).toUpperCase() + layer.slice(1)}`,
+hint: 'Layer',
+icon: 'ui-architecture',
+run: () => selectLayerFilter(layer)
+})));
 items.push(...commands);
 
 items.push(...LENSES.map(lens => ({
