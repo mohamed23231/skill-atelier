@@ -1,6 +1,7 @@
 // Database ER Sub-view
 function renderERView() {
   const target = document.getElementById('er-tables-container');
+  if (!target) return;
   const er = ARCH_SPEC.views?.database_er;
   if (!er || !Array.isArray(er.tables) || er.tables.length === 0) {
     target.innerHTML = '<div style="color: var(--muted);">No database ER specifications defined.</div>';
@@ -14,7 +15,7 @@ function renderERView() {
       return `<div class="er-col-row"><div>${pkTag}${fkTag}<strong class="voice-mono">${escapeHtml(col.name)}</strong></div><span class="voice-mono" style="color:var(--muted);">${escapeHtml(col.type)}</span></div>`;
     }).join('');
     return `
-      <div class="er-table-card">
+      <div class="er-table-card" data-table="${escapeHtml(table.name)}">
         <div class="er-table-header">
           <span class="detail-row">${iconMarkup('ui-table')}<span class="voice-mono">${escapeHtml(table.name)}</span></span>
           <span style="font-size:10px; color:var(--muted);">${escapeHtml(table.delta || 'EXISTING')}</span>
@@ -27,6 +28,7 @@ function renderERView() {
 // Implementation Plan Sub-view
 function renderImplementationPlanView() {
   const target = document.getElementById('plan-container');
+  if (!target) return;
   const plan = ARCH_SPEC.views?.implementation_plan;
   if (!plan || !Array.isArray(plan.phases) || plan.phases.length === 0) {
     target.innerHTML = '<div style="color: var(--muted);">No implementation phases defined.</div>';
@@ -55,6 +57,12 @@ function renderImplementationPlanView() {
 
 function renderQualityGate() {
   const target = document.getElementById('gate-body');
+  if (!target) return;
+  const gateLine = document.getElementById('gate-line');
+  if (gateLine && typeof trustSummary === 'function') {
+    const summary = trustSummary(ARCH_SPEC, QUALITY_GATE);
+    gateLine.textContent = summary.gate.label;
+  }
   if (!Array.isArray(QUALITY_GATE) || QUALITY_GATE.length === 0) {
     target.innerHTML = '<div style="color: var(--muted);">No quality gate data embedded.</div>';
     return;

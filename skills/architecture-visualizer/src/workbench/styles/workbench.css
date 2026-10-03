@@ -213,7 +213,7 @@ body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-aff
 body[data-presentation="true"] header,
 body[data-presentation="true"] .filter-bar,
 body[data-presentation="true"] .workbench-navigator,
-body[data-presentation="true"] .inspector-drawer,
+body[data-presentation="true"] .rail,
 body[data-presentation="true"] .legend-box { display: none !important; }
 body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }
 body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }

@@ -1,10 +1,10 @@
-/* Inspector Drawer Panel - visibility is controlled solely by data-open */
-.inspector-drawer {
+/* Reading Rail */
+.rail {
   position: fixed;
   top: 56px;
   bottom: 0;
-  right: calc(-1 * min(430px, 102vw));
-  width: min(420px, 100vw);
+  right: 0;
+  width: min(400px, calc(100vw - 48px));
   background: var(--surface);
   border-left: 1px solid var(--line);
   z-index: 60;
@@ -13,20 +13,158 @@
   flex-direction: column;
   overflow: hidden;
   pointer-events: none;
-  transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(105%);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* The rail settles into its docked or drawer state during boot without sliding. */
+body:not([data-ready-ms]) .rail { transition: none; }
 
-.inspector-drawer[data-open="true"] {
-  right: 0;
+
+.rail[data-open="true"] {
+  transform: translateX(0);
   pointer-events: auto;
 }
 
-.inspector-header {
-  padding: 16px 20px;
+.rail-head {
+  padding: 0 12px;
+  min-height: 48px;
+  height: 48px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  flex: none;
+}
+
+.rail-chapters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  overflow-x: auto;
+}
+
+.rail-tab {
+  height: 100%;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.rail-tab:hover {
+  color: var(--ink);
+}
+
+.rail-tab.active, .rail-tab[aria-selected="true"] {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.rail-body {
+  padding: 18px 20px 40px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+}
+
+.rail-panel h2 {
+  font-size: 18px;
+  font-weight: 650;
+  margin: 0 0 16px;
+  color: var(--ink);
+}
+
+.rail-panel h3 {
+  font-size: 13px;
+  font-weight: 650;
+  margin: 26px 0 10px;
+  color: var(--ink);
+}
+
+.rail-sheet {
+  position: absolute;
+  inset: 0;
+  background: var(--surface);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rail-sheet[hidden] {
+  display: none;
+}
+
+.sheet-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  flex: none;
+}
+
+.sheet-focus-row {
+  flex: none;
+}
+
+.rule-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+
+.rule-row:last-child {
+  border-bottom: none;
+}
+
+.rule-status {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex: none;
+}
+
+.rule-status.pass {
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.rule-status.violated {
+  color: var(--risk);
+  background: var(--risk-soft);
+}
+
+.rule-desc {
+  flex: 1;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Single column stacking for tables and plan inside the rail */
+.rail .er-grid, .rail .plan-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
 }
 
 .inspector-body {
@@ -108,23 +246,6 @@
   justify-content: center;
 }
 
-/* Sub-view containers (ER / Implementation Plan) */
-.subview-overlay {
-  position: absolute;
-  top: 56px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--bg);
-  z-index: 30;
-  display: none;
-  padding: 30px;
-  overflow-y: auto;
-}
-
-.subview-overlay.active {
-  display: block;
-}
 
 .er-grid {
   display: grid;

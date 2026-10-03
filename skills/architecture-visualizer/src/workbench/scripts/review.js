@@ -26,7 +26,7 @@ function openReviewInspector(kind, item) {
   document.getElementById('node-inspector-body').classList.add('workbench-hidden');
   panel.classList.remove('workbench-hidden');
   panel.replaceChildren();
-  inspector.setAttribute('data-inspector-kind', kind);
+  showSheet('review');
   document.getElementById('ins-title').textContent = item.name || item.label || item.message || item.id || kind;
   document.getElementById('ins-tech').textContent = kind;
   const stateValue = item.verification || item.severity || item.status || 'unknown';
@@ -35,7 +35,6 @@ function openReviewInspector(kind, item) {
     if (['name', 'label', 'message', 'id', 'verification', 'severity', 'status'].includes(key)) return;
     appendReviewField(panel, key, value);
   });
-  setDrawerOpen('inspector', true, document.querySelector('[data-action="inspector-toggle"]'));
   panel.focus();
   announceStatus(`${kind} ${item.id || item.name || ''} opened. ${stateValue}.`);
   updateUrlState();

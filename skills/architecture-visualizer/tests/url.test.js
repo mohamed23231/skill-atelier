@@ -18,6 +18,7 @@ function camp(hash) {
 // Everything a version 2 snapshot can carry, in one object.
 function fullSnapshot() {
   return {
+    chapter: 'review',
     view: 'sequence',
     node: 'api',
     edge: 'e1',
@@ -42,6 +43,7 @@ const cases = [
       assert.strictEqual(camp(hash).version, 2);
       assert.deepStrictEqual(camp(hash), {
         version: 2,
+        chapter: 'review',
         view: 'sequence',
         node: 'api',
         edge: 'e1',
@@ -60,6 +62,7 @@ const cases = [
     'each version 2 field survives on its own',
     () => {
       const expected = {
+        chapter: 'review',
         view: 'sequence',
         node: 'api',
         edge: 'e1',
@@ -91,7 +94,7 @@ const cases = [
     'keys are emitted in the fixed order, and only when set',
     () => {
       const hash = encodeViewHash(fullSnapshot());
-      assert.strictEqual(hash, 'v=2&view=sequence&n=api&e=e1&s=s1&at=stage-one&step=3&filter=async&focus=neighbors&present=1&cam=10,-20.1,1');
+      assert.strictEqual(hash, 'v=2&c=review&view=sequence&n=api&e=e1&s=s1&at=stage-one&step=3&filter=async&focus=neighbors&present=1&cam=10,-20.1,1');
     },
   ],
 
@@ -99,6 +102,14 @@ const cases = [
     'view defaults to architecture and is omitted',
     () => {
       assert.strictEqual(encodeViewHash({ view: 'architecture', node: 'api' }), 'v=2&n=api');
+      assert.deepStrictEqual(camp('v=2&n=api'), { version: 2, node: 'api' });
+    },
+  ],
+
+  [
+    'chapter defaults to walkthrough and is omitted',
+    () => {
+      assert.strictEqual(encodeViewHash({ chapter: 'walkthrough', node: 'api' }), 'v=2&n=api');
       assert.deepStrictEqual(camp('v=2&n=api'), { version: 2, node: 'api' });
     },
   ],

@@ -50,8 +50,11 @@ function assembleWorkbench(dir = WORKBENCH_DIR) {
   return { html, modules };
 }
 
+// The built page drops each line's leading indentation (about 30 KB). This is safe because no
+// whitespace-sensitive text is authored in the workbench: multi-line template literals only build
+// HTML for innerHTML, and the shell has no <pre> or <textarea> content. A test guards both.
 function loadTemplate(dir = WORKBENCH_DIR) {
-  return assembleWorkbench(dir).html;
+  return assembleWorkbench(dir).html.replace(/^[ \t]+/gm, '');
 }
 
 module.exports = { assembleWorkbench, loadTemplate, WORKBENCH_DIR };

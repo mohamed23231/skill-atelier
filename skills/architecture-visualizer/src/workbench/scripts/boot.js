@@ -15,15 +15,19 @@ let lastOverlayMode = null;
 function syncResponsiveRegions(force) {
   const overlay = isOverlayPanels();
   const navigator = document.querySelector('[data-region="navigator"]');
-  const inspectorRegion = document.querySelector('[data-region="inspector"]');
+  const railRegion = document.querySelector('[data-region="rail"]');
   navigator.setAttribute('aria-modal', overlay ? 'true' : 'false');
-  inspectorRegion.setAttribute('aria-modal', overlay && inspectorRegion.getAttribute('data-open') === 'true' ? 'true' : 'false');
+  if (railRegion) {
+    railRegion.setAttribute('aria-modal', overlay && railRegion.getAttribute('data-open') === 'true' ? 'true' : 'false');
+  }
   if (!force && overlay === lastOverlayMode) return;
   lastOverlayMode = overlay;
   activeDrawer = null;
   drawerReturnFocus = null;
   navigator.setAttribute('data-open', overlay ? 'false' : 'true');
-  inspectorRegion.setAttribute('data-open', 'false');
+  if (railRegion) {
+    railRegion.setAttribute('data-open', overlay ? 'false' : 'true');
+  }
 }
 
 // Initialize application
@@ -52,6 +56,8 @@ function init() {
   renderERView();
   renderImplementationPlanView();
   renderQualityGate();
+  initRail();
+  renderReviewChapter();
   applyVisibility();
   fitToScreen();
   const linkNotices = restoreUrlState();
@@ -97,7 +103,11 @@ function fitFromButton() {
 }
 
 function toggleGatePanel() {
-  document.getElementById('gate-panel').classList.toggle('open');
+  openChapter('review');
+  const btn = document.getElementById('btn-gate');
+  setDrawerOpen('rail', true, btn);
+  const gateSec = document.getElementById('section-gate') || document.getElementById('gate-body');
+  gateSec?.scrollIntoView?.({ block: 'nearest' });
 }
 
 function setupEventListeners() {
@@ -159,6 +169,7 @@ function setupEventListeners() {
   let resizeTimer = null;
   window.addEventListener('resize', () => {
     syncResponsiveRegions();
+    if (!state.userMovedView) fitToScreen();
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(() => { if (!state.userMovedView) fitToScreen(); else updateMinimapViewport(); }, 150);
   });
@@ -173,10 +184,12 @@ function setupEventListeners() {
 
   document.getElementById('btn-animate').addEventListener('click', toggleFlowAnimation);
   const navigatorToggle = document.querySelector('[data-action="navigator-toggle"]');
-  const inspectorToggle = document.querySelector('[data-action="inspector-toggle"]');
+  const railToggle = document.querySelector('[data-action="rail-toggle"]');
   navigatorToggle.addEventListener('click', () => toggleDrawer('navigator', navigatorToggle));
-  inspectorToggle.addEventListener('click', () => toggleDrawer('inspector', inspectorToggle));
+  if (railToggle) railToggle.addEventListener('click', () => toggleDrawer('rail', railToggle));
   document.querySelector('[data-action="navigator-close"]').addEventListener('click', () => setDrawerOpen('navigator', false));
+  document.querySelector('[data-action="rail-close"]')?.addEventListener('click', () => setDrawerOpen('rail', false));
+  document.querySelector('[data-action="sheet-back"]')?.addEventListener('click', hideSheetKeepSelection);
   document.querySelector('[data-action="inspector-close"]').addEventListener('click', closeInspector);
   document.querySelector('[data-action="drawer-backdrop"]').addEventListener('click', closeActiveDrawer);
   document.querySelector('[data-region="minimap"]').addEventListener('mousedown', event => event.stopPropagation());
@@ -238,9 +251,6 @@ function setupEventListeners() {
   });
 
   document.getElementById('btn-gate').addEventListener('click', toggleGatePanel);
-  document.getElementById('gate-close').addEventListener('click', () => {
-    document.getElementById('gate-panel').classList.remove('open');
-  });
 
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('modal-copy').addEventListener('click', copyModalContent);
@@ -278,7 +288,6 @@ function handleKeyDown(e) {
       deactivateScenario();
       closeActiveDrawer();
       closeModal();
-      document.getElementById('gate-panel').classList.remove('open');
       document.getElementById('export-menu').classList.remove('open');
       closeInspector();
       break;
@@ -314,13 +323,19 @@ function handleKeyDown(e) {
 }
 
 function switchView(viewName) {
+  if (viewName === VIEWS.DATABASE_ER) {
+    openChapter('data');
+    return;
+  }
+  if (viewName === VIEWS.IMPLEMENTATION_PLAN) {
+    openChapter('plan');
+    return;
+  }
   if (viewName !== VIEWS.SEQUENCE) stopScenarioPlayback();
   if (viewName !== VIEWS.ARCHITECTURE) actions.setScenarioActive(false);
   actions.setView(viewName);
   document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
   document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
-  document.getElementById('view-database-er').classList.toggle('active', viewName === VIEWS.DATABASE_ER);
-  document.getElementById('view-implementation-plan').classList.toggle('active', viewName === VIEWS.IMPLEMENTATION_PLAN);
   document.getElementById('flow-hint').classList.toggle('visible', viewName === VIEWS.DATA_FLOW);
 
   if (viewName !== VIEWS.SEQUENCE) {

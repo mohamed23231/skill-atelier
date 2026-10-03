@@ -58,9 +58,6 @@ function selectNode(nodeId) {
 
   const highlightBtn = document.getElementById('ins-btn-highlight');
   setIconLabel(highlightBtn, state.highlightedChain === nodeId ? 'ui-close' : 'ui-link', state.highlightedChain === nodeId ? 'Clear Dependency Chain' : 'Highlight Dependency Chain');
-
-  inspector.setAttribute('data-open', 'true');
-  inspector.setAttribute('data-inspector-kind', 'node');
 }
 
 function renderDetailList(containerId, items, renderItem, emptyMessage) {
@@ -73,10 +70,13 @@ function renderDetailList(containerId, items, renderItem, emptyMessage) {
 }
 
 function closeInspector() {
-  setDrawerOpen('inspector', false);
+  hideSheetKeepSelection();
   document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
   actions.clearSelection();
   state.highlightedChain = null;
   document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
   applyVisibility();
+  if (isOverlayPanels()) {
+    setDrawerOpen('rail', false);
+  }
 }

@@ -82,8 +82,6 @@
       <button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-delta"></use></svg><span>Delta</span></button>
       <button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-flow"></use></svg><span>Data Flow</span></button>
       <button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-sequence"></use></svg><span>Sequence</span></button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="database_er" aria-label="Database ER" title="Database ER"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-data"></use></svg><span>Data Model</span></button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="implementation_plan" aria-label="Implementation Plan" title="Implementation Plan"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-plan"></use></svg><span>Plan</span></button>
       <button class="btn-icon icon-only tabs-min-toggle" data-action="tabs-minimize" aria-pressed="false" aria-label="Minimize view tabs" title="Minimize view tabs"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-collapse"></use></svg></button>
     </nav>
 
@@ -91,9 +89,7 @@
     <div class="header-actions">
       <button id="btn-palette" class="btn-icon" aria-keyshortcuts="Control+K Meta+K" aria-label="Search and commands"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-search"></use></svg><span>Search</span><kbd>Ctrl K</kbd></button>
       <button class="btn-icon icon-only workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-menu"></use></svg></button>
-      <button class="btn-icon icon-only workbench-mobile-toggle" data-action="inspector-toggle" aria-label="Open inspector"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-info"></use></svg></button>
-      <button id="btn-focus-neighbors" class="btn-icon" aria-pressed="false" title="Focus selected component and direct neighbors">Focus</button>
-      <button id="btn-focus-affected" class="btn-icon" aria-pressed="false" title="Focus downstream affected path">Impact</button>
+      <button class="btn-icon icon-only workbench-mobile-toggle" data-action="rail-toggle" aria-label="Open reading rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-info"></use></svg></button>
       <button id="btn-presentation" class="btn-icon" aria-pressed="false" title="Toggle presentation mode">Present</button>
       <button id="btn-fullscreen" class="btn-icon" aria-pressed="false" title="Toggle fullscreen">Fullscreen</button>
       <button id="btn-animate" class="btn-icon" title="Toggle flow animation">
@@ -174,14 +170,6 @@
   <!-- Data-flow hint -->
   <div id="flow-hint" class="flow-hint">Data Flow view: read / write / event / replication paths only. Request-response control edges are dimmed.</div>
 
-  <!-- Quality Gate panel -->
-  <aside id="gate-panel" class="gate-panel">
-    <div class="gate-header">
-      <strong>14-Point Quality Gate</strong>
-      <button id="gate-close" class="btn-icon" style="width:26px;height:26px;padding:0;" aria-label="Close quality gate"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
-    </div>
-    <div id="gate-body" class="gate-body"></div>
-  </aside>
 
   <!-- Text modal (Mermaid source, export errors) -->
   <div id="modal" class="modal">
@@ -204,8 +192,6 @@
     <section><h2>Model outline</h2><div data-navigator-section="outline">Select a component to inspect it.</div></section>
     <section><h2>Search results</h2><div data-navigator-section="search">Type in search to find nodes and relationships.</div></section>
     <section><h2>Evidence</h2><div data-navigator-section="evidence">No evidence selected.</div></section>
-    <section><h2>Findings</h2><div data-navigator-section="findings">No findings selected.</div></section>
-    <section><h2>Scenarios</h2><div data-navigator-section="scenarios">No scenario selected.</div></section>
   </div>
 </aside>
 
@@ -253,95 +239,130 @@
     </div>
   </div>
 
-  <!-- Side Inspector Drawer -->
-  <aside id="inspector" class="inspector-drawer" data-region="inspector" data-open="false" data-inspector-kind="node" aria-label="Inspector" aria-modal="false">
-    <div class="inspector-header">
-      <div>
-        <h2 id="ins-title" style="font-size: 15px; font-weight: 700;">Component Details</h2>
-        <span id="ins-tech" style="font-size: 11px; color: var(--muted);">Technology</span>
-      </div>
-      <button id="ins-close" class="btn-icon" data-action="inspector-close" aria-label="Close inspector" style="width: 28px; height: 28px; padding: 0;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
+  <!-- Reading Rail -->
+  <aside id="rail" class="rail" data-region="rail" data-open="true" data-sheet="none" aria-label="Reading rail" aria-modal="false">
+    <div class="rail-head">
+      <div class="rail-chapters" role="tablist" aria-label="Chapters"></div>
+      <button class="btn-icon icon-only" data-action="rail-close" aria-label="Close rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
     </div>
-    <div id="node-inspector-body" class="inspector-body">
-      <!-- Status Badges -->
-      <div style="display: flex; gap: 8px;">
-        <span id="ins-status-badge" class="badge-status">VERIFIED</span>
-        <span id="ins-delta-badge" class="badge-status">UNCHANGED</span>
-      </div>
-
-      <!-- Responsibility -->
-      <div>
-        <div class="inspector-section-title">Responsibility</div>
-        <p id="ins-description" class="detail-card" style="line-height: 1.5;"></p>
-      </div>
-
-      <!-- Traceability: Files in Repository -->
-      <div>
-        <div class="inspector-section-title">Repository Source Files</div>
-        <div id="ins-files" class="detail-card">
-          <span style="color: var(--muted);">No files linked.</span>
-        </div>
-      </div>
-
-      <!-- API Endpoints -->
-      <div>
-        <div class="inspector-section-title">APIs & Interfaces</div>
-        <div id="ins-apis" class="detail-card">
-          <span style="color: var(--muted);">None</span>
-        </div>
-      </div>
-
-      <!-- Database Tables -->
-      <div>
-        <div class="inspector-section-title">Data Entities / Tables</div>
-        <div id="ins-tables" class="detail-card">
-          <span style="color: var(--muted);">None</span>
-        </div>
-      </div>
-
-      <!-- Implementation Checklist -->
-      <div>
-        <div class="inspector-section-title">Implementation Tasks</div>
-        <div id="ins-tasks" class="detail-card">
-          <span style="color: var(--muted);">None</span>
-        </div>
-      </div>
-
-      <!-- Failure Modes & Bottlenecks -->
-      <div>
-        <div class="inspector-section-title">Failure Modes & Risks</div>
-        <div id="ins-risks" class="detail-card">
-          <span style="color: var(--muted);">None recorded</span>
-        </div>
-      </div>
-
-      <!-- Dependency Graph Highlights -->
-      <div>
-        <button id="ins-btn-highlight" class="btn-icon" style="width: 100%; justify-content: center;">
-          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Highlight Dependency Chain</span>
-        </button>
-      </div>
+    <div class="rail-body">
+      <section id="chapter-walkthrough" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-walkthrough" data-chapter-panel="walkthrough">
+        <h2>Walkthrough</h2>
+        <div data-navigator-section="scenarios">No scenario selected.</div>
+      </section>
+      <section id="chapter-review" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-review" data-chapter-panel="review" hidden>
+        <h2>Review</h2>
+        <section id="section-gate">
+          <h3>Quality gate</h3>
+          <div id="gate-line" class="gate-line" style="font-weight: 600; font-size: 13px; margin-bottom: 8px;"></div>
+          <div id="gate-body" class="gate-body"></div>
+        </section>
+        <section id="section-rules">
+          <h3>Rules</h3>
+          <div id="review-rules"></div>
+        </section>
+        <section id="section-findings">
+          <h3>Findings</h3>
+          <div data-navigator-section="findings">No findings selected.</div>
+        </section>
+        <section id="section-assumptions">
+          <h3>Assumptions</h3>
+          <div id="review-assumptions"></div>
+        </section>
+        <section id="section-questions">
+          <h3>Open questions</h3>
+          <div id="review-questions"></div>
+        </section>
+        <section id="section-decisions">
+          <h3>Decisions</h3>
+          <div id="review-decisions"></div>
+        </section>
+      </section>
+      <section id="chapter-data" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-data" data-chapter-panel="data" hidden>
+        <h2>Data model</h2>
+        <div id="er-tables-container" class="er-grid"></div>
+      </section>
+      <section id="chapter-plan" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-plan" data-chapter-panel="plan" hidden>
+        <h2>Plan</h2>
+        <div id="plan-container" class="plan-container"></div>
+      </section>
     </div>
-    <div id="review-inspector-body" class="inspector-body workbench-hidden" tabindex="-1"></div>
+    <section class="rail-sheet" id="component-sheet" aria-label="Component details" hidden>
+      <div class="sheet-header">
+        <button class="btn-icon" data-action="sheet-back"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-prev"></use></svg><span>Back to Walkthrough</span></button>
+        <div style="flex: 1; min-width: 0; margin: 0 8px;">
+          <h2 id="ins-title" style="font-size: 15px; font-weight: 700; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Component Details</h2>
+          <span id="ins-tech" style="font-size: 11px; color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Technology</span>
+        </div>
+        <button class="btn-icon icon-only" data-action="inspector-close" aria-label="Close details" style="width: 28px; height: 28px; padding: 0;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
+      </div>
+      <div class="sheet-focus-row" style="display: flex; gap: 8px; padding: 12px 20px 0;">
+        <button id="btn-focus-neighbors" class="btn-icon" aria-pressed="false" style="flex: 1;" title="Focus selected component and direct neighbors">Show neighbours</button>
+        <button id="btn-focus-affected" class="btn-icon" aria-pressed="false" style="flex: 1;" title="Focus downstream affected path">Show blast radius</button>
+      </div>
+      <div id="node-inspector-body" class="inspector-body">
+        <!-- Status Badges -->
+        <div style="display: flex; gap: 8px;">
+          <span id="ins-status-badge" class="badge-status">VERIFIED</span>
+          <span id="ins-delta-badge" class="badge-status">UNCHANGED</span>
+        </div>
+
+        <!-- Responsibility -->
+        <div>
+          <div class="inspector-section-title">Responsibility</div>
+          <p id="ins-description" class="detail-card" style="line-height: 1.5;"></p>
+        </div>
+
+        <!-- Traceability: Files in Repository -->
+        <div>
+          <div class="inspector-section-title">Repository Source Files</div>
+          <div id="ins-files" class="detail-card">
+            <span style="color: var(--muted);">No files linked.</span>
+          </div>
+        </div>
+
+        <!-- API Endpoints -->
+        <div>
+          <div class="inspector-section-title">APIs & Interfaces</div>
+          <div id="ins-apis" class="detail-card">
+            <span style="color: var(--muted);">None</span>
+          </div>
+        </div>
+
+        <!-- Database Tables -->
+        <div>
+          <div class="inspector-section-title">Data Entities / Tables</div>
+          <div id="ins-tables" class="detail-card">
+            <span style="color: var(--muted);">None</span>
+          </div>
+        </div>
+
+        <!-- Implementation Checklist -->
+        <div>
+          <div class="inspector-section-title">Implementation Tasks</div>
+          <div id="ins-tasks" class="detail-card">
+            <span style="color: var(--muted);">None</span>
+          </div>
+        </div>
+
+        <!-- Failure Modes & Bottlenecks -->
+        <div>
+          <div class="inspector-section-title">Failure Modes & Risks</div>
+          <div id="ins-risks" class="detail-card">
+            <span style="color: var(--muted);">None recorded</span>
+          </div>
+        </div>
+
+        <!-- Dependency Graph Highlights -->
+        <div>
+          <button id="ins-btn-highlight" class="btn-icon" style="width: 100%; justify-content: center;">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Highlight Dependency Chain</span>
+          </button>
+        </div>
+      </div>
+      <div id="review-inspector-body" class="inspector-body workbench-hidden" tabindex="-1"></div>
+    </section>
   </aside>
-
-  <!-- Database ER Sub-view Overlay -->
-  <div id="view-database-er" class="subview-overlay">
-    <div style="max-width: 1400px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center;">
-      <h2 style="font-size: 18px; font-weight: 700;">Database Schema & Entity Relations</h2>
-      <span style="font-size: 12px; color: var(--muted);">Physical Data Model</span>
-    </div>
-    <div id="er-tables-container" class="er-grid"></div>
-  </div>
-
-  <!-- Implementation Plan Sub-view Overlay -->
-  <div id="view-implementation-plan" class="subview-overlay">
-    <div style="max-width: 1000px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center;">
-      <h2 style="font-size: 18px; font-weight: 700;">Feature Implementation & Execution Plan</h2>
-      <span style="font-size: 12px; color: var(--muted);">Traceable phased execution</span>
-    </div>
-    <div id="plan-container" class="plan-container"></div>
-  </div>
 
   <!-- Embedded Specification & Computed Layout Data -->
   <script>
@@ -379,6 +400,8 @@
     <!-- include: scripts/canvas.js -->
 
     <!-- include: scripts/inspector.js -->
+
+    <!-- include: scripts/rail.js -->
 
     <!-- include: scripts/flow.js -->
 

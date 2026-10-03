@@ -7,7 +7,7 @@ const { compileArchitecture, generateMarkdownReport } = require('../src/engine/c
 const { validateArchitecture } = require('../src/engine/validator.js');
 const { exportToMermaid } = require('../src/utils/mermaid-exporter.js');
 const { VALID_SPEC, clone } = require('./fixtures.js');
-const { assembleWorkbench, WORKBENCH_DIR } = require('../src/workbench/assemble.js');
+const { assembleWorkbench, loadTemplate, WORKBENCH_DIR } = require('../src/workbench/assemble.js');
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-test-'));
@@ -304,6 +304,25 @@ const cases = [
       assert.deepStrictEqual([...modules].sort(), onDisk.sort(), 'every module on disk is included, and only those');
       assert.ok(!html.includes('<!-- include:'), 'no include line may survive assembly');
       assert.strictEqual((html.match(/<style>/g) || []).length, 1, 'all styles land in one <style> block');
+    },
+  ],
+  [
+    'the built template strips indentation only where whitespace carries no meaning',
+    () => {
+      const { html } = assembleWorkbench();
+      const built = loadTemplate();
+      assert.ok(built.length < html.length - 10000, 'indentation should be stripped from the built template');
+      assert.ok(!/^[ \t]+\S/m.test(built), 'no line of the built template keeps leading indentation');
+      // Stripping is only safe while nothing authored depends on leading whitespace.
+      assert.ok(!/<pre[^>]*>[^<\s]/.test(html) && !/<textarea/.test(html), 'the shell must not author whitespace-sensitive <pre> or <textarea> content');
+      const scriptsDir = path.join(WORKBENCH_DIR, 'scripts');
+      fs.readdirSync(scriptsDir).forEach((file) => {
+        const source = fs.readFileSync(path.join(scriptsDir, file), 'utf8');
+        (source.match(/`[^`]*`/g) || []).filter((literal) => literal.includes('\n')).forEach((literal) => {
+          assert.ok(/^`\s*</.test(literal) || /^`[^\n]*\n\s*</.test(literal) || /^`[^`]*\$\{/.test(literal),
+            `${file}: a multi-line template literal that is not HTML would lose its indentation: ${literal.slice(0, 60)}`);
+        });
+      });
     },
   ],
   [

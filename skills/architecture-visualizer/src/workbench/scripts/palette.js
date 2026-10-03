@@ -1,5 +1,5 @@
 // Command Palette
-const PALETTE_GROUPS = ['Commands', 'Views', 'Components', 'Connections', 'Scenario stages', 'Export'];
+const PALETTE_GROUPS = ['Commands', 'Views', 'Chapters', 'Components', 'Connections', 'Scenario stages', 'Export'];
 
 let paletteOpener = null;
 let paletteCurrentItems = [];
@@ -140,25 +140,22 @@ function paletteBuildAllItems() {
       hint: 'Sequence · View',
       icon: 'ui-sequence',
       run: () => switchView(VIEWS.SEQUENCE)
-    },
-    {
-      id: 'view-database_er',
-      group: 'Views',
-      label: 'Database ER',
-      hint: 'Data Model · View',
-      icon: 'ui-data',
-      run: () => switchView(VIEWS.DATABASE_ER)
-    },
-    {
-      id: 'view-implementation_plan',
-      group: 'Views',
-      label: 'Implementation Plan',
-      hint: 'Plan · View',
-      icon: 'ui-plan',
-      run: () => switchView(VIEWS.IMPLEMENTATION_PLAN)
     }
   ];
   items.push(...views);
+
+  // 3. Chapters
+  if (typeof availableChapters === 'function') {
+    const chapters = availableChapters().map(ch => ({
+      id: `chapter-${ch.id}`,
+      group: 'Chapters',
+      label: ch.label,
+      hint: 'Chapter',
+      icon: ch.id === 'data' ? 'ui-table' : (ch.id === 'plan' ? 'ui-sequence' : 'ui-file'),
+      run: () => openChapter(ch.id)
+    }));
+    items.push(...chapters);
+  }
 
   // 3. Components
   (LAYOUT_DATA.nodes || []).forEach(node => {
@@ -267,7 +264,7 @@ function paletteFilter(rawQuery) {
   const q = (rawQuery || '').trim().toLowerCase();
 
   if (!q) {
-    const allowed = new Set(['Commands', 'Views', 'Components']);
+    const allowed = new Set(['Commands', 'Views', 'Chapters', 'Components']);
     paletteCurrentItems = allItems.filter(item => allowed.has(item.group)).slice(0, 50);
   } else {
     const tokens = q.split(/\s+/).filter(Boolean);

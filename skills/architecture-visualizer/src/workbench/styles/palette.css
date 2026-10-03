@@ -138,5 +138,5 @@
   #btn-palette { width: 32px; padding: 0; justify-content: center; flex: none; }
   #btn-palette > span, #btn-palette kbd { display: none; }
   /* These commands live in the palette; the narrower header keeps only what has no other home. */
-  #btn-presentation, #btn-fullscreen, #btn-animate, #btn-focus-neighbors, #btn-focus-affected { display: none; }
+  #btn-presentation, #btn-fullscreen, #btn-animate { display: none; }
 }

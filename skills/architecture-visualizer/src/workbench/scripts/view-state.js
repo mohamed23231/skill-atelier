@@ -154,6 +154,7 @@ function holdsLinkedCamera() {
 // view refits wherever it opens. A link to a scenario stage carries no camera for the same reason.
 function viewSnapshot() {
   const snapshot = {
+    chapter: state.chapter,
     view: state.currentView,
     node: state.selectedNodeId,
     edge: state.selectedEdgeId,
@@ -198,9 +199,27 @@ function restoreUrlState() {
       notices.push(`This link uses a newer format (version ${link.version}); showing the default view.`);
       return notices;
     }
+    if (link.chapter !== undefined) {
+      const available = typeof availableChapters === 'function' ? availableChapters().map(c => c.id) : ['walkthrough', 'review', 'data', 'plan'];
+      if (available.includes(link.chapter)) {
+        openChapter(link.chapter);
+      } else {
+        notices.push(`Chapter ${link.chapter} does not exist; showing the walkthrough.`);
+        openChapter('walkthrough');
+      }
+    }
     if (link.view !== undefined) {
-      if (Object.values(VIEWS).includes(link.view)) switchView(link.view);
-      else notices.push(`View ${link.view} does not exist; showing the architecture.`);
+      if (link.view === 'database_er') {
+        openChapter('data');
+        switchView('architecture');
+      } else if (link.view === 'implementation_plan') {
+        openChapter('plan');
+        switchView('architecture');
+      } else if (Object.values(VIEWS).includes(link.view)) {
+        switchView(link.view);
+      } else {
+        notices.push(`View ${link.view} does not exist; showing the architecture.`);
+      }
     }
     if (link.filter !== undefined) {
       if (document.querySelector(`[data-filter="${CSS.escape(link.filter)}"]`)) {

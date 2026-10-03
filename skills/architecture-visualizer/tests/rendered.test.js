@@ -8,7 +8,7 @@ const geometry = require('../src/engine/geometry.js');
 const { loadTemplate } = require('../src/workbench/assemble.js');
 const fixtures = require('./fixtures.js');
 
-const REGION_NAMES = ['topbar', 'navigator', 'canvas', 'inspector'];
+const REGION_NAMES = ['topbar', 'navigator', 'canvas', 'rail'];
 const CAMERA_CONTROL_SELECTORS = ['#btn-zoom-in', '#btn-zoom-out', '#btn-fit', '#btn-reset'];
 const templateHtml = loadTemplate();
 const bpMatch = templateHtml.match(/const\s+PANEL_BREAKPOINT\s*=\s*(\d+)/);
@@ -599,7 +599,7 @@ function regionsScript() {
 
 function drawerSteps() {
   const navigatorToggle = '[data-action="navigator-toggle"]';
-  const inspectorToggle = '[data-action="inspector-toggle"]';
+  const railToggle = '[data-action="rail-toggle"]';
   const steps = [];
 
   steps.push(
@@ -607,9 +607,9 @@ function drawerSteps() {
       ${PAGE_HELPERS}
       window.__obs = {};
       __record('navigatorToggle', !!__q(${q(navigatorToggle)}));
-      __record('inspectorToggle', !!__q(${q(inspectorToggle)}));
+      __record('railToggle', !!__q(${q(railToggle)}));
       __record('navigatorInitialOpen', __open('navigator'));
-      __record('inspectorInitialOpen', __open('inspector'));
+      __record('railInitialOpen', __open('rail'));
       return __observed();
     })()`)
   );
@@ -679,19 +679,19 @@ function drawerSteps() {
   steps.push(
     ev(`(async function () {
       ${PAGE_HELPERS}
-      __click(__q(${q(inspectorToggle)}));
+      __click(__q(${q(railToggle)}));
       await __sleep(100);
-      __record('inspectorOpen', __open('inspector'));
-      __record('inspectorVisible', __visible(__region('inspector')));
-      __record('inspectorFocusOnOpen', __inside(__region('inspector')));
-      var tabbables = __tabbables(__region('inspector'));
-      __record('inspectorTabbableCount', tabbables.length);
+      __record('railOpen', __open('rail'));
+      __record('railVisible', __visible(__region('rail')));
+      __record('railFocusOnOpen', __inside(__region('rail')));
+      var tabbables = __tabbables(__region('rail'));
+      __record('railTabbableCount', tabbables.length);
       var last = tabbables[tabbables.length - 1];
       var first = tabbables[0];
       if (last) last.focus();
-      __record('inspectorLastTabbableFocused', !!last && document.activeElement === last);
+      __record('railLastTabbableFocused', !!last && document.activeElement === last);
       if (first) first.focus();
-      __record('inspectorFirstTabbableFocused', !!first && document.activeElement === first);
+      __record('railFirstTabbableFocused', !!first && document.activeElement === first);
       return __observed();
     })()`)
   );
@@ -701,7 +701,7 @@ function drawerSteps() {
     ev(`(async function () {
       ${PAGE_HELPERS}
       await __sleep(60);
-      __record('inspectorForwardWrappedInside', __inside(__region('inspector')));
+      __record('railForwardWrappedInside', __inside(__region('rail')));
       return __observed();
     })()`)
   );
@@ -709,10 +709,10 @@ function drawerSteps() {
   steps.push(
     ev(`(async function () {
       ${PAGE_HELPERS}
-      var tabbables = __tabbables(__region('inspector'));
+      var tabbables = __tabbables(__region('rail'));
       var first = tabbables[0];
       if (first) first.focus();
-      __record('inspectorFirstRefocused', !!first && document.activeElement === first);
+      __record('railFirstRefocused', !!first && document.activeElement === first);
       return __observed();
     })()`)
   );
@@ -722,7 +722,7 @@ function drawerSteps() {
     ev(`(async function () {
       ${PAGE_HELPERS}
       await __sleep(60);
-      __record('inspectorBackwardWrappedInside', __inside(__region('inspector')));
+      __record('railBackwardWrappedInside', __inside(__region('rail')));
       return __observed();
     })()`)
   );
@@ -734,8 +734,8 @@ function drawerSteps() {
       __record('backdropPresent', !!backdrop);
       __click(backdrop);
       await __sleep(120);
-      __record('inspectorAfterBackdropOpen', __open('inspector'));
-      __record('backdropFocusRestored', document.activeElement === __q(${q(inspectorToggle)}));
+      __record('railAfterBackdropOpen', __open('rail'));
+      __record('backdropFocusRestored', document.activeElement === __q(${q(railToggle)}));
       return __observed();
     })()`)
   );
@@ -743,13 +743,26 @@ function drawerSteps() {
   steps.push(
     ev(`(async function () {
       ${PAGE_HELPERS}
-      __click(__q(${q(inspectorToggle)}));
+      __click(__q(${q(railToggle)}));
       await __sleep(100);
-      var close = __q('[data-action="inspector-close"]');
-      __record('inspectorCloseControl', !!close);
+      var close = __q('[data-action="rail-close"]');
+      __record('railCloseControl', !!close);
       __click(close);
       await __sleep(120);
-      __record('inspectorAfterCloseOpen', __open('inspector'));
+      __record('railAfterCloseOpen', __open('rail'));
+      return __observed();
+    })()`)
+  );
+
+  steps.push(
+    ev(`(async function () {
+      ${PAGE_HELPERS}
+      openInspectorForNode('api');
+      await __sleep(100);
+      var back = __q('[data-action="sheet-back"]');
+      __record('sheetBackPresent', !!back);
+      hideSheetKeepSelection();
+      setDrawerOpen('rail', false);
       return __observed();
     })()`)
   );
@@ -799,8 +812,8 @@ function searchSteps(label, modelId, selectedSelector, expectedKind) {
       ${PAGE_HELPERS}
       await __sleep(200);
       __record('selectionPresent', !!__q(${q(selectedSelector)}));
-      __record('inspectorOpen', __open('inspector'));
-      __record('inspectorKind', __region('inspector') ? __region('inspector').getAttribute('data-inspector-kind') : null);
+      __record('railOpen', __open('rail'));
+      __record('railSheet', __region('rail') ? __region('rail').getAttribute('data-sheet') : null);
       __record('transformAfter', __transform());
       return __observed();
     })()`),
@@ -856,35 +869,30 @@ function desktopInspectorCloseSteps() {
       ${PAGE_HELPERS}
       window.__obs = {};
       __record('innerWidth', window.innerWidth);
-      __record('initialInspectorOpen', __open('inspector'));
+      // The harness opens the page small and then resizes to 1440, which slides the docked rail in.
+      await __sleep(320);
+      __record('initialRailOpen', __open('rail'));
+      __record('initialRailVisible', __visible(__region('rail')));
       __record('initialCanvasWidth', __rect(__region('canvas')).width);
-      __click(__q('[data-action="inspector-toggle"]'));
-      await __sleep(320);
-      __record('inspectorOpenAfterToggle', __open('inspector'));
-      __record('inspectorVisibleAfterToggle', __visible(__region('inspector')));
-      __record('canvasWidthInspectorOpen', __rect(__region('canvas')).width);
-      __record('inspectorRectOpen', __rect(__region('inspector')));
+      __record('railRectOpen', __rect(__region('rail')));
       __record('zoomControlRectOpen', __rect(__q('#btn-zoom-in')));
+      __click(__q('[data-action="rail-close"]'));
+      await __sleep(320);
+      var rect = __rect(__region('rail'));
+      __record('railOpenAfterClose', __open('rail'));
+      __record('railVisibleAfterClose', __visible(__region('rail')));
+      __record('railRectAfterClose', rect);
+      __record('railOffscreenAfterClose', !!rect && rect.x >= window.innerWidth - 0.5);
+      __record('canvasWidthRailClosed', __rect(__region('canvas')).width);
       return __observed();
     })()`),
     ev(`(async function () {
       ${PAGE_HELPERS}
-      __click(__q('[data-action="inspector-close"]'));
+      __click(__q('[data-action="rail-toggle"]'));
       await __sleep(320);
-      var rect = __rect(__region('inspector'));
-      __record('inspectorOpenAfterClose', __open('inspector'));
-      __record('inspectorVisibleAfterClose', __visible(__region('inspector')));
-      __record('inspectorRectAfterClose', rect);
-      __record('inspectorOffscreenAfterClose', !!rect && rect.x >= window.innerWidth - 0.5);
-      __record('canvasWidthInspectorClosed', __rect(__region('canvas')).width);
-      return __observed();
-    })()`),
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      __click(__q('[data-action="inspector-toggle"]'));
-      await __sleep(320);
-      __record('inspectorOpenAfterReopen', __open('inspector'));
-      __record('inspectorVisibleAfterReopen', __visible(__region('inspector')));
+      __record('railOpenAfterReopen', __open('rail'));
+      __record('railVisibleAfterReopen', __visible(__region('rail')));
+      __record('canvasWidthRailReopened', __rect(__region('canvas')).width);
       return __observed();
     })()`),
   ];
@@ -976,36 +984,32 @@ function rectChanged(a, b) {
 }
 
 function assertDesktopInspectorClose(raw) {
-  assert.ok(raw, 'no desktop inspector observations returned');
-  assert.strictEqual(raw.initialInspectorOpen, 'false', 'inspector should start closed at 1440px');
-  assert.strictEqual(raw.inspectorOpenAfterToggle, 'true', 'inspector header toggle did not open the inspector');
-  assert.ok(raw.inspectorVisibleAfterToggle, 'inspector is not visible after opening from the header toggle');
-  assert.ok(
-    raw.canvasWidthInspectorOpen < raw.initialCanvasWidth - 1,
-    `docked inspector did not consume canvas layout space (open=${raw.canvasWidthInspectorOpen}, closed=${raw.initialCanvasWidth})`
-  );
-  assert.ok(
-    raw.inspectorRectOpen && raw.inspectorRectOpen.width > 0.5,
-    'inspector has no rendered size while open at 1440px'
-  );
+  assert.ok(raw, 'no desktop rail observations returned');
+  assert.strictEqual(raw.initialRailOpen, 'true', 'rail should start open at 1440px');
+  assert.ok(raw.initialRailVisible, 'rail should be visible at 1440px initially');
+  assert.ok(raw.railRectOpen && raw.railRectOpen.width > 0.5, 'rail has no rendered size while open at 1440px');
   if (raw.zoomControlRectOpen) {
     assert.ok(
-      raw.zoomControlRectOpen.right <= raw.inspectorRectOpen.x + 1,
-      `viewport controls are covered by the open inspector (controls right=${raw.zoomControlRectOpen.right}, inspector left=${raw.inspectorRectOpen.x})`
+      raw.zoomControlRectOpen.right <= raw.railRectOpen.x + 1,
+      `viewport controls are covered by the open rail (controls right=${raw.zoomControlRectOpen.right}, rail left=${raw.railRectOpen.x})`
     );
   }
-  assert.strictEqual(raw.inspectorOpenAfterClose, 'false', 'inspector X control did not close the inspector');
-  assert.strictEqual(raw.inspectorVisibleAfterClose, false, 'inspector is still visible after clicking its X control');
+  assert.strictEqual(raw.railOpenAfterClose, 'false', 'rail close control did not close the rail');
+  assert.strictEqual(raw.railVisibleAfterClose, false, 'rail is still visible after clicking its close control');
   assert.ok(
-    raw.inspectorOffscreenAfterClose,
-    `inspector drawer was not pushed off-screen after close: ${JSON.stringify(raw.inspectorRectAfterClose)}`
+    raw.railOffscreenAfterClose,
+    `rail was not pushed off-screen after close: ${JSON.stringify(raw.railRectAfterClose)}`
   );
   assert.ok(
-    raw.canvasWidthInspectorClosed > raw.canvasWidthInspectorOpen + 1,
-    `canvas usable width did not expand after the inspector closed (open=${raw.canvasWidthInspectorOpen}, closed=${raw.canvasWidthInspectorClosed})`
+    raw.canvasWidthRailClosed > raw.initialCanvasWidth + 1,
+    `canvas usable width did not expand after the rail closed (open=${raw.initialCanvasWidth}, closed=${raw.canvasWidthRailClosed})`
   );
-  assert.strictEqual(raw.inspectorOpenAfterReopen, 'true', 'inspector did not reopen from the header toggle');
-  assert.ok(raw.inspectorVisibleAfterReopen, 'inspector is not visible after reopening from the header toggle');
+  assert.strictEqual(raw.railOpenAfterReopen, 'true', 'rail did not reopen from the header toggle');
+  assert.ok(raw.railVisibleAfterReopen, 'rail is not visible after reopening from the header toggle');
+  assert.ok(
+    raw.canvasWidthRailReopened < raw.canvasWidthRailClosed - 1,
+    `canvas width did not shrink back after reopening rail (closed=${raw.canvasWidthRailClosed}, open=${raw.canvasWidthRailReopened})`
+  );
 }
 
 function assertTabletNavigatorOverlay(raw) {
@@ -1071,10 +1075,20 @@ function assertRegionLayout(raw, width) {
   assert.ok(raw.visible.canvas, `canvas region not visible at ${width}px`);
   if (width >= PANEL_BREAKPOINT) {
     assert.ok(raw.visible.navigator, `navigator should be docked open by default at ${width}px`);
-    assert.ok(!raw.visible.inspector, `inspector should be closed by default at ${width}px`);
+    assert.ok(raw.visible.rail, `rail should be docked open by default at ${width}px`);
+    const expectedRailWidth = width >= 1280 ? 400 : 340;
+    assert.ok(
+      Math.abs(raw.rects.rail.width - expectedRailWidth) <= 1,
+      `rail width should be ${expectedRailWidth}px at ${width}px, got ${raw.rects.rail.width}`
+    );
+    const expectedCanvasWidth = width - 240 - expectedRailWidth;
+    assert.ok(
+      Math.abs(raw.rects.canvas.width - expectedCanvasWidth) <= 1,
+      `canvas width should be ${expectedCanvasWidth}px at ${width}px, got ${raw.rects.canvas.width}`
+    );
   } else {
     assert.ok(!raw.visible.navigator, `navigator region should be collapsed by default at ${width}px`);
-    assert.ok(!raw.visible.inspector, `inspector region should be collapsed by default at ${width}px`);
+    assert.ok(!raw.visible.rail, `rail region should be collapsed by default at ${width}px`);
   }
 
   const visibleNames = REGION_NAMES.filter((name) => raw.visible[name]);
@@ -1121,10 +1135,10 @@ function assertMinimapContainment(raw, width) {
 function assertDrawerBehavior(raw) {
   assert.ok(raw, 'no drawer observations returned');
   assert.ok(raw.navigatorToggle, 'missing [data-action="navigator-toggle"] control at 320px');
-  assert.ok(raw.inspectorToggle, 'missing [data-action="inspector-toggle"] control at 320px');
+  assert.ok(raw.railToggle, 'missing [data-action="rail-toggle"] control at 320px');
 
   assert.strictEqual(raw.navigatorInitialOpen, 'false', 'navigator drawer should start collapsed at 320px');
-  assert.strictEqual(raw.inspectorInitialOpen, 'false', 'inspector drawer should start collapsed at 320px');
+  assert.strictEqual(raw.railInitialOpen, 'false', 'rail drawer should start collapsed at 320px');
 
   assert.strictEqual(raw.navigatorOpen, 'true', 'navigator toggle did not open the drawer');
   assert.ok(raw.navigatorVisible, 'navigator drawer is not visibly rendered after opening');
@@ -1139,22 +1153,26 @@ function assertDrawerBehavior(raw) {
   assert.strictEqual(raw.navigatorAfterEscapeOpen, 'false', 'real Escape did not dismiss the navigator drawer');
   assert.ok(raw.navigatorEscapeFocusRestored, 'focus was not restored to the navigator toggle after real Escape');
 
-  assert.strictEqual(raw.inspectorOpen, 'true', 'inspector toggle did not open the drawer');
-  assert.ok(raw.inspectorVisible, 'inspector drawer is not visibly rendered after opening');
-  assert.ok(raw.inspectorFocusOnOpen, 'keyboard focus was not moved into the inspector drawer on open');
-  assert.ok(raw.inspectorTabbableCount >= 2, `inspector drawer exposes ${raw.inspectorTabbableCount} tabbables, expected at least 2`);
-  assert.ok(raw.inspectorLastTabbableFocused, 'could not focus the last tabbable in the inspector drawer');
-  assert.ok(raw.inspectorFirstTabbableFocused, 'could not focus the first tabbable in the inspector drawer');
-  assert.ok(raw.inspectorForwardWrappedInside, 'real Tab from the last inspector tabbable escaped the inspector drawer');
-  assert.ok(raw.inspectorFirstRefocused, 'could not refocus the first tabbable in the inspector drawer');
-  assert.ok(raw.inspectorBackwardWrappedInside, 'real Shift+Tab from the first inspector tabbable escaped the inspector drawer');
+  assert.strictEqual(raw.railOpen, 'true', 'rail toggle did not open the drawer');
+  assert.ok(raw.railVisible, 'rail drawer is not visibly rendered after opening');
+  assert.ok(raw.railFocusOnOpen, 'keyboard focus was not moved into the rail drawer on open');
+  assert.ok(raw.railTabbableCount >= 2, `rail drawer exposes ${raw.railTabbableCount} tabbables, expected at least 2`);
+  assert.ok(raw.railLastTabbableFocused, 'could not focus the last tabbable in the rail drawer');
+  assert.ok(raw.railFirstTabbableFocused, 'could not focus the first tabbable in the rail drawer');
+  assert.ok(raw.railForwardWrappedInside, 'real Tab from the last rail tabbable escaped the rail drawer');
+  assert.ok(raw.railFirstRefocused, 'could not refocus the first tabbable in the rail drawer');
+  assert.ok(raw.railBackwardWrappedInside, 'real Shift+Tab from the first rail tabbable escaped the rail drawer');
 
-  assert.ok(raw.backdropPresent, 'missing [data-action="drawer-backdrop"] while the inspector drawer is open');
-  assert.strictEqual(raw.inspectorAfterBackdropOpen, 'false', 'backdrop click did not dismiss the inspector drawer');
-  assert.ok(raw.backdropFocusRestored, 'focus was not restored to the inspector toggle after backdrop dismissal');
+  assert.ok(raw.backdropPresent, 'missing [data-action="drawer-backdrop"] while the rail drawer is open');
+  assert.strictEqual(raw.railAfterBackdropOpen, 'false', 'backdrop click did not dismiss the rail drawer');
+  assert.ok(raw.backdropFocusRestored, 'focus was not restored to the rail toggle after backdrop dismissal');
 
-  assert.ok(raw.inspectorCloseControl, 'missing [data-action="inspector-close"] control at 320px');
-  assert.strictEqual(raw.inspectorAfterCloseOpen, 'false', 'inspector close control did not dismiss the drawer');
+  assert.ok(raw.railCloseControl, 'missing [data-action="rail-close"] control at 320px');
+  assert.strictEqual(raw.railAfterCloseOpen, 'false', 'rail close control did not dismiss the drawer');
+
+  if (raw.sheetBackPresent !== undefined) {
+    assert.ok(raw.sheetBackPresent, 'missing [data-action="sheet-back"] when sheet open');
+  }
 
   assert.ok(raw.navigatorCloseControl, 'missing [data-action="navigator-close"] control at 320px');
   assert.strictEqual(raw.navigatorAfterCloseOpen, 'false', 'navigator close control did not dismiss the drawer');
@@ -1166,8 +1184,8 @@ function assertSearchActivation(raw, expectedKind, modelId) {
   assert.ok(raw.resultPresent, `no search result rendered for ${modelId}`);
   assert.ok(raw.resultFocused, `search result for ${modelId} is not keyboard focusable`);
   assert.ok(raw.selectionPresent, `real Enter on the search result for ${modelId} did not mark it data-selected="true"`);
-  assert.strictEqual(raw.inspectorOpen, 'true', `activating search result for ${modelId} did not open the inspector`);
-  assert.strictEqual(raw.inspectorKind, expectedKind, `inspector is not in the ${expectedKind} state after activating ${modelId}`);
+  assert.strictEqual(raw.railOpen, 'true', `activating search result for ${modelId} did not open the rail`);
+  assert.strictEqual(raw.railSheet, expectedKind, `rail is not in the ${expectedKind} sheet state after activating ${modelId}`);
   assert.notStrictEqual(raw.transformAfter, raw.transformBefore, `camera transform did not change after activating search result for ${modelId}`);
 }
 
@@ -1266,7 +1284,7 @@ function assertTabsBarBehavior(raw) {
   assert.ok(raw, 'no tabs bar observations returned');
   assert.strictEqual(raw.tabsPresent, true, 'tabs section is missing');
   assert.strictEqual(raw.togglePresent, true, 'tabs minimize toggle is missing');
-  assert.ok(raw.tabCount >= 6, `expected at least 6 view tabs, found ${raw.tabCount}`);
+  assert.ok(raw.tabCount >= 4, `expected at least 4 view tabs, found ${raw.tabCount}`);
   assert.strictEqual(raw.initialMinimized, 'false', 'tabs should start expanded');
   assert.strictEqual(raw.overflowing, true, 'test setup invalid: tabs bar is not overflowing at 768px');
   assert.ok(
@@ -1319,7 +1337,7 @@ const cases = [
   ],
 
   [
-    'B2a: topbar, navigator, canvas and inspector render without overlap at 320, 768 and 1440',
+    'B2a: topbar, navigator, canvas and rail render without overlap at 320, 768 and 1440',
     () => {
       const phases = VIEWPORTS.map((viewport) => ({
         width: viewport.width,
@@ -1336,7 +1354,7 @@ const cases = [
   ],
 
   [
-    'B2b: at 1440 the inspector X closes the docked panel, expands the canvas and reopens from the header toggle',
+    'B2b: at 1440 the rail close button closes the docked panel, expands the canvas and reopens from the header toggle',
     () => {
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps: desktopInspectorCloseSteps() }]);
       assertDesktopInspectorClose(lastEvalValue(results[0]));
@@ -1360,7 +1378,7 @@ const cases = [
   ],
 
   [
-    'B2a: at 320 the navigator and inspector drawers trap focus, dismiss and restore focus',
+    'B2a: at 320 the navigator and rail drawers trap focus, dismiss and restore focus',
     () => {
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 320, height: 800, mobile: false, steps: drawerSteps() }]);
       assertDrawerBehavior(lastEvalValue(results[0]));
@@ -1532,7 +1550,7 @@ const cases = [
     'Phase 0: playback, delta and gate overlays never sit under each other or a docked panel at 1440 and 1600',
     () => {
       const OVERLAPS = ev(`(function () {
-        const sel = ['.filter-bar', '#delta-bar', '#sequence-bar', '.legend-box', '#gate-panel', '.workbench-minimap', '.viewport-controls', '[data-region=navigator]', '#inspector'];
+        const sel = ['.filter-bar', '#delta-bar', '#sequence-bar', '.legend-box', '.workbench-minimap', '.viewport-controls', '[data-region=navigator]', '#rail'];
         const vis = sel.map((s) => [s, document.querySelector(s)])
           .filter(([, e]) => e && e.getAttribute('data-open') !== 'false' && getComputedStyle(e).display !== 'none')
           .map(([s, e]) => [s, e.getBoundingClientRect()])
@@ -1546,7 +1564,7 @@ const cases = [
       })()`);
       const settle = ev('new Promise((resolve) => setTimeout(() => resolve(0), 350))');
       const steps = [
-        ev("document.getElementById('gate-panel').classList.remove('open'); switchView('sequence'); goToSequenceStep(2); 0"), settle, OVERLAPS,
+        ev("switchView('sequence'); goToSequenceStep(2); 0"), settle, OVERLAPS,
         ev("openInspectorForNode('saga_orchestrator'); 0"), settle, OVERLAPS,
         ev("closeInspector(); switchView('before_after'); 0"), settle, OVERLAPS,
         ev("switchView('architecture'); document.getElementById('btn-gate').click(); 0"), settle, OVERLAPS,
@@ -1634,11 +1652,11 @@ const cases = [
           await __sleep(200);
           var scrim = __q('#palette-scrim');
           var node = __q('#node-api');
-          var inspector = __region('inspector');
+          var rail = __region('rail');
           __record('paletteClosedAfterNode', scrim ? scrim.getAttribute('data-open') : null);
           __record('nodeSelected', node ? node.getAttribute('data-selected') : null);
-          __record('inspectorOpenNode', __open('inspector'));
-          __record('inspectorKindNode', inspector ? inspector.getAttribute('data-inspector-kind') : null);
+          __record('railOpenNode', __open('rail'));
+          __record('railSheetNode', rail ? rail.getAttribute('data-sheet') : null);
           __record('transformAfterNode', __transform());
           return __observed();
         })()`),
@@ -1659,11 +1677,11 @@ const cases = [
           await __sleep(200);
           var scrim = __q('#palette-scrim');
           var edge = __q('#path-e1');
-          var inspector = __region('inspector');
+          var rail = __region('rail');
           __record('paletteClosedAfterEdge', scrim ? scrim.getAttribute('data-open') : null);
           __record('edgeSelected', edge ? edge.getAttribute('data-selected') : null);
-          __record('inspectorOpenEdge', __open('inspector'));
-          __record('inspectorKindEdge', inspector ? inspector.getAttribute('data-inspector-kind') : null);
+          __record('railOpenEdge', __open('rail'));
+          __record('railSheetEdge', rail ? rail.getAttribute('data-sheet') : null);
           __record('transformAfterEdge', __transform());
           return __observed();
         })()`),
@@ -1674,15 +1692,15 @@ const cases = [
       assert.strictEqual(obs.inputFocused, true, 'Palette input should be focused on open');
       assert.strictEqual(obs.firstRowModelId, 'api', 'Typing "API Service" should put api component first');
       assert.strictEqual(obs.nodeSelected, 'true', 'Enter should mark #node-api data-selected="true"');
-      assert.strictEqual(obs.inspectorOpenNode, 'true', 'Selecting node should open inspector');
-      assert.strictEqual(obs.inspectorKindNode, 'node', 'Inspector should be in node state');
+      assert.strictEqual(obs.railOpenNode, 'true', 'Selecting node should open rail');
+      assert.strictEqual(obs.railSheetNode, 'node', 'Rail should be in node sheet state');
       assert.notStrictEqual(obs.transformAfterNode, obs.transformBefore, 'Camera transform should change on node selection');
       assert.strictEqual(obs.paletteClosedAfterNode, 'false', 'Palette should close after running node item');
 
       assert.strictEqual(obs.edgeRowModelId, 'e1', 'Typing "SQL Write" should put e1 connection first');
       assert.strictEqual(obs.edgeSelected, 'true', 'Enter should mark #path-e1 data-selected="true"');
-      assert.strictEqual(obs.inspectorOpenEdge, 'true', 'Selecting edge should open inspector');
-      assert.strictEqual(obs.inspectorKindEdge, 'edge', 'Inspector should be in edge state');
+      assert.strictEqual(obs.railOpenEdge, 'true', 'Selecting edge should open rail');
+      assert.strictEqual(obs.railSheetEdge, 'edge', 'Rail should be in edge sheet state');
       assert.notStrictEqual(obs.transformAfterEdge, obs.transformAfterNode, 'Camera transform should change on edge selection');
       assert.strictEqual(obs.paletteClosedAfterEdge, 'false', 'Palette should close after running edge item');
     },
@@ -1883,6 +1901,252 @@ const cases = [
         assert.ok(probe.palette, `${width}: the palette button is hidden or overlaps the brand mark`);
         assert.ok(probe.markWidth >= 14, `${width}: the brand mark was squeezed`);
       });
+    },
+  ],
+
+  [
+    '1c: rail chapter tabs by keyboard (arrows change aria-selected and the visible panel)',
+    () => {
+      const ARROW_RIGHT = key('ArrowRight', { code: 'ArrowRight', windowsVirtualKeyCode: 39 });
+      const ARROW_LEFT = key('ArrowLeft', { code: 'ArrowLeft', windowsVirtualKeyCode: 37 });
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          var tabWalk = __q('#chapter-tab-walkthrough');
+          if (tabWalk) tabWalk.focus();
+          await __sleep(60);
+          __record('initialFocus', document.activeElement === tabWalk);
+          __record('initialWalkSelected', tabWalk ? tabWalk.getAttribute('aria-selected') : null);
+          __record('initialWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
+          __record('initialReviewHidden', __q('#chapter-review') ? __q('#chapter-review').hidden : null);
+          return __observed();
+        })()`),
+        ARROW_RIGHT,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(60);
+          var tabRev = __q('#chapter-tab-review');
+          var tabWalk = __q('#chapter-tab-walkthrough');
+          __record('afterRightFocus', document.activeElement === tabRev);
+          __record('afterRightWalkSelected', tabWalk ? tabWalk.getAttribute('aria-selected') : null);
+          __record('afterRightRevSelected', tabRev ? tabRev.getAttribute('aria-selected') : null);
+          __record('afterRightWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
+          __record('afterRightRevHidden', __q('#chapter-review') ? __q('#chapter-review').hidden : null);
+          return __observed();
+        })()`),
+        ARROW_LEFT,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(60);
+          var tabWalk = __q('#chapter-tab-walkthrough');
+          var tabRev = __q('#chapter-tab-review');
+          __record('afterLeftFocus', document.activeElement === tabWalk);
+          __record('afterLeftWalkSelected', tabWalk ? tabWalk.getAttribute('aria-selected') : null);
+          __record('afterLeftRevSelected', tabRev ? tabRev.getAttribute('aria-selected') : null);
+          __record('afterLeftWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
+          __record('afterLeftRevHidden', __q('#chapter-review') ? __q('#chapter-review').hidden : null);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases('examples/2-complex-database-migration/architecture.json', [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.initialFocus, true, 'Walkthrough tab should be focused initially');
+      assert.strictEqual(obs.initialWalkSelected, 'true', 'Walkthrough tab should be selected initially');
+      assert.strictEqual(obs.initialWalkHidden, false, 'Walkthrough panel should be visible initially');
+      assert.strictEqual(obs.initialReviewHidden, true, 'Review panel should be hidden initially');
+      assert.strictEqual(obs.afterRightFocus, true, 'ArrowRight should move focus to Review tab');
+      assert.strictEqual(obs.afterRightWalkSelected, 'false', 'Walkthrough tab should not be selected after ArrowRight');
+      assert.strictEqual(obs.afterRightRevSelected, 'true', 'Review tab should be selected after ArrowRight');
+      assert.strictEqual(obs.afterRightWalkHidden, true, 'Walkthrough panel should be hidden after ArrowRight');
+      assert.strictEqual(obs.afterRightRevHidden, false, 'Review panel should be visible after ArrowRight');
+      assert.strictEqual(obs.afterLeftFocus, true, 'ArrowLeft should move focus back to Walkthrough tab');
+      assert.strictEqual(obs.afterLeftWalkSelected, 'true', 'Walkthrough tab should be selected after ArrowLeft');
+      assert.strictEqual(obs.afterLeftRevSelected, 'false', 'Review tab should not be selected after ArrowLeft');
+      assert.strictEqual(obs.afterLeftWalkHidden, false, 'Walkthrough panel should be visible after ArrowLeft');
+      assert.strictEqual(obs.afterLeftRevHidden, true, 'Review panel should be hidden after ArrowLeft');
+    },
+  ],
+
+  [
+    '1c: rail #btn-gate opens Review with the gate rows visible',
+    () => {
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          var btnGate = __q('#btn-gate');
+          __record('gateButtonPresent', !!btnGate);
+          __record('gateState', btnGate ? btnGate.getAttribute('data-gate-state') : null);
+          __record('initialChapter', state.chapter);
+          if (btnGate) __click(btnGate);
+          await __sleep(120);
+          var revTab = __q('#chapter-tab-review');
+          var revPanel = __q('#chapter-review');
+          var gateBody = __q('#gate-body');
+          var gateRows = gateBody ? gateBody.querySelectorAll('.gate-row') : [];
+          __record('railOpen', __open('rail'));
+          __record('chapterAfter', state.chapter);
+          __record('revTabSelected', revTab ? revTab.getAttribute('aria-selected') : null);
+          __record('revPanelHidden', revPanel ? revPanel.hidden : null);
+          __record('gateRowsCount', gateRows.length);
+          __record('gateBodyVisible', gateBody ? gateBody.getBoundingClientRect().height > 0 : false);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases('examples/2-complex-database-migration/architecture.json', [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.gateButtonPresent, true, '#btn-gate should be present in the header');
+      assert.strictEqual(obs.railOpen, 'true', 'Rail should be open after clicking #btn-gate');
+      assert.strictEqual(obs.chapterAfter, 'review', 'Active chapter should be review after clicking #btn-gate');
+      assert.strictEqual(obs.revTabSelected, 'true', 'Review tab should be selected');
+      assert.strictEqual(obs.revPanelHidden, false, 'Review panel should be visible');
+      assert.ok(obs.gateRowsCount > 0, `Expected gate rows to be rendered in #gate-body, found ${obs.gateRowsCount}`);
+      assert.strictEqual(obs.gateBodyVisible, true, '#gate-body should be visible in the Review chapter');
+    },
+  ],
+
+  [
+    '1c: rail a #view=database_er link opens the Data chapter with every table of example 2',
+    () => {
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          __record('chapter', state.chapter);
+          __record('currentView', state.currentView);
+          var dataTab = __q('#chapter-tab-data');
+          var dataPanel = __q('#chapter-data');
+          __record('dataTabSelected', dataTab ? dataTab.getAttribute('aria-selected') : null);
+          __record('dataPanelHidden', dataPanel ? dataPanel.hidden : null);
+          var tables = __qa('#chapter-data .er-table-card');
+          __record('tableCount', tables.length);
+          __record('tableNames', tables.map(function (t) { return t.getAttribute('data-table'); }));
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases('examples/2-complex-database-migration/architecture.json', [{ width: 1440, height: 900, mobile: false, steps }], undefined, { hash: 'view=database_er' });
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.chapter, 'data', 'Active chapter should be data');
+      assert.strictEqual(obs.currentView, 'architecture', 'Canvas view should be architecture');
+      assert.strictEqual(obs.dataTabSelected, 'true', 'Data chapter tab should be selected');
+      assert.strictEqual(obs.dataPanelHidden, false, 'Data chapter panel should be visible');
+      assert.strictEqual(obs.tableCount, 4, 'All 4 tables of example 2 should be rendered in the Data chapter');
+      const expected = ['orders_legacy', 'orders_partitioned', 'orders_2026_09', 'orders_2026_10'];
+      expected.forEach((name) => {
+        assert.ok(obs.tableNames.includes(name), `Expected table ${name} to be rendered in Data chapter`);
+      });
+    },
+  ],
+
+  [
+    '1c: rail sheet Back returns to the chapter and keeps the node selected',
+    () => {
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          openInspectorForNode('api');
+          await __sleep(80);
+          var rail = __region('rail');
+          var sheet = __q('#component-sheet');
+          var backBtn = __q('[data-action="sheet-back"]');
+          __record('sheetOpen', rail ? rail.getAttribute('data-sheet') : null);
+          __record('sheetHidden', sheet ? sheet.hidden : null);
+          __record('nodeSelectedBefore', state.selectedNodeId);
+          __record('backText', backBtn ? backBtn.textContent.trim() : null);
+          if (backBtn) __click(backBtn);
+          await __sleep(80);
+          __record('sheetClosed', rail ? rail.getAttribute('data-sheet') : null);
+          __record('sheetHiddenAfter', sheet ? sheet.hidden : null);
+          __record('nodeSelectedAfter', state.selectedNodeId);
+          var nodeEl = __q('#node-api');
+          __record('nodeAttrSelected', nodeEl ? nodeEl.getAttribute('data-selected') : null);
+          __record('chapter', state.chapter);
+          __record('chapterWalkHidden', __q('#chapter-walkthrough') ? __q('#chapter-walkthrough').hidden : null);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.sheetOpen, 'node', 'Sheet should open in node mode');
+      assert.strictEqual(obs.sheetHidden, false, 'Sheet should be visible');
+      assert.strictEqual(obs.nodeSelectedBefore, 'api', 'Node should be selected before Back');
+      assert.strictEqual(obs.sheetClosed, 'none', 'Rail data-sheet should be none after Back');
+      assert.strictEqual(obs.sheetHiddenAfter, true, 'Sheet should be hidden after Back');
+      assert.strictEqual(obs.nodeSelectedAfter, 'api', 'Node should still be selected in state after Back');
+      assert.strictEqual(obs.nodeAttrSelected, 'true', '#node-api should keep data-selected="true" after Back');
+      assert.strictEqual(obs.chapter, 'walkthrough', 'Should return to current chapter (walkthrough)');
+      assert.strictEqual(obs.chapterWalkHidden, false, 'Walkthrough chapter should be visible');
+    },
+  ],
+
+  [
+    '1c: rail the sheet\'s "Show neighbours" sets aria-pressed and body[data-focus-mode="neighbors"]',
+    () => {
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          openInspectorForNode('api');
+          await __sleep(80);
+          var btn = __q('#btn-focus-neighbors');
+          __record('btnPresent', !!btn);
+          __record('btnText', btn ? btn.textContent.trim() : null);
+          __record('initialPressed', btn ? btn.getAttribute('aria-pressed') : null);
+          __record('initialBodyMode', document.body.getAttribute('data-focus-mode'));
+          if (btn) __click(btn);
+          await __sleep(80);
+          __record('afterPressed', btn ? btn.getAttribute('aria-pressed') : null);
+          __record('afterBodyMode', document.body.getAttribute('data-focus-mode'));
+          __record('storeFocusMode', state.focusMode);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.btnPresent, true, '#btn-focus-neighbors should be present in the sheet');
+      assert.strictEqual(obs.initialPressed, 'false', 'Initial aria-pressed should be false');
+      assert.strictEqual(obs.initialBodyMode, null, 'Initial body[data-focus-mode] should be null');
+      assert.strictEqual(obs.afterPressed, 'true', 'Clicking Show neighbours should set aria-pressed="true"');
+      assert.strictEqual(obs.afterBodyMode, 'neighbors', 'Clicking Show neighbours should set body[data-focus-mode="neighbors"]');
+      assert.strictEqual(obs.storeFocusMode, 'neighbors', 'state.focusMode should be set to "neighbors"');
+    },
+  ],
+
+  [
+    '1c: rail at 1440 the docked rail plus canvas fill the width with no overlap',
+    () => {
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(300);
+          window.__obs = {};
+          var nav = __region('navigator');
+          var canvas = __region('canvas');
+          var rail = __region('rail');
+          __record('navRect', __rect(nav));
+          __record('canvasRect', __rect(canvas));
+          __record('railRect', __rect(rail));
+          __record('scrollWidth', document.documentElement.scrollWidth);
+          __record('innerWidth', window.innerWidth);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.innerWidth, 1440);
+      assert.ok(obs.scrollWidth <= 1440 + 1, `Page should not scroll horizontally (scrollWidth=${obs.scrollWidth}, innerWidth=${obs.innerWidth})`);
+      assert.ok(Math.abs(obs.navRect.width - 240) <= 1, `Navigator width should be 240, got ${obs.navRect.width}`);
+      assert.ok(Math.abs(obs.railRect.width - 400) <= 1, `Rail width should be 400 at 1440px, got ${obs.railRect.width}`);
+      const expectedCanvasWidth = 1440 - 240 - 400;
+      assert.ok(Math.abs(obs.canvasRect.width - expectedCanvasWidth) <= 1, `Canvas width should be ${expectedCanvasWidth}, got ${obs.canvasRect.width}`);
+      assert.ok(obs.navRect.right <= obs.canvasRect.x + 1, 'Navigator should not overlap canvas on the left');
+      assert.ok(obs.canvasRect.right <= obs.railRect.x + 1, 'Canvas should not overlap rail on the right');
+      assert.ok(obs.railRect.right <= obs.innerWidth + 1, 'Rail should stay within viewport right boundary');
+      assert.ok(!rectsOverlap(obs.navRect, obs.canvasRect), 'Navigator and canvas must not overlap');
+      assert.ok(!rectsOverlap(obs.canvasRect, obs.railRect), 'Canvas and rail must not overlap');
+      assert.ok(!rectsOverlap(obs.navRect, obs.railRect), 'Navigator and rail must not overlap');
     },
   ],
 ];

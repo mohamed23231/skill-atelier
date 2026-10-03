@@ -68,6 +68,8 @@ function urlParseV1(params) {
 
 function urlParseV2(params) {
   const result = { version: 2 };
+  const chapter = params.get('c');
+  if (urlSet(chapter)) result.chapter = chapter;
   const view = params.get('view');
   if (urlSet(view)) result.view = view;
   const node = params.get('n');
@@ -95,6 +97,7 @@ function encodeViewHash(snapshot) {
   const params = new URLSearchParams();
   let camSuffix = '';
   params.set('v', '2');
+  if (urlSet(source.chapter) && source.chapter !== 'walkthrough') params.set('c', String(source.chapter));
   if (urlSet(source.view) && source.view !== URL_CODEC_DEFAULT_VIEW) params.set('view', String(source.view));
   if (urlSet(source.node)) params.set('n', String(source.node));
   if (urlSet(source.edge)) params.set('e', String(source.edge));

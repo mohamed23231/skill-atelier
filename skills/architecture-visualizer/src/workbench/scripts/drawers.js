@@ -28,7 +28,7 @@ function setDrawerOpen(kind, open, opener) {
   const overlay = isOverlayPanels();
   const wasOpen = region.getAttribute('data-open') === 'true';
   if (open && overlay) {
-    const otherKind = kind === 'navigator' ? 'inspector' : 'navigator';
+    const otherKind = kind === 'navigator' ? 'rail' : 'navigator';
     const other = document.querySelector(`[data-region="${otherKind}"]`);
     if (other) other.setAttribute('data-open', 'false');
     activeDrawer = kind;
@@ -43,7 +43,10 @@ function setDrawerOpen(kind, open, opener) {
     const target = drawerReturnFocus;
     activeDrawer = null;
     drawerReturnFocus = null;
-    if (overlay) window.requestAnimationFrame(() => target?.focus());
+    if (overlay) {
+      target?.focus();
+      window.requestAnimationFrame(() => target?.focus());
+    }
   }
   if (wasOpen !== open) refreshViewportForPanelChange();
 }
@@ -94,8 +97,7 @@ function openInspectorForNode(nodeId) {
   const node = nodeById.get(nodeId);
   const nodeElement = document.getElementById(`node-${nodeId}`);
   if (nodeElement) nodeElement.setAttribute('data-selected', 'true');
-  inspector.setAttribute('data-inspector-kind', 'node');
-  setDrawerOpen('inspector', true, document.querySelector('[data-action="inspector-toggle"]'));
+  showSheet('node');
   if (node) focusModelPoint(node.x + node.width / 2, node.y + node.height / 2);
   applyFocusMode();
   updateUrlState();
@@ -111,11 +113,10 @@ function openInspectorForEdge(edgeId) {
   const path = document.getElementById(`path-${edgeId}`);
   if (path) path.setAttribute('data-selected', 'true');
   actions.selectNode(null);
-  inspector.setAttribute('data-inspector-kind', 'edge');
+  showSheet('edge');
   document.getElementById('ins-title').textContent = edge.label || edge.packetLabel || edge.id;
   document.getElementById('ins-tech').textContent = `${edge.communication || 'sync'} relationship`;
   document.getElementById('ins-description').textContent = `${nodeById.get(edge.source)?.label || edge.source} to ${nodeById.get(edge.target)?.label || edge.target}`;
-  setDrawerOpen('inspector', true, document.querySelector('[data-action="inspector-toggle"]'));
   const x = edge.labelAnchor?.x ?? edge.labelX ?? ((edge.points?.x1 || 0) + (edge.points?.x2 || 0)) / 2;
   const y = edge.labelAnchor?.y ?? edge.labelY ?? ((edge.points?.y1 || 0) + (edge.points?.y2 || 0)) / 2;
   focusModelPoint(x, y);

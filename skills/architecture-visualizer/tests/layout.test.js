@@ -495,10 +495,10 @@ const cases = [
     () => {
       const html = loadTemplate();
 
-      assert.ok(html.includes('height: 100vh;\n      height: 100dvh;\n      width: 100%;'), 'body should use 100vh with 100dvh and 100% width');
-      assert.ok(html.includes('height: calc(100vh - 56px);\n      height: calc(100dvh - 56px);'), 'canvas-container should use dvh fallback');
-      assert.ok(html.includes('width: min(420px, 100vw);'), 'inspector drawer width should use min(420px, 100vw)');
-      assert.ok(html.includes('right: calc(-1 * min(430px, 102vw));'), 'inspector drawer parked position should be responsive');
+      assert.ok(html.includes('height: 100vh;\nheight: 100dvh;\nwidth: 100%;'), 'body should use 100vh with 100dvh and 100% width');
+      assert.ok(html.includes('height: calc(100vh - 56px);\nheight: calc(100dvh - 56px);'), 'canvas-container should use dvh fallback');
+      assert.ok(html.includes('width: min(400px, calc(100vw - 48px));'), 'rail drawer width should use min(400px, calc(100vw - 48px))');
+      assert.ok(html.includes('transform: translateX(105%);'), 'rail drawer parked position should be responsive');
       assert.ok(html.includes('max-height: min(46vh, 320px);'), 'legend-box max-height should be clamped');
       assert.ok(html.includes("window.addEventListener('resize'"), 'resize listener should be registered');
       assert.ok(html.includes('!state.userMovedView'), 'resize listener should check userMovedView latch before fitToScreen');
