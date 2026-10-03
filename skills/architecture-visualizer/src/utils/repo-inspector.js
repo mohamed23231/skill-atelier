@@ -31,9 +31,80 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function realPathOr(target) {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    return target;
+  }
+}
+
+// Real path of the nearest existing ancestor, with the missing tail re-appended,
+// so a not-yet-created file under an outbound symlink still resolves outside.
+function realPathOfNearest(target) {
+  let current = target;
+  const tail = [];
+  while (!fs.existsSync(current)) {
+    const parent = path.dirname(current);
+    if (parent === current) return target;
+    tail.unshift(path.basename(current));
+    current = parent;
+  }
+  return path.join(realPathOr(current), ...tail);
+}
+
+// True only for a path strictly below root: the root itself grounds nothing.
+function isWithin(root, target) {
+  const relative = path.relative(root, target);
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+/**
+ * Resolves a locator path against the repository root and reports whether it
+ * stays strictly under it. Absolute paths, `../` escapes, symlinks that lead
+ * out of the root, and the root itself all count as outside. Only the repo-relative path is returned, so no
+ * machine-local absolute path reaches a generated artifact.
+ */
 function resolveRepoPath(repoRoot, targetPath) {
-  if (!targetPath) return null;
-  return path.isAbsolute(targetPath) ? targetPath : path.resolve(repoRoot, targetPath);
+  if (!targetPath || typeof targetPath !== 'string') return null;
+  const root = path.resolve(repoRoot);
+  const candidate = path.resolve(root, targetPath);
+  const exists = fs.existsSync(candidate);
+  const lexicallyInside = isWithin(root, candidate);
+  // For a path that exists, where it really lives decides: a symlink out of the
+  // repo is outside, an alias of the repo root (e.g. /var vs /private/var) is not.
+  const realRoot = realPathOr(root);
+  const realCandidate = realPathOfNearest(candidate);
+  const inside = isWithin(realRoot, realCandidate);
+  if (!inside) {
+    return { absolutePath: candidate, relativePath: null, inside: false };
+  }
+  const relativePath = (lexicallyInside ? path.relative(root, candidate) : path.relative(realRoot, realCandidate)).split(path.sep).join('/');
+  return { absolutePath: candidate, relativePath, inside: true, exists };
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const IDENTIFIER_CHAR = '\\p{ID_Continue}$\\u200C\\u200D';
+
+function containsSymbol(content, symbol) {
+  const pattern = new RegExp(`(^|[^${IDENTIFIER_CHAR}])${escapeRegExp(symbol)}($|[^${IDENTIFIER_CHAR}])`, 'u');
+  return pattern.test(content);
+}
+
+/**
+ * The form of a locator path that is safe to publish in an artifact: an
+ * absolute path under the root becomes repo-relative, and any path that
+ * resolves outside the root (absolute or `../`) keeps only its file name, so no
+ * machine-local directory leaks. Relative paths inside the root are kept.
+ */
+function displayRepoPath(repoRoot, targetPath) {
+  if (typeof targetPath !== 'string' || targetPath === '') return targetPath;
+  const resolved = resolveRepoPath(repoRoot, targetPath);
+  if (resolved && resolved.inside) return path.isAbsolute(targetPath) ? resolved.relativePath : targetPath;
+  return `<outside repository>/${path.basename(targetPath)}`;
 }
 
 function countLines(content) {
@@ -54,8 +125,8 @@ class RepoInspector {
    */
   exists(relativePath) {
     if (!relativePath) return false;
-    const target = resolveRepoPath(this.repoRoot, relativePath);
-    return fs.existsSync(target);
+    const resolved = resolveRepoPath(this.repoRoot, relativePath);
+    return Boolean(resolved && resolved.inside && resolved.exists);
   }
 
   inspectEvidence(record = {}) {
@@ -76,25 +147,34 @@ class RepoInspector {
       return result;
     }
 
+    // An API locator's `path` is the route (`/api/orders`), not a file, so only
+    // an explicit `file` is checked against the repository.
+    const fileField = result.type === EVIDENCE_TYPE.API ? 'file' : 'path';
     if (result.type === EVIDENCE_TYPE.API || result.type === EVIDENCE_TYPE.TABLE) {
-      const filePath = result.locator.path;
-      if (!filePath) {
+      if (!result.locator[fileField]) {
         result.verification = EVIDENCE_VERIFICATION.COMPATIBILITY;
         result.exists = false;
         return result;
       }
     }
 
-    const relativePath = result.locator.path || result.locator.document;
+    const relativePath = result.locator[fileField] || result.locator.document;
     if (!relativePath) {
       result.verification = EVIDENCE_VERIFICATION.UNRESOLVED;
       result.exists = false;
       return result;
     }
 
-    const absolutePath = resolveRepoPath(this.repoRoot, relativePath);
-    result.absolutePath = absolutePath;
-    result.exists = fs.existsSync(absolutePath);
+    const resolved = resolveRepoPath(this.repoRoot, relativePath);
+    if (!resolved || !resolved.inside) {
+      result.verification = EVIDENCE_VERIFICATION.UNRESOLVED;
+      result.exists = false;
+      result.outsideRepo = true;
+      return result;
+    }
+    const absolutePath = resolved.absolutePath;
+    result.resolvedPath = resolved.relativePath;
+    result.exists = resolved.exists;
     if (!result.exists) {
       result.verification = EVIDENCE_VERIFICATION.UNRESOLVED;
       return result;
@@ -135,7 +215,14 @@ class RepoInspector {
         result.verification = EVIDENCE_VERIFICATION.UNRESOLVED;
         return result;
       }
-      result.symbolFound = content.includes(symbol);
+      // Match the whole identifier, and only inside the cited line range when
+      // one is given and valid, so "create" does not verify "createOrder".
+      let scope = content;
+      if (result.verification !== EVIDENCE_VERIFICATION.STALE && (result.locator.startLine != null || result.locator.endLine != null)) {
+        const lines = content.split(/\r?\n/);
+        scope = lines.slice((result.locator.startLine || 1) - 1, result.locator.endLine || lines.length).join('\n');
+      }
+      result.symbolFound = containsSymbol(scope, String(symbol));
       if (!result.symbolFound) {
         result.verification = EVIDENCE_VERIFICATION.STALE;
       }
@@ -151,12 +238,13 @@ class RepoInspector {
   verifyFiles(files = []) {
     return files.map((entry) => {
       const filePath = typeof entry === 'string' ? entry : entry?.path;
-      const target = path.isAbsolute(filePath) ? filePath : path.resolve(this.repoRoot, filePath);
-      const exists = fs.existsSync(target);
+      const resolved = resolveRepoPath(this.repoRoot, filePath);
+      const inside = Boolean(resolved && resolved.inside);
       return {
         path: filePath,
-        exists,
-        absolutePath: target,
+        exists: inside && Boolean(resolved.exists),
+        insideRepo: inside,
+        resolvedPath: inside ? resolved.relativePath : null,
       };
     });
   }
@@ -227,6 +315,8 @@ class RepoInspector {
 
 module.exports = {
   RepoInspector,
+  resolveRepoPath,
+  displayRepoPath,
   EVIDENCE_TYPE,
   EVIDENCE_VERIFICATION,
   EVIDENCE_ORIGIN,

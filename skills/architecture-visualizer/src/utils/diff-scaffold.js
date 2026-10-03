@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { resolveRepoPath } = require('./repo-inspector.js');
 
 const LABEL_CHARS = 22;
 const TECH_CHARS = 28;
@@ -268,12 +269,18 @@ function scaffoldFromDiff(options = {}) {
   const requestedRoot = realPath(path.resolve(options.repoRoot || process.cwd()));
   const gitRoot = realPath(resolveGitRoot(requestedRoot));
   const scope = path.relative(gitRoot, requestedRoot).split(path.sep).filter(Boolean).join('/');
-  const changes = collectChanges(gitRoot, options.base);
-  const repoRoot = gitRoot;
+  const gitChanges = collectChanges(gitRoot, options.base);
+  // Paths are written relative to the requested root, so `validate --repo-root`
+  // with the same root resolves them.
+  const repoRoot = requestedRoot;
   const ignore = [...DEFAULT_IGNORE, ...(options.ignore || [])];
+  const changes = new Map();
+  gitChanges.forEach((code, file) => {
+    if (!scope) changes.set(file, code);
+    else if (file.startsWith(`${scope}/`)) changes.set(file.slice(scope.length + 1), code);
+  });
 
   const files = [...changes.keys()]
-    .filter((file) => !scope || file === scope || file.startsWith(`${scope}/`))
     .filter((file) => !ignore.some((prefix) => file.startsWith(prefix)))
     .sort();
 
@@ -299,7 +306,9 @@ function scaffoldFromDiff(options = {}) {
     usedIds.add(id);
 
     const code = changes.get(file);
-    const exists = fs.existsSync(path.join(repoRoot, file));
+    // Same containment rule as validate: an outbound symlink is not evidence.
+    const resolved = resolveRepoPath(repoRoot, file);
+    const exists = Boolean(resolved && resolved.inside && resolved.exists);
 
     const node = {
       id,

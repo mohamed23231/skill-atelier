@@ -41,7 +41,7 @@ A version 2 specification contains the following top-level properties:
 | `title` | `string` | **Required.** Title of the architecture diagram or proposal. |
 | `description` | `string` | Summary of the system design, context, and goals. |
 | `status` | `string` | Lifecycle state: `PROPOSED`, `ACCEPTED`, `IN_REVIEW`, `CURRENT`, etc. |
-| `grounding` | `string` | Set to `"illustrative"` for teaching examples to bypass local filesystem path existence checks. Omit for real repositories. |
+| `grounding` | `string` | Set to `"illustrative"` for teaching examples to bypass local filesystem path existence checks; the workbench then shows an *Illustrative* marker. Omit for real repositories. |
 | `assumptions` | `string[]` | Architectural assumptions explicitly made during design. |
 | `unresolvedQuestions` | `string[]` | Open technical questions or ambiguities flagged for reviewers. |
 | `decisions` | `ADR[]` | Architectural Decision Records: `[{ id, title, context, decision, consequences }]`. |

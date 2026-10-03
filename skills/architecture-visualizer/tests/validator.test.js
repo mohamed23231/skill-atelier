@@ -1,6 +1,38 @@
 const assert = require('node:assert');
 const { validateArchitecture } = require('../src/engine/validator.js');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { VALID_SPEC, VERSION_2_SPEC, clone } = require('./fixtures.js');
+
+// A throwaway repository with one source file, plus a sibling file outside it.
+function groundingSandbox() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-grounding-'));
+  const repo = path.join(base, 'repo');
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  fs.writeFileSync(
+    path.join(repo, 'src', 'orders.js'),
+    ['// orders', 'function createOrderDraft() {}', '', 'function createOrder() {', '  return 1;', '}', ''].join('\n')
+  );
+  fs.writeFileSync(path.join(base, 'outside.js'), 'function createOrder() {}\n');
+  return { base, repo, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
+}
+
+function groundedSpec(evidence) {
+  const spec = clone(VALID_SPEC);
+  delete spec.meta.grounding;
+  spec.schemaVersion = 2;
+  spec.nodes.forEach((node) => {
+    if (node.details) delete node.details.files;
+  });
+  spec.evidence = evidence;
+  spec.nodes[0].evidenceIds = evidence.map((entry) => entry.id);
+  return spec;
+}
+
+function evidenceRecord(res, id) {
+  return res.model.evidence.find((entry) => entry.id === id);
+}
 
 const cases = [
   [
@@ -668,6 +700,180 @@ const cases = [
       assert.ok(res.review.traceability.mapped.includes('api'));
       assert.ok(res.review.traceability.gaps.includes('cache'));
       assert.deepStrictEqual(res.review, validateArchitecture(spec).review);
+    },
+  ],
+  [
+    'rejects evidence that escapes the repository root by absolute path, ../ or symlink',
+    () => {
+      const box = groundingSandbox();
+      try {
+        const outside = path.join(box.base, 'outside.js');
+        fs.symlinkSync(outside, path.join(box.repo, 'src', 'link.js'));
+        const spec = groundedSpec([
+          { id: 'ev_abs', type: 'file', locator: { path: outside } },
+          { id: 'ev_dotdot', type: 'file', locator: { path: '../outside.js' } },
+          { id: 'ev_link', type: 'file', locator: { path: 'src/link.js' } },
+          { id: 'ev_root', type: 'file', locator: { path: '.' } },
+          { id: 'ev_ok', type: 'file', locator: { path: 'src/orders.js' } },
+        ]);
+        const res = validateArchitecture(spec, { repoRoot: box.repo });
+        ['ev_abs', 'ev_dotdot', 'ev_link', 'ev_root'].forEach((id) => {
+          const record = evidenceRecord(res, id);
+          assert.strictEqual(record.verification, 'unresolved', id);
+          assert.strictEqual(record.outsideRepo, true, id);
+          assert.ok(res.findings.some((f) => f.policyId === 'evidence.outside_repo' && f.evidenceIds.includes(id)), id);
+        });
+        assert.strictEqual(evidenceRecord(res, 'ev_ok').verification, 'verified');
+        const gate = res.gate.find((g) => g.id === 13);
+        assert.strictEqual(gate.status, 'WARN');
+        assert.ok(/outside the repository root/.test(gate.detail));
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
+
+  [
+    'accepts an absolute path that stays inside the repository and records it repo-relative',
+    () => {
+      const box = groundingSandbox();
+      try {
+        const spec = groundedSpec([{ id: 'ev_inside', type: 'file', locator: { path: path.join(box.repo, 'src', 'orders.js') } }]);
+        const res = validateArchitecture(spec, { repoRoot: box.repo });
+        const record = evidenceRecord(res, 'ev_inside');
+        assert.strictEqual(record.verification, 'verified');
+        assert.strictEqual(record.resolvedPath, 'src/orders.js');
+        assert.ok(!Object.prototype.hasOwnProperty.call(record, 'absolutePath'));
+        const alias = path.join(box.base, 'alias');
+        fs.symlinkSync(box.repo, alias);
+        const viaAlias = validateArchitecture(groundedSpec([{ id: 'ev_alias', type: 'file', locator: { path: path.join(alias, 'src', 'orders.js') } }]), { repoRoot: box.repo });
+        assert.strictEqual(evidenceRecord(viaAlias, 'ev_alias').verification, 'verified');
+        assert.strictEqual(evidenceRecord(viaAlias, 'ev_alias').resolvedPath, 'src/orders.js');
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
+
+  [
+    'flags VERIFIED details.files that point outside the repository root',
+    () => {
+      const box = groundingSandbox();
+      try {
+        const spec = groundedSpec([{ id: 'ev_ok', type: 'file', locator: { path: 'src/orders.js' } }]);
+        spec.nodes[0].details.files = ['../outside.js'];
+        const res = validateArchitecture(spec, { repoRoot: box.repo });
+        assert.ok(res.warnings.some((w) => w.includes('../outside.js') && /not under the repository root/.test(w)));
+        assert.ok(!res.warnings.some((w) => w.includes(box.base)));
+        assert.strictEqual(res.gate.find((g) => g.id === 13).status, 'WARN');
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
+
+  [
+    'matches symbols as whole identifiers and only inside the cited line range',
+    () => {
+      const box = groundingSandbox();
+      try {
+        const spec = groundedSpec([
+          { id: 'ev_prefix', type: 'symbol', locator: { path: 'src/orders.js', symbol: 'createOrderDra' } },
+          { id: 'ev_whole', type: 'symbol', locator: { path: 'src/orders.js', symbol: 'createOrder' } },
+          { id: 'ev_in_range', type: 'symbol', locator: { path: 'src/orders.js', symbol: 'createOrder', startLine: 4, endLine: 6 } },
+          { id: 'ev_out_of_range', type: 'symbol', locator: { path: 'src/orders.js', symbol: 'createOrder', startLine: 1, endLine: 2 } },
+        ]);
+        const res = validateArchitecture(spec, { repoRoot: box.repo });
+        assert.strictEqual(evidenceRecord(res, 'ev_prefix').verification, 'stale');
+        assert.strictEqual(evidenceRecord(res, 'ev_whole').verification, 'verified');
+        assert.strictEqual(evidenceRecord(res, 'ev_in_range').verification, 'verified');
+        assert.strictEqual(evidenceRecord(res, 'ev_out_of_range').verification, 'stale');
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
+  [
+    'classifies a missing file under an outbound symlink as outside the repository',
+    () => {
+      const box = groundingSandbox();
+      try {
+        fs.mkdirSync(path.join(box.base, 'elsewhere'));
+        fs.symlinkSync(path.join(box.base, 'elsewhere'), path.join(box.repo, 'src', 'linked'));
+        const res = validateArchitecture(groundedSpec([{ id: 'ev_future', type: 'file', locator: { path: 'src/linked/new.js' } }]), { repoRoot: box.repo });
+        const record = evidenceRecord(res, 'ev_future');
+        assert.strictEqual(record.outsideRepo, true);
+        assert.ok(res.findings.some((f) => f.policyId === 'evidence.outside_repo'));
+        assert.ok(!res.findings.some((f) => f.policyId === 'evidence.missing'));
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
+
+  [
+    'reports outside-root evidence cited by a node that is not VERIFIED',
+    () => {
+      const box = groundingSandbox();
+      try {
+        const spec = groundedSpec([{ id: 'ev_abs', type: 'file', locator: { path: path.join(box.base, 'outside.js') } }]);
+        spec.nodes[0].status = 'INFERRED';
+        const res = validateArchitecture(spec, { repoRoot: box.repo });
+        assert.strictEqual(res.findings.filter((f) => f.policyId === 'evidence.outside_repo').length, 1);
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
+
+  [
+    'treats an API locator path as a route and verifies only its handler file',
+    () => {
+      const box = groundingSandbox();
+      try {
+        const res = validateArchitecture(
+          groundedSpec([
+            { id: 'ev_route', type: 'api', locator: { method: 'POST', path: '/api/orders' } },
+            { id: 'ev_route_file', type: 'api', locator: { method: 'POST', path: '/api/orders', file: 'src/orders.js' } },
+          ]),
+          { repoRoot: box.repo }
+        );
+        assert.strictEqual(evidenceRecord(res, 'ev_route').verification, 'compatibility');
+        assert.strictEqual(evidenceRecord(res, 'ev_route_file').verification, 'verified');
+        assert.ok(!res.findings.some((f) => f.policyId === 'evidence.outside_repo'));
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
+
+  [
+    'does not let a Unicode identifier character end a symbol match',
+    () => {
+      const box = groundingSandbox();
+      try {
+        fs.writeFileSync(path.join(box.repo, 'src', 'greek.js'), 'const createΩ = 1;\n');
+        const res = validateArchitecture(groundedSpec([{ id: 'ev_greek', type: 'symbol', locator: { path: 'src/greek.js', symbol: 'create' } }]), { repoRoot: box.repo });
+        assert.strictEqual(evidenceRecord(res, 'ev_greek').verification, 'stale');
+      } finally {
+        box.cleanup();
+      }
+    },
+  ],
+  [
+    'lists every node that cites the same outside-root evidence',
+    () => {
+      const box = groundingSandbox();
+      try {
+        const spec = groundedSpec([{ id: 'ev_shared', type: 'file', locator: { path: '../outside.js' } }]);
+        spec.nodes[1].evidenceIds = ['ev_shared'];
+        const res = validateArchitecture(spec, { repoRoot: box.repo });
+        const outside = res.findings.filter((f) => f.policyId === 'evidence.outside_repo');
+        assert.strictEqual(outside.length, 1);
+        assert.deepStrictEqual(outside[0].nodeIds.sort(), [spec.nodes[0].id, spec.nodes[1].id].sort());
+      } finally {
+        box.cleanup();
+      }
     },
   ],
 ];
