@@ -5,7 +5,7 @@ function toggleFlowAnimation() {
     return;
   }
   state.animatingFlow = !state.animatingFlow;
-  setIconLabel(document.getElementById('anim-icon'), state.animatingFlow ? 'ui-pause' : 'ui-play');
+  announceStatus(state.animatingFlow ? 'Data flow animation on.' : 'Data flow animation off.');
   if (state.animatingFlow) {
     startFlowParticles();
   } else {
@@ -18,7 +18,6 @@ let particleLastFrame = 0;
 function startFlowParticles() {
   stopFlowParticles();
   state.animatingFlow = true;
-  setIconLabel(document.getElementById('anim-icon'), 'ui-pause');
 
   const totalBounds = computeTotalVisualBounds();
   const visibleEdges = (LAYOUT_DATA.edges || []).filter(e => {

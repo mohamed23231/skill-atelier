@@ -67,9 +67,6 @@ function renderQualityGate() {
     target.innerHTML = '<div style="color: var(--muted);">No quality gate data embedded.</div>';
     return;
   }
-  const warnCount = QUALITY_GATE.filter(g => g.status === 'WARN').length;
-  setIconLabel(document.getElementById('btn-gate'), warnCount === 0 ? 'ui-check-circle' : 'ui-alert', warnCount === 0 ? 'Gate' : `Gate (${warnCount})`);
-  document.getElementById('btn-gate').dataset.gateState = warnCount === 0 ? 'pass' : 'warn';
   target.innerHTML = QUALITY_GATE.map(g => {
     const status = g.status === 'PASS' ? ['ui-check-circle', 'pass', 'Pass'] : (g.status === 'WARN' ? ['ui-alert', 'warn', 'Warning'] : ['ui-skip', 'skip', 'Skipped']);
     return `<div class="gate-row" data-gate-status="${status[1]}"><span class="gate-icon" title="${status[2]}">${iconMarkup(status[0])}<span class="workbench-sr-only">${status[2]}</span></span><div><strong>${g.id}. ${escapeHtml(g.name)}</strong><div style="color:var(--muted); font-size:11px;">${escapeHtml(g.detail)}</div></div></div>`;

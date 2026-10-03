@@ -40,7 +40,7 @@
   header { overflow: hidden; }
   .tabs-section { display: none; }
   .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme):not(#btn-palette) { display: none; }
-  .filter-bar { top: 64px; left: 8px; right: 8px; overflow-x: auto; }
+  .filter-bar { top: calc(var(--chrome-top) + 8px); left: 8px; right: 8px; overflow-x: auto; }
   .search-input { min-width: 140px; width: 140px; }
   .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
   .viewport-controls { right: 8px; bottom: 8px; }

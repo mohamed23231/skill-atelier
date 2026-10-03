@@ -257,9 +257,11 @@ const cases = [
     'marks an illustrative diagram as illustrative in the built HTML',
     () => {
       const illustrative = compileArchitecture(clone(VALID_SPEC));
-      assert.ok(illustrative.html.includes('id="doc-grounding"'));
+      // The trust strip's grounding pill replaced the filter bar's Illustrative badge.
+      assert.ok(illustrative.html.includes('data-trust-pills'));
+      assert.ok(illustrative.html.includes('function renderTrustStrip'));
       assert.ok(/"grounding":"illustrative"/.test(illustrative.html));
-      assert.ok(illustrative.html.includes("document.getElementById('doc-grounding').hidden = ARCH_SPEC.meta.grounding !== 'illustrative'"));
+      assert.ok(illustrative.html.includes("if (key === 'grounding' && entry.label === 'Illustrative') pill.setAttribute('data-illustrative', 'true');"));
     },
   ],
   [
@@ -395,7 +397,7 @@ const cases = [
         const literals = (text.match(/#[0-9a-fA-F]{3,8}\b(?![\w-])|rgba?\(/g) || []).filter((m) => !/^#(i|ui|kind|arrow)/.test(m));
         assert.deepStrictEqual(literals, [], `${rel} has a color literal; use a token`);
         [...text.matchAll(/var\((--[a-z0-9-]+)/g)].forEach((m) => {
-          const local = new RegExp(`${m[1]}\\s*:`).test(text) || /--canvas-(left|right)|--overlay-clearance/.test(m[1]);
+          const local = new RegExp(`${m[1]}\\s*:`).test(text) || /--canvas-(left|right)|--overlay-clearance|--chrome-top/.test(m[1]);
           assert.ok(defined.has(m[1]) || local, `${rel} uses ${m[1]}, which no stylesheet defines`);
         });
       });

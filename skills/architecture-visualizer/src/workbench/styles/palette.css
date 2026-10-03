@@ -137,6 +137,7 @@
 @media (max-width: 1099px) {
   #btn-palette { width: 32px; padding: 0; justify-content: center; flex: none; }
   #btn-palette > span, #btn-palette kbd { display: none; }
+  #btn-copy-link { width: 32px; padding: 0; justify-content: center; flex: none; }
+  #btn-copy-link > span { display: none; }
   /* These commands live in the palette; the narrower header keeps only what has no other home. */
-  #btn-presentation, #btn-fullscreen, #btn-animate { display: none; }
 }

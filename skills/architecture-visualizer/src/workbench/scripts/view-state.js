@@ -102,7 +102,6 @@ function setFocusMode(mode) {
 function setPresentation(enabled) {
   actions.setPresentation(enabled);
   document.body.setAttribute('data-presentation', String(enabled));
-  document.getElementById('btn-presentation').setAttribute('aria-pressed', String(enabled));
   window.requestAnimationFrame(() => {
     if (!state.userMovedView) fitToScreen();
     else updateTransform();

@@ -1567,7 +1567,7 @@ const cases = [
         ev("switchView('sequence'); goToSequenceStep(2); 0"), settle, OVERLAPS,
         ev("openInspectorForNode('saga_orchestrator'); 0"), settle, OVERLAPS,
         ev("closeInspector(); switchView('before_after'); 0"), settle, OVERLAPS,
-        ev("switchView('architecture'); document.getElementById('btn-gate').click(); 0"), settle, OVERLAPS,
+        ev("switchView('architecture'); toggleGatePanel(); 0"), settle, OVERLAPS,
       ];
       const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [
         { width: 1440, height: 900, steps },
@@ -1969,15 +1969,14 @@ const cases = [
   ],
 
   [
-    '1c: rail #btn-gate opens Review with the gate rows visible',
+    '1c: rail the trust strip rules pill opens Review with the gate rows visible',
     () => {
       const steps = [
         ev(`(async function () {
           ${PAGE_HELPERS}
           window.__obs = {};
-          var btnGate = __q('#btn-gate');
+          var btnGate = __q('.trust-pill[data-trust="rules"]');
           __record('gateButtonPresent', !!btnGate);
-          __record('gateState', btnGate ? btnGate.getAttribute('data-gate-state') : null);
           __record('initialChapter', state.chapter);
           if (btnGate) __click(btnGate);
           await __sleep(120);
@@ -1996,9 +1995,9 @@ const cases = [
       ];
       const results = runPhases('examples/2-complex-database-migration/architecture.json', [{ width: 1440, height: 900, mobile: false, steps }]);
       const obs = lastEvalValue(results[0]);
-      assert.strictEqual(obs.gateButtonPresent, true, '#btn-gate should be present in the header');
-      assert.strictEqual(obs.railOpen, 'true', 'Rail should be open after clicking #btn-gate');
-      assert.strictEqual(obs.chapterAfter, 'review', 'Active chapter should be review after clicking #btn-gate');
+      assert.strictEqual(obs.gateButtonPresent, true, 'the rules pill should be present in the trust strip');
+      assert.strictEqual(obs.railOpen, 'true', 'Rail should be open after clicking the rules pill');
+      assert.strictEqual(obs.chapterAfter, 'review', 'Active chapter should be review after clicking the rules pill');
       assert.strictEqual(obs.revTabSelected, 'true', 'Review tab should be selected');
       assert.strictEqual(obs.revPanelHidden, false, 'Review panel should be visible');
       assert.ok(obs.gateRowsCount > 0, `Expected gate rows to be rendered in #gate-body, found ${obs.gateRowsCount}`);
@@ -2147,6 +2146,76 @@ const cases = [
       assert.ok(!rectsOverlap(obs.navRect, obs.canvasRect), 'Navigator and canvas must not overlap');
       assert.ok(!rectsOverlap(obs.canvasRect, obs.railRect), 'Canvas and rail must not overlap');
       assert.ok(!rectsOverlap(obs.navRect, obs.railRect), 'Navigator and rail must not overlap');
+    },
+  ],
+
+  [
+    '1c: trust strip pills equal the trust model for every example',
+    () => {
+      ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow'].forEach((name) => {
+        const [phase] = runPhases(`examples/${name}/architecture.json`, [{ width: 1440, height: 900, steps: [ev(`JSON.stringify({
+          pills: [...document.querySelectorAll('.trust-pill')].map((p) => [p.dataset.trust, p.dataset.state, p.textContent.trim()]),
+          model: (function () { const t = trustSummary(ARCH_SPEC, QUALITY_GATE); return ['grounding', 'evidence', 'rules', 'openItems'].map((k) => [k, t[k].state, t[k].label]); })(),
+        })`)] }]);
+        const { pills, model } = JSON.parse(lastEvalValue(phase));
+        assert.deepStrictEqual(pills, model, `${name}: the strip must say exactly what the trust model says`);
+      });
+    },
+  ],
+
+  [
+    '1c: trust strip pills open their chapter, docked at 1440 and as a drawer at 900',
+    () => {
+      const CLICK = ev(`(async function () {
+        ${PAGE_HELPERS}
+        window.__obs = {};
+        __click(__q('.trust-pill[data-trust="openItems"]'));
+        await __sleep(320);
+        __record('chapter', state.chapter);
+        __record('railOpen', __open('rail'));
+        __record('tabSelected', __q('#chapter-tab-review').getAttribute('aria-selected'));
+        return __observed();
+      })()`);
+      [1440, 900].forEach((width) => {
+        const obs = lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width, height: 900, steps: [CLICK] }])[0]);
+        assert.deepStrictEqual([obs.chapter, obs.railOpen, obs.tabSelected], ['review', 'true', 'true'], `${width}: ${JSON.stringify(obs)}`);
+      });
+    },
+  ],
+
+  [
+    '1c: header and trust strip stay within 104px with at most 7 persistent controls at 1440',
+    () => {
+      const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`JSON.stringify({
+        bottom: document.querySelector('.trust-strip').getBoundingClientRect().bottom,
+        canvasTop: document.getElementById('canvas-container').getBoundingClientRect().top,
+        controls: [...document.querySelector('.header-actions').children, document.querySelector('.tabs-section')]
+          .filter((el) => getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0).map((el) => el.id || el.className),
+      })`)] }]);
+      const probe = JSON.parse(lastEvalValue(phase));
+      assert.ok(probe.bottom <= 104, `header and trust strip take ${probe.bottom}px`);
+      assert.ok(Math.abs(probe.canvasTop - probe.bottom) <= 1, `the canvas should start right under the strip (${probe.canvasTop} vs ${probe.bottom})`);
+      assert.ok(probe.controls.length <= 7, `${probe.controls.length} persistent controls: ${probe.controls.join(', ')}`);
+    },
+  ],
+
+  [
+    '1c: the Copy link button copies the current view and says so',
+    () => {
+      const obs = lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, steps: [ev(`(async function () {
+        ${PAGE_HELPERS}
+        window.__obs = {};
+        var copied = null;
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: function (text) { copied = text; return Promise.resolve(); } } });
+        openInspectorForNode('api');
+        __click(__q('#btn-copy-link'));
+        await __sleep(200);
+        __record('copied', copied);
+        __record('status', document.getElementById('workbench-status').textContent);
+        return __observed();
+      })()`)] }])[0]);
+      assert.ok(/#v=2/.test(obs.copied) && /[#&]n=api(&|$)/.test(obs.copied), `copied ${obs.copied}`);
+      assert.strictEqual(obs.status, 'Link copied.');
     },
   ],
 ];

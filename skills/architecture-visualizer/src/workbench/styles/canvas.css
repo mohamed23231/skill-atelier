@@ -1,9 +1,9 @@
 /* Canvas Viewport */
 #canvas-container {
   width: 100%;
-  height: calc(100vh - 56px);
-  height: calc(100dvh - 56px);
-  margin-top: 56px;
+  height: calc(100vh - var(--chrome-top));
+  height: calc(100dvh - var(--chrome-top));
+  margin-top: var(--chrome-top);
   position: relative;
   cursor: grab;
   overflow: hidden;

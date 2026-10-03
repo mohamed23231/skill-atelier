@@ -42,7 +42,6 @@ function init() {
     const statusBadge = document.getElementById('doc-status');
     statusBadge.textContent = ARCH_SPEC.meta.status || 'PROPOSED';
     statusBadge.className = `badge-status ${ARCH_SPEC.meta.status || 'PROPOSED'}`;
-    document.getElementById('doc-grounding').hidden = ARCH_SPEC.meta.grounding !== 'illustrative';
   }
 
   initTheme();
@@ -56,6 +55,7 @@ function init() {
   renderERView();
   renderImplementationPlanView();
   renderQualityGate();
+  renderTrustStrip();
   initRail();
   renderReviewChapter();
   applyVisibility();
@@ -104,8 +104,7 @@ function fitFromButton() {
 
 function toggleGatePanel() {
   openChapter('review');
-  const btn = document.getElementById('btn-gate');
-  setDrawerOpen('rail', true, btn);
+  setDrawerOpen('rail', true, document.activeElement);
   const gateSec = document.getElementById('section-gate') || document.getElementById('gate-body');
   gateSec?.scrollIntoView?.({ block: 'nearest' });
 }
@@ -115,6 +114,7 @@ function setupEventListeners() {
   if (btnPalette) btnPalette.addEventListener('click', () => togglePalette(btnPalette));
 
   document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+  document.getElementById('btn-copy-link').addEventListener('click', copyCurrentLink);
 
   // Tabs bar: vertical mouse wheel scrolls the horizontal tab strip
   const tabsSection = document.querySelector('.tabs-section');
@@ -182,7 +182,6 @@ function setupEventListeners() {
   container.addEventListener('touchmove', handleTouchMove, { passive: false });
   container.addEventListener('touchend', handleTouchEnd);
 
-  document.getElementById('btn-animate').addEventListener('click', toggleFlowAnimation);
   const navigatorToggle = document.querySelector('[data-action="navigator-toggle"]');
   const railToggle = document.querySelector('[data-action="rail-toggle"]');
   navigatorToggle.addEventListener('click', () => toggleDrawer('navigator', navigatorToggle));
@@ -196,12 +195,9 @@ function setupEventListeners() {
   document.querySelector('[data-region="minimap"]').addEventListener('click', handleMinimapClick);
   document.getElementById('btn-focus-neighbors').addEventListener('click', () => setFocusMode(FOCUS_MODES.NEIGHBORS));
   document.getElementById('btn-focus-affected').addEventListener('click', () => setFocusMode(FOCUS_MODES.AFFECTED));
-  document.getElementById('btn-presentation').addEventListener('click', () => setPresentation(!state.presentation));
-  document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
   document.addEventListener('fullscreenchange', () => {
     const enabled = Boolean(document.fullscreenElement);
     document.body.setAttribute('data-fullscreen', String(enabled));
-    document.getElementById('btn-fullscreen').setAttribute('aria-pressed', String(enabled));
   });
   window.addEventListener('hashchange', () => {
     const notices = restoreUrlState();
@@ -250,7 +246,6 @@ function setupEventListeners() {
     });
   });
 
-  document.getElementById('btn-gate').addEventListener('click', toggleGatePanel);
 
   document.getElementById('modal-close').addEventListener('click', closeModal);
   document.getElementById('modal-copy').addEventListener('click', copyModalContent);

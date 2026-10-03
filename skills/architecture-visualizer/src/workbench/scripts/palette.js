@@ -1,3 +1,15 @@
+// Copies the link to this exact view; the header button and the palette share it.
+function copyCurrentLink() {
+  updateUrlState();
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(location.href)
+      .then(() => announceStatus('Link copied.'))
+      .catch(() => announceStatus('Copy failed; the link is in the address bar.'));
+  } else {
+    announceStatus('Copy failed; the link is in the address bar.');
+  }
+}
+
 // Command Palette
 const PALETTE_GROUPS = ['Commands', 'Views', 'Chapters', 'Components', 'Connections', 'Scenario stages', 'Export'];
 
@@ -73,15 +85,7 @@ function paletteBuildAllItems() {
       label: 'Copy link',
       hint: 'Command',
       icon: 'ui-copy',
-      run: () => {
-        if (navigator.clipboard?.writeText) {
-          navigator.clipboard.writeText(location.href)
-            .then(() => announceStatus('Link copied.'))
-            .catch(() => announceStatus('Copy failed; the link is in the address bar.'));
-        } else {
-          announceStatus('Copy failed; the link is in the address bar.');
-        }
-      }
+      run: () => copyCurrentLink()
     }
   ];
 

@@ -231,10 +231,53 @@ background: var(--surface-2);
 border-color: var(--faint);
 }
 
+/* Trust strip: whether to believe this document, one pill per question, each opening its chapter. */
+.trust-strip {
+position: absolute;
+top: 56px;
+left: 0;
+right: 0;
+height: calc(var(--chrome-top) - 56px);
+display: flex;
+align-items: center;
+gap: 12px;
+padding: 0 16px;
+background: var(--surface-2);
+border-bottom: 1px solid var(--line);
+z-index: 49;
+min-width: 0;
+}
+.trust-lead { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); flex: none; }
+.trust-pills { display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.trust-pills::-webkit-scrollbar { display: none; }
+.trust-pill {
+display: inline-flex;
+align-items: center;
+gap: 7px;
+height: 26px;
+padding: 0 11px;
+border-radius: 13px;
+border: 1px solid var(--line);
+background: var(--surface);
+color: var(--ink);
+font-size: 12px;
+white-space: nowrap;
+flex: none;
+cursor: pointer;
+}
+.trust-pill:hover { border-color: var(--faint); }
+.trust-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.trust-pill[data-illustrative="true"] { border-style: dashed; }
+.trust-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.trust-pill[data-state="ok"] .trust-dot { background: var(--ok); }
+.trust-pill[data-state="warn"] .trust-dot { background: var(--warn); }
+.trust-pill[data-state="risk"] .trust-dot { background: var(--risk); }
+.trust-pill[data-state="unchecked"] .trust-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+
 /* Search & Filter Bar Overlay */
 .filter-bar {
 position: absolute;
-top: 68px;
+top: calc(var(--chrome-top) + 12px);
 left: 16px;
 z-index: 40;
 display: flex;
@@ -317,7 +360,7 @@ color: var(--ink);
 }
 
 /* Overlays centre on the canvas, not the window, so docked panels never push them under each other. */
-body { --canvas-left: 0px; --canvas-right: 0px; --overlay-clearance: 8px; }
+body { --canvas-left: 0px; --canvas-right: 0px; --overlay-clearance: 8px; --chrome-top: 94px; }
 @media (min-width: 768px) { body { --overlay-clearance: 136px; } }
 @media (min-width: 1100px) { body { --overlay-clearance: 208px; } }
 
@@ -349,7 +392,7 @@ display: flex;
 /* Before vs After Mode Switcher Bar */
 .delta-controls {
 position: absolute;
-top: 116px;
+top: calc(var(--chrome-top) + 60px);
 left: calc(var(--canvas-left) + 16px);
 z-index: 40;
 display: none;
@@ -403,9 +446,9 @@ color: var(--ink);
 /* Canvas Viewport */
 #canvas-container {
 width: 100%;
-height: calc(100vh - 56px);
-height: calc(100dvh - 56px);
-margin-top: 56px;
+height: calc(100vh - var(--chrome-top));
+height: calc(100dvh - var(--chrome-top));
+margin-top: var(--chrome-top);
 position: relative;
 cursor: grab;
 overflow: hidden;
@@ -610,7 +653,7 @@ fill: var(--accent);
 /* Reading Rail */
 .rail {
 position: fixed;
-top: 56px;
+top: var(--chrome-top);
 bottom: 0;
 right: 0;
 width: min(400px, calc(100vw - 48px));
@@ -934,8 +977,6 @@ padding-bottom: 10px;
 .gate-icon { display: inline-flex; color: var(--ok); }
 .gate-row[data-gate-status="warn"] .gate-icon { color: var(--warn); }
 .gate-row[data-gate-status="skip"] .gate-icon { color: var(--muted); }
-#btn-gate[data-gate-state="pass"] .icon { color: var(--ok); }
-#btn-gate[data-gate-state="warn"] .icon { color: var(--warn); }
 
 /* Key chips in the data model: primary and foreign keys as tinted chips, not bracketed text. */
 .key-chip { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 4px; font-family: var(--mono); font-size: 10px; font-weight: 600; line-height: 16px; }
@@ -1166,7 +1207,7 @@ body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 
 body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }
 .workbench-close, .workbench-mobile-toggle { min-width: 32px; }
 .workbench-mobile-toggle, .workbench-close { display: inline-flex; }
-.workbench-backdrop { display: none; position: fixed; inset: 56px 0 0; z-index: 54; border: 0; background: var(--scrim); }
+.workbench-backdrop { display: none; position: fixed; inset: var(--chrome-top) 0 0; z-index: 54; border: 0; background: var(--scrim); }
 .workbench-minimap { position: absolute; left: 16px; bottom: 16px; width: 176px; height: 116px; z-index: 35; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); }
 .workbench-minimap svg { width: 100%; height: 100%; display: block; }
 [data-minimap-viewport] { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
@@ -1217,7 +1258,7 @@ body:has(.rail[data-open="true"]) .workbench-backdrop { display: block; }
 header { overflow: hidden; }
 .tabs-section { display: none; }
 .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme):not(#btn-palette) { display: none; }
-.filter-bar { top: 64px; left: 8px; right: 8px; overflow-x: auto; }
+.filter-bar { top: calc(var(--chrome-top) + 8px); left: 8px; right: 8px; overflow-x: auto; }
 .search-input { min-width: 140px; width: 140px; }
 .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
 .viewport-controls { right: 8px; bottom: 8px; }
@@ -1367,8 +1408,9 @@ margin-left: 2px;
 @media (max-width: 1099px) {
 #btn-palette { width: 32px; padding: 0; justify-content: center; flex: none; }
 #btn-palette > span, #btn-palette kbd { display: none; }
+#btn-copy-link { width: 32px; padding: 0; justify-content: center; flex: none; }
+#btn-copy-link > span { display: none; }
 /* These commands live in the palette; the narrower header keeps only what has no other home. */
-#btn-presentation, #btn-fullscreen, #btn-animate { display: none; }
 }
 
 </style>
@@ -1407,7 +1449,7 @@ margin-left: 2px;
 <symbol id="ui-check" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></g></symbol>
 <symbol id="ui-keyboard" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.1M6.5 6.5h.1M9 6.5h.1M11.5 6.5h.1M5 9.5h6"/></g></symbol>
 <symbol id="ui-collapse" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4 5.5 8l4 4M13 4 9 8l4 4"/></g></symbol>
-<symbol id="ui-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3.3 3.3"/></symbol>
+<symbol id="ui-panel" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></symbol><symbol id="ui-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3.3 3.3"/></symbol>
 </defs>
 </svg>
 
@@ -1436,18 +1478,12 @@ margin-left: 2px;
 <!-- Header Actions -->
 <div class="header-actions">
 <button id="btn-palette" class="btn-icon" aria-keyshortcuts="Control+K Meta+K" aria-label="Search and commands"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-search"></use></svg><span>Search</span><kbd>Ctrl K</kbd></button>
+<button id="btn-copy-link" class="btn-icon" title="Copy a link to this exact view"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Copy link</span></button>
 <button class="btn-icon icon-only workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-menu"></use></svg></button>
-<button class="btn-icon icon-only workbench-mobile-toggle" data-action="rail-toggle" aria-label="Open reading rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-info"></use></svg></button>
-<button id="btn-presentation" class="btn-icon" aria-pressed="false" title="Toggle presentation mode">Present</button>
-<button id="btn-fullscreen" class="btn-icon" aria-pressed="false" title="Toggle fullscreen">Fullscreen</button>
-<button id="btn-animate" class="btn-icon" title="Toggle flow animation">
-<span id="anim-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-play"></use></svg></span>
-<span>Animate</span>
-</button>
+<button class="btn-icon icon-only workbench-mobile-toggle" data-action="rail-toggle" aria-label="Open reading rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-panel"></use></svg></button>
 <button id="btn-theme" class="btn-icon icon-only" title="Toggle Light/Dark Theme" aria-label="Toggle light and dark theme">
 <span id="theme-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-moon"></use></svg></span>
 </button>
-<button id="btn-gate" class="btn-icon" title="Show the 14-point quality gate result"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-check-circle"></use></svg><span>Gate</span></button>
 <div class="export-wrap">
 <button id="btn-export" class="btn-icon" title="Export this visualization"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-export"></use></svg><span>Export</span></button>
 <div id="export-menu" class="export-menu">
@@ -1460,6 +1496,7 @@ margin-left: 2px;
 </div>
 </div>
 </header>
+<nav class="trust-strip" aria-label="Trust summary"><span class="trust-lead">Trust</span><div class="trust-pills" data-trust-pills></div></nav>
 
 <!-- Filter & Search Bar -->
 <div class="filter-bar">
@@ -1469,7 +1506,6 @@ margin-left: 2px;
 <button class="filter-chip" data-filter="backend">Backend</button>
 <button class="filter-chip" data-filter="data">Data/Storage</button>
 <button class="filter-chip" data-filter="external">External</button>
-<span id="doc-grounding" class="badge-status ASSUMED" hidden title="Illustrative example: file paths were not checked against a repository.">Illustrative</span>
 </div>
 
 <!-- Delta View Controls -->
@@ -3981,7 +4017,6 @@ updateUrlState();
 function setPresentation(enabled) {
 actions.setPresentation(enabled);
 document.body.setAttribute('data-presentation', String(enabled));
-document.getElementById('btn-presentation').setAttribute('aria-pressed', String(enabled));
 window.requestAnimationFrame(() => {
 if (!state.userMovedView) fitToScreen();
 else updateTransform();
@@ -4444,7 +4479,6 @@ subtitleEl.setAttribute('title', subtitleEl.textContent);
 const statusBadge = document.getElementById('doc-status');
 statusBadge.textContent = ARCH_SPEC.meta.status || 'PROPOSED';
 statusBadge.className = `badge-status ${ARCH_SPEC.meta.status || 'PROPOSED'}`;
-document.getElementById('doc-grounding').hidden = ARCH_SPEC.meta.grounding !== 'illustrative';
 }
 
 initTheme();
@@ -4458,6 +4492,7 @@ renderMinimap();
 renderERView();
 renderImplementationPlanView();
 renderQualityGate();
+renderTrustStrip();
 initRail();
 renderReviewChapter();
 applyVisibility();
@@ -4506,8 +4541,7 @@ fitToScreen();
 
 function toggleGatePanel() {
 openChapter('review');
-const btn = document.getElementById('btn-gate');
-setDrawerOpen('rail', true, btn);
+setDrawerOpen('rail', true, document.activeElement);
 const gateSec = document.getElementById('section-gate') || document.getElementById('gate-body');
 gateSec?.scrollIntoView?.({ block: 'nearest' });
 }
@@ -4517,6 +4551,7 @@ const btnPalette = document.getElementById('btn-palette');
 if (btnPalette) btnPalette.addEventListener('click', () => togglePalette(btnPalette));
 
 document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+document.getElementById('btn-copy-link').addEventListener('click', copyCurrentLink);
 
 // Tabs bar: vertical mouse wheel scrolls the horizontal tab strip
 const tabsSection = document.querySelector('.tabs-section');
@@ -4584,7 +4619,6 @@ container.addEventListener('touchstart', handleTouchStart, { passive: false });
 container.addEventListener('touchmove', handleTouchMove, { passive: false });
 container.addEventListener('touchend', handleTouchEnd);
 
-document.getElementById('btn-animate').addEventListener('click', toggleFlowAnimation);
 const navigatorToggle = document.querySelector('[data-action="navigator-toggle"]');
 const railToggle = document.querySelector('[data-action="rail-toggle"]');
 navigatorToggle.addEventListener('click', () => toggleDrawer('navigator', navigatorToggle));
@@ -4598,12 +4632,9 @@ document.querySelector('[data-region="minimap"]').addEventListener('mousedown', 
 document.querySelector('[data-region="minimap"]').addEventListener('click', handleMinimapClick);
 document.getElementById('btn-focus-neighbors').addEventListener('click', () => setFocusMode(FOCUS_MODES.NEIGHBORS));
 document.getElementById('btn-focus-affected').addEventListener('click', () => setFocusMode(FOCUS_MODES.AFFECTED));
-document.getElementById('btn-presentation').addEventListener('click', () => setPresentation(!state.presentation));
-document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', () => {
 const enabled = Boolean(document.fullscreenElement);
 document.body.setAttribute('data-fullscreen', String(enabled));
-document.getElementById('btn-fullscreen').setAttribute('aria-pressed', String(enabled));
 });
 window.addEventListener('hashchange', () => {
 const notices = restoreUrlState();
@@ -4652,7 +4683,6 @@ runExport(btn.dataset.export);
 });
 });
 
-document.getElementById('btn-gate').addEventListener('click', toggleGatePanel);
 
 document.getElementById('modal-close').addEventListener('click', closeModal);
 document.getElementById('modal-copy').addEventListener('click', copyModalContent);
@@ -5445,6 +5475,48 @@ ${d.status ? `<span class="badge-status ${escapeHtml(d.status)}">${escapeHtml(d.
 }
 }
 
+// Trust strip: four pills under the header that say whether to believe this document. Every number
+// comes from trustSummary (the validator's embedded output); each pill opens the chapter that explains it.
+const TRUST_PILLS = [
+{ key: 'grounding', name: 'Grounding' },
+{ key: 'evidence', name: 'Evidence' },
+{ key: 'rules', name: 'Rules' },
+{ key: 'openItems', name: 'Open items' }
+];
+
+function openTrustChapter(chapter, opener) {
+openChapter(chapter);
+if (isOverlayPanels()) setDrawerOpen('rail', true, opener);
+else if (document.querySelector('[data-region="rail"]')?.getAttribute('data-open') !== 'true') setDrawerOpen('rail', true, opener);
+}
+
+function renderTrustStrip() {
+const target = document.querySelector('[data-trust-pills]');
+if (!target) return;
+const summary = trustSummary(ARCH_SPEC, QUALITY_GATE);
+target.replaceChildren();
+TRUST_PILLS.forEach(({ key, name }) => {
+const entry = summary[key];
+const pill = document.createElement('button');
+pill.type = 'button';
+pill.className = 'trust-pill';
+pill.setAttribute('data-trust', key);
+pill.setAttribute('data-state', entry.state);
+if (key === 'grounding' && entry.label === 'Illustrative') pill.setAttribute('data-illustrative', 'true');
+const description = `${name}: ${entry.label}.${entry.detail ? ` ${entry.detail}` : ''}`;
+pill.title = description;
+pill.setAttribute('aria-label', description);
+const dot = document.createElement('span');
+dot.className = 'trust-dot';
+dot.setAttribute('aria-hidden', 'true');
+const label = document.createElement('span');
+label.textContent = entry.label;
+pill.append(dot, label);
+pill.addEventListener('click', () => openTrustChapter(entry.chapter, pill));
+target.appendChild(pill);
+});
+}
+
 // Animated Flow Particles
 function toggleFlowAnimation() {
 if (state.prefersReducedMotion && !state.animatingFlow) {
@@ -5452,7 +5524,7 @@ announceStatus('Flow animation is disabled by reduced-motion preference.');
 return;
 }
 state.animatingFlow = !state.animatingFlow;
-setIconLabel(document.getElementById('anim-icon'), state.animatingFlow ? 'ui-pause' : 'ui-play');
+announceStatus(state.animatingFlow ? 'Data flow animation on.' : 'Data flow animation off.');
 if (state.animatingFlow) {
 startFlowParticles();
 } else {
@@ -5465,7 +5537,6 @@ let particleLastFrame = 0;
 function startFlowParticles() {
 stopFlowParticles();
 state.animatingFlow = true;
-setIconLabel(document.getElementById('anim-icon'), 'ui-pause');
 
 const totalBounds = computeTotalVisualBounds();
 const visibleEdges = (LAYOUT_DATA.edges || []).filter(e => {
@@ -5717,9 +5788,6 @@ if (!Array.isArray(QUALITY_GATE) || QUALITY_GATE.length === 0) {
 target.innerHTML = '<div style="color: var(--muted);">No quality gate data embedded.</div>';
 return;
 }
-const warnCount = QUALITY_GATE.filter(g => g.status === 'WARN').length;
-setIconLabel(document.getElementById('btn-gate'), warnCount === 0 ? 'ui-check-circle' : 'ui-alert', warnCount === 0 ? 'Gate' : `Gate (${warnCount})`);
-document.getElementById('btn-gate').dataset.gateState = warnCount === 0 ? 'pass' : 'warn';
 target.innerHTML = QUALITY_GATE.map(g => {
 const status = g.status === 'PASS' ? ['ui-check-circle', 'pass', 'Pass'] : (g.status === 'WARN' ? ['ui-alert', 'warn', 'Warning'] : ['ui-skip', 'skip', 'Skipped']);
 return `<div class="gate-row" data-gate-status="${status[1]}"><span class="gate-icon" title="${status[2]}">${iconMarkup(status[0])}<span class="workbench-sr-only">${status[2]}</span></span><div><strong>${g.id}. ${escapeHtml(g.name)}</strong><div style="color:var(--muted); font-size:11px;">${escapeHtml(g.detail)}</div></div></div>`;
@@ -6266,6 +6334,18 @@ btn.textContent = 'Clipboard unavailable';
 }
 }
 
+// Copies the link to this exact view; the header button and the palette share it.
+function copyCurrentLink() {
+updateUrlState();
+if (navigator.clipboard?.writeText) {
+navigator.clipboard.writeText(location.href)
+.then(() => announceStatus('Link copied.'))
+.catch(() => announceStatus('Copy failed; the link is in the address bar.'));
+} else {
+announceStatus('Copy failed; the link is in the address bar.');
+}
+}
+
 // Command Palette
 const PALETTE_GROUPS = ['Commands', 'Views', 'Chapters', 'Components', 'Connections', 'Scenario stages', 'Export'];
 
@@ -6341,15 +6421,7 @@ group: 'Commands',
 label: 'Copy link',
 hint: 'Command',
 icon: 'ui-copy',
-run: () => {
-if (navigator.clipboard?.writeText) {
-navigator.clipboard.writeText(location.href)
-.then(() => announceStatus('Link copied.'))
-.catch(() => announceStatus('Copy failed; the link is in the address bar.'));
-} else {
-announceStatus('Copy failed; the link is in the address bar.');
-}
-}
+run: () => copyCurrentLink()
 }
 ];
 

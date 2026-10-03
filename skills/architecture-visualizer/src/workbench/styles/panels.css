@@ -1,7 +1,7 @@
 /* Reading Rail */
 .rail {
   position: fixed;
-  top: 56px;
+  top: var(--chrome-top);
   bottom: 0;
   right: 0;
   width: min(400px, calc(100vw - 48px));
@@ -325,8 +325,6 @@ body:not([data-ready-ms]) .rail { transition: none; }
 .gate-icon { display: inline-flex; color: var(--ok); }
 .gate-row[data-gate-status="warn"] .gate-icon { color: var(--warn); }
 .gate-row[data-gate-status="skip"] .gate-icon { color: var(--muted); }
-#btn-gate[data-gate-state="pass"] .icon { color: var(--ok); }
-#btn-gate[data-gate-state="warn"] .icon { color: var(--warn); }
 
 /* Key chips in the data model: primary and foreign keys as tinted chips, not bracketed text. */
 .key-chip { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 4px; font-family: var(--mono); font-size: 10px; font-weight: 600; line-height: 16px; }
