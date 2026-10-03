@@ -6,6 +6,8 @@ const suites = [
   require('./compiler.test.js'),
   require('./url.test.js'),
   require('./trust.test.js'),
+  require('./lenses.test.js'),
+  require('./walkthrough.test.js'),
   require('./cli.test.js'),
   require('./scaffold.test.js'),
   require('./rendered.test.js')
