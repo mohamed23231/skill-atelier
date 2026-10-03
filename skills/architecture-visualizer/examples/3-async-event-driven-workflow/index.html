@@ -1093,6 +1093,295 @@ padding-bottom: 10px;
 .evidence-locator:hover { border-color: var(--accent); }
 .evidence-empty { color: var(--muted); font-size: 11px; }
 
+/* Walkthrough track and chapter. The track sits along the bottom of the canvas while a
+walkthrough is active; the chapter list mirrors the same path in the rail. */
+
+.walk-track {
+position: absolute;
+left: 0;
+right: 0;
+bottom: 0;
+z-index: 50;
+display: flex;
+align-items: center;
+gap: 10px;
+min-height: 46px;
+padding: 7px 14px;
+background: var(--surface);
+border-top: 1px solid var(--line);
+box-shadow: var(--shadow);
+}
+
+.walk-track[hidden] {
+display: none;
+}
+
+.walk-track-controls {
+display: flex;
+align-items: center;
+gap: 6px;
+flex: none;
+}
+
+.walk-track-controls button {
+min-width: 30px;
+height: 30px;
+padding: 0 8px;
+}
+
+.walk-track-controls button:disabled {
+opacity: 0.45;
+cursor: default;
+}
+
+.walk-count {
+flex: none;
+color: var(--ink);
+font-size: 12px;
+font-weight: 600;
+white-space: nowrap;
+}
+
+.walk-note {
+flex: none;
+color: var(--muted);
+font-size: 11px;
+white-space: nowrap;
+}
+
+.walk-beads {
+display: flex;
+align-items: center;
+gap: 12px;
+flex: 1 1 auto;
+min-width: 0;
+overflow-x: auto;
+padding: 4px 2px;
+}
+
+.walk-bead {
+position: relative;
+flex: none;
+width: 26px;
+height: 26px;
+padding: 0;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+color: var(--muted);
+background: var(--surface-2);
+border: 1px solid var(--line);
+border-radius: 50%;
+font: inherit;
+font-size: 11px;
+font-weight: 600;
+cursor: pointer;
+}
+
+.walk-bead:hover {
+border-color: var(--accent);
+}
+
+.walk-bead[aria-selected="true"] {
+color: var(--accent-ink);
+background: var(--accent);
+border-color: var(--accent);
+}
+
+.walk-bead[aria-selected="true"]::after {
+content: '';
+position: absolute;
+inset: -4px;
+border: 1px solid var(--accent);
+border-radius: inherit;
+}
+
+.walk-bead-parallel {
+box-shadow: inset 0 0 0 3px var(--surface-2), inset 0 0 0 4px var(--line);
+}
+
+.walk-bead-parallel::before,
+.walk-bead-parallel::after {
+content: '';
+position: absolute;
+background: var(--line);
+}
+
+.walk-bead-parallel::before {
+width: 1px;
+height: 32px;
+}
+
+.walk-bead-parallel::after {
+width: 32px;
+height: 1px;
+}
+
+.walk-bead-decision {
+border-radius: 4px;
+transform: rotate(45deg);
+}
+
+.walk-bead-decision .walk-bead-number {
+transform: rotate(-45deg);
+}
+
+.walk-bead-end {
+border-radius: 3px 12px 12px 3px;
+background: var(--surface);
+}
+
+.walk-bead-number {
+line-height: 1;
+}
+
+/* Parallel hop markers drawn over the canvas. */
+.walk-marker-dot {
+fill: var(--accent);
+stroke: var(--surface);
+stroke-width: 2;
+}
+
+.walk-marker-number {
+fill: var(--accent-ink);
+font-family: var(--sans);
+font-size: 11px;
+font-weight: 700;
+text-anchor: middle;
+}
+
+/* Walkthrough chapter: an ordered list of the same path. */
+.walk-list {
+display: flex;
+flex-direction: column;
+gap: 8px;
+margin: 12px 0 0;
+padding: 0;
+list-style: none;
+}
+
+.walk-item {
+padding: 9px 10px;
+border: 1px solid var(--line);
+border-radius: 8px;
+background: var(--surface);
+}
+
+.walk-item.current {
+border-color: var(--accent);
+background: var(--accent-soft);
+}
+
+.walk-item-head {
+display: flex;
+align-items: baseline;
+gap: 8px;
+}
+
+.walk-item-number {
+flex: none;
+width: 20px;
+height: 20px;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+border-radius: 50%;
+background: var(--surface-2);
+border: 1px solid var(--line);
+color: var(--muted);
+font-size: 11px;
+font-weight: 700;
+}
+
+.walk-item.current .walk-item-number {
+color: var(--accent-ink);
+background: var(--accent);
+border-color: var(--accent);
+}
+
+.walk-item-name {
+flex: 1;
+min-width: 0;
+color: var(--ink);
+font-size: 13px;
+font-weight: 600;
+overflow-wrap: anywhere;
+}
+
+.walk-item-tag {
+display: inline-block;
+margin-top: 6px;
+padding: 1px 6px;
+border-radius: 4px;
+color: var(--muted);
+background: var(--surface-2);
+font-size: 10px;
+font-weight: 700;
+text-transform: uppercase;
+letter-spacing: 0.03em;
+}
+
+.walk-item-narrative {
+margin: 6px 0 0;
+color: var(--muted);
+font-family: var(--serif);
+font-size: 13px;
+line-height: 1.5;
+}
+
+.walk-generated {
+display: inline-block;
+margin-top: 4px;
+color: var(--faint);
+font-size: 10px;
+text-transform: uppercase;
+letter-spacing: 0.04em;
+}
+
+.walk-condition {
+margin: 0 0 8px;
+color: var(--ink);
+font-size: 13px;
+font-weight: 600;
+overflow-wrap: anywhere;
+}
+
+.walk-outcomes {
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
+}
+
+.walk-outcome {
+padding: 5px 9px;
+color: var(--ink);
+background: var(--surface-2);
+border: 1px solid var(--line);
+border-radius: 6px;
+font: inherit;
+font-size: 12px;
+cursor: pointer;
+text-align: left;
+overflow-wrap: anywhere;
+}
+
+.walk-outcome:hover {
+border-color: var(--accent);
+}
+
+.walk-outcome[aria-pressed="true"] {
+color: var(--accent-ink);
+background: var(--accent);
+border-color: var(--accent);
+}
+
+.walk-outcome-name {
+margin: 0;
+color: var(--ink);
+font-size: 13px;
+font-weight: 600;
+}
+
 /* --- 1.1.0 additions --- */
 .hidden { display: none !important; }
 
@@ -1688,6 +1977,7 @@ margin-left: 2px;
 <div class="workbench-minimap" data-region="minimap" aria-label="Architecture minimap">
 <svg id="minimap-svg" aria-hidden="true"><g id="minimap-content"></g><rect data-minimap-viewport></rect></svg>
 </div>
+<div class="walk-track" role="listbox" aria-label="Walkthrough steps" hidden></div>
 </div>
 
 <!-- Reading Rail -->
@@ -2789,12 +3079,15 @@ scenarioId: null,
 scenarioStage: 0,
 scenarioActive: false,
 scenarioTimer: null,
+walkChoices: {},
+walkCursor: null,
 prefersReducedMotion: false
 };
 
 // The only writer of view state. Reads stay as `state.x`; every write goes through an action here.
 const STORE_FIELDS = Object.freeze(['theme', 'chapter', 'lens', 'lensExplicit', 'currentView', 'deltaMode', 'selectedNodeId', 'selectedEdgeId',
 'activeFilter', 'searchQuery', 'focusMode', 'presentation', 'scenarioId', 'scenarioStage', 'scenarioActive',
+'walkChoices', 'walkCursor',
 'sequenceIndex', 'zoom', 'panX', 'panY', 'userMovedView']);
 
 const actions = Object.freeze({
@@ -2813,6 +3106,9 @@ setPresentation(enabled) { state.presentation = enabled; },
 setScenario(id) { state.scenarioId = id; },
 setScenarioStage(index) { state.scenarioStage = index; },
 setScenarioActive(active) { state.scenarioActive = active; },
+setWalkChoices(choices) { state.walkChoices = choices && typeof choices === 'object' ? { ...choices } : {}; },
+setWalkChoice(decisionId, index) { state.walkChoices = { ...state.walkChoices, [decisionId]: index }; },
+setWalkCursor(id) { state.walkCursor = id; },
 setSequenceIndex(index) { state.sequenceIndex = index; },
 // Any subset of { zoom, panX, panY, userMoved }; omitted keys are left as they are.
 setCamera({ zoom, panX, panY, userMoved } = {}) {
@@ -3815,6 +4111,31 @@ if (!(w > 0)) return null;
 return { x, y, w };
 }
 
+// Walkthrough choices are `decisionId:branchIndex` pairs, comma separated. Anything malformed is
+// dropped rather than guessed, and an empty result is reported as absent.
+function urlParseOutcomes(raw) {
+if (!urlSet(raw)) return null;
+const result = {};
+String(raw).split(',').forEach((pair) => {
+const parts = pair.split(':');
+if (parts.length !== 2) return;
+const [id, indexRaw] = parts;
+const index = Number(indexRaw);
+if (!urlSet(id) || !Number.isInteger(index) || index < 0) return;
+result[id] = index;
+});
+return Object.keys(result).length ? result : null;
+}
+
+function urlEncodeOutcomes(outcomes) {
+if (!outcomes || typeof outcomes !== 'object') return '';
+return Object.keys(outcomes)
+.filter((id) => urlSet(id) && Number.isInteger(outcomes[id]) && outcomes[id] >= 0)
+.sort()
+.map((id) => `${id}:${outcomes[id]}`)
+.join(',');
+}
+
 // Version 1 keeps the stage and step as indices into the authored arrays; version 2 stores the
 // authored stage id and step number instead. Both live on different keys so the caller can tell.
 function urlParseV1(params) {
@@ -3864,6 +4185,8 @@ const scenario = params.get('s');
 if (urlSet(scenario)) result.scenario = scenario;
 const stage = params.get('at');
 if (urlSet(stage)) result.stage = stage;
+const outcomes = urlParseOutcomes(params.get('o'));
+if (outcomes) result.outcomes = outcomes;
 const step = urlIndexOf(params.get('step'));
 if (step !== null) result.step = step;
 const filter = params.get('filter');
@@ -3888,6 +4211,8 @@ if (urlSet(source.node)) params.set('n', String(source.node));
 if (urlSet(source.edge)) params.set('e', String(source.edge));
 if (urlSet(source.scenario)) params.set('s', String(source.scenario));
 if (urlSet(source.stage)) params.set('at', String(source.stage));
+const outcomes = urlEncodeOutcomes(source.outcomes);
+if (outcomes) params.set('o', outcomes);
 const step = urlIndexOf(source.step);
 if (step !== null) params.set('step', String(step));
 if (urlSet(source.filter)) params.set('filter', String(source.filter));
@@ -3901,7 +4226,8 @@ if (urlFiniteNumber(x) && urlFiniteNumber(y) && urlFiniteNumber(w) && w > 0) {
 camSuffix = `&cam=${urlRound1(x)},${urlRound1(y)},${urlRound1(w)}`;
 }
 }
-return params.toString() + camSuffix;
+// The colon and comma are part of the outcome grammar, so the value is left unencoded.
+return params.toString().replace(/([?&]o=)([^&]*)/, (match, prefix, value) => prefix + decodeURIComponent(value)) + camSuffix;
 }
 
 function parseViewHash(hash) {
@@ -3964,10 +4290,7 @@ document.body.dataset.lens = lens;
 const scenarioActive = state.scenarioActive;
 if (lens === 'change') switchView(VIEWS.BEFORE_AFTER);
 else if (state.currentView === VIEWS.BEFORE_AFTER) switchView(VIEWS.ARCHITECTURE);
-if (scenarioActive) {
-actions.setScenarioActive(true);
-renderScenarioStage();
-}
+if (scenarioActive && state.walkCursor) walkTo(state.walkCursor);
 applyLens();
 announceStatus(`${lens.charAt(0).toUpperCase() + lens.slice(1)} lens`);
 updateUrlState();
@@ -4143,8 +4466,14 @@ snapshot.step = Number.isInteger(step?.step) ? step.step : state.sequenceIndex +
 }
 if (state.scenarioActive && state.scenarioId) {
 snapshot.scenario = state.scenarioId;
-const stage = flattenScenarioStages(selectedScenario()?.stages)[state.scenarioStage];
-if (stage?.id) snapshot.stage = stage.id;
+if (state.walkCursor) snapshot.stage = state.walkCursor;
+const outcomes = {};
+linearizeScenario(selectedScenario(), state.walkChoices).forEach((entry) => {
+if (entry && entry.kind === 'decision' && entry.chosen !== defaultBranchIndex(entry.stage)) {
+outcomes[entry.id] = entry.chosen;
+}
+});
+if (Object.keys(outcomes).length) snapshot.outcomes = outcomes;
 }
 if (state.userMovedView && !snapshot.scenario) snapshot.camera = cameraToWorld(state, canvasSize());
 return snapshot;
@@ -4220,18 +4549,24 @@ const scenario = (ARCH_SPEC.scenarios || []).find(item => item.id === link.scena
 if (!scenario) {
 notices.push(`Scenario ${link.scenario} no longer exists.`);
 } else {
-let stageIndex = link.stageIndex ?? 0;
-if (link.stage !== undefined) {
-stageIndex = flattenScenarioStages(scenario.stages).findIndex(stage => stage.id === link.stage);
-if (stageIndex < 0) {
-notices.push(`Step ${link.stage} no longer exists; showing the walkthrough start.`);
-stageIndex = 0;
-}
-}
+const choices = link.outcomes && typeof link.outcomes === 'object' ? { ...link.outcomes } : {};
 actions.setScenario(scenario.id);
-actions.setScenarioStage(stageIndex);
-actions.setScenarioActive(true);
-renderScenarioNavigator();
+actions.setWalkChoices(choices);
+const entries = linearizeScenario(scenario, choices);
+let entryId = entries.length ? entries[0].id : null;
+if (link.stage !== undefined) {
+const exact = entries.find(entry => entry.id === link.stage);
+if (exact) {
+entryId = exact.id;
+} else {
+notices.push(`Step ${link.stage} no longer exists; showing the walkthrough start.`);
+}
+} else if (link.stageIndex !== undefined) {
+const flatStage = flattenScenarioStages(scenario.stages)[link.stageIndex];
+const mapped = flatStage ? entries.find(entry => entry.id === flatStage.id) : null;
+if (mapped) entryId = mapped.id;
+}
+if (entryId) walkTo(entryId);
 }
 }
 if (link.focus !== undefined) {
@@ -4416,139 +4751,513 @@ const scenarios = ARCH_SPEC.scenarios || [];
 return scenarios.find(item => item.id === state.scenarioId) || scenarios[0] || null;
 }
 
-function renderScenarioStage() {
-const target = document.querySelector('[data-scenario-stage]');
-const scenario = selectedScenario();
-if (!target || !scenario) return;
-const stages = flattenScenarioStages(scenario.stages);
-actions.setScenarioStage(Math.max(0, Math.min(state.scenarioStage, Math.max(stages.length - 1, 0))));
-const stage = stages[state.scenarioStage];
-target.replaceChildren();
-if (!stage) {
-target.textContent = 'This scenario has no stages.';
-return;
-}
-target.className = 'workbench-stage';
-const interactions = stageInteractions(stage);
-const status = stage.status || interactions.find(item => item.status)?.status || stage.branchStatus || (stage.optional ? 'optional' : 'ready');
-const nodeName = id => nodeById.get(id)?.label || id;
-target.setAttribute('data-stage-status', status);
-appendReviewField(target, 'Stage', `${state.scenarioStage + 1}/${stages.length} · ${stage.name || stage.label || stage.id || stage.kind || 'stage'}`);
-appendReviewField(target, 'Group', stage.kind === 'branch' ? `decision: ${stage.condition || 'condition'}` : (stage.group || stage.kind || 'serial'));
-appendReviewField(target, 'Status', status);
-appendReviewField(target, 'Participants', [...new Set(interactions.flatMap(item => [item.from, item.to]).filter(Boolean))].map(nodeName));
-appendReviewField(target, 'Interactions', interactions.map(item => item.label || item.id));
-appendReviewField(target, 'Payload / metadata', interactions.map(item => item.payload || item.metadata).filter(Boolean));
-appendReviewField(target, 'Failure / recovery', stage.failure || stage.recovery || stage.onFailure
-|| interactions.map(item => item.failure || item.recovery).filter(Boolean).join(' · ')
-|| stage.branchRecovery || 'Not specified');
-if (state.scenarioActive) spotlightInteractions(interactions);
-const slider = document.querySelector('[data-scenario-scrubber]');
-slider.max = Math.max(stages.length - 1, 0);
-slider.value = state.scenarioStage;
-announceStatus(`${scenario.name || scenario.id}, stage ${state.scenarioStage + 1} of ${stages.length}, ${status}.`);
-updateUrlState();
-}
-
-// A branch stage has no hops of its own; it stands for every path it can take.
-function stageInteractions(stage) {
-if (stage.kind !== 'branch') return stage.interactions || [];
-const collect = stages => (stages || []).flatMap(child => [...(child.interactions || []), ...(child.branches || []).flatMap(b => collect(b.stages))]);
-return (stage.branches || []).flatMap(branch => collect(branch.stages));
-}
-
 function activateScenario() {
 if (state.currentView !== VIEWS.ARCHITECTURE) switchView(VIEWS.ARCHITECTURE);
 actions.setScenarioActive(true);
 }
 
-function deactivateScenario() {
-if (!state.scenarioActive) return;
-actions.setScenarioActive(false);
-stopScenarioPlayback();
-clearSpotlight();
-updateUrlState();
+// Renders and drives the scenario walkthrough. The path itself is pure (walkthrough.js); this file
+// turns it into the canvas spotlight, the numbered track and the Walkthrough chapter, and owns the
+// keys, playback timer and URL round-trip. It reads state but only writes through `actions`.
+
+const WALK_DEFAULT_DELAY = 2600;
+
+let walkTimer = null;
+let walkPlaying = false;
+let walkTrackBound = false;
+
+function walkEntries() {
+return linearizeScenario(selectedScenario(), state.walkChoices);
 }
 
-function selectScenario(id) {
-const scenario = (ARCH_SPEC.scenarios || []).find(item => item.id === id);
+function walkEntryIndex(entries, id) {
+return (Array.isArray(entries) ? entries : []).findIndex((entry) => entry && entry.id === id);
+}
+
+function walkCurrent() {
+const entries = walkEntries();
+const index = walkEntryIndex(entries, state.walkCursor);
+return index < 0 ? null : { entries, index, entry: entries[index] };
+}
+
+function walkNodeLabel(id) {
+return nodeById.get(id)?.label || id;
+}
+
+// Flattened position of an entry's stage, so existing links and the stage count keep working.
+function walkStageIndex(entry) {
+const scenario = selectedScenario();
+if (!scenario || !entry) return -1;
+return flattenScenarioStages(scenario.stages).findIndex((stage) => stage.id === entry.id);
+}
+
+function walkStartDelay(entry) {
+const stage = entry && entry.stage;
+return stage && typeof stage.durationMs === 'number' ? stage.durationMs : WALK_DEFAULT_DELAY;
+}
+
+function walkIsActive() {
+return Boolean(state.scenarioActive && state.walkCursor);
+}
+
+// Light the focused nodes and edges, dim the rest, and draw ghosts plus numbered parallel markers.
+function spotlightWalkFocus(focus) {
+const nodes = new Set((focus && focus.primaryNodes) || []);
+document.querySelectorAll('.node-group').forEach((node) => {
+node.classList.toggle('selected', nodes.has(node.id.replace('node-', '')));
+});
+const edges = new Set((focus && focus.primaryEdges) || []);
+document.querySelectorAll('.edge-path').forEach((path) => {
+const isActive = edges.has(path.id.replace('path-', ''));
+path.classList.toggle('highlighted', isActive);
+if (typeof syncEdgeMarker === 'function') syncEdgeMarker(path);
+path.classList.toggle('dimmed', !isActive);
+});
+if (typeof drawGhostSteps === 'function') drawGhostSteps((focus && focus.ghosts) || []);
+drawWalkMarkers((focus && focus.markers) || []);
+}
+
+function walkMarkerPoint(marker) {
+if (marker.edgeId) {
+const path = document.getElementById(`path-${marker.edgeId}`);
+if (path && typeof path.getTotalLength === 'function') {
+const length = path.getTotalLength();
+if (length > 0) return path.getPointAtLength(length / 2);
+}
+}
+const from = nodeById.get(marker.from);
+const to = nodeById.get(marker.to);
+if (!from || !to) return null;
+return {
+x: (from.x + from.width / 2 + to.x + to.width / 2) / 2,
+y: (from.y + from.height / 2 + to.y + to.height / 2) / 2
+};
+}
+
+function drawWalkMarkers(markers) {
+if (!Array.isArray(markers) || markers.length === 0) return;
+markers.forEach((marker) => {
+const point = walkMarkerPoint(marker);
+if (!point) return;
+const group = el('g', { class: 'walk-marker', 'data-walk-marker': String(marker.n) });
+group.appendChild(el('circle', { class: 'walk-marker-dot', cx: point.x, cy: point.y, r: 11 }));
+const text = el('text', { class: 'walk-marker-number', x: point.x, y: point.y + 4 });
+text.textContent = String(marker.n);
+group.appendChild(text);
+ghostLayer.appendChild(group);
+});
+}
+
+function applyWalkFocus(entries, index) {
+spotlightWalkFocus(focusOfEntry(entries, index, LAYOUT_DATA.edges || []));
+}
+
+function walkAnnouncement(entries, index) {
+const entry = entries[index];
+if (!entry) return '';
+if (entry.kind === 'decision') return `Decision: ${entry.stage?.condition || entry.id}`;
+if (entry.kind === 'end') return `Outcome: ${entry.branch?.name || 'End'}`;
+const total = walkthroughTotal(entries);
+const name = entry.stage?.name || entry.stage?.label || entry.id;
+const hops = entry.interactions || [];
+const first = hops[0] || entry.stage || {};
+return `Step ${entry.number} of ${total}, ${name}, ${walkNodeLabel(first.from)} to ${walkNodeLabel(first.to)}`;
+}
+
+function syncScenarioFromEntry(entry) {
+const index = walkStageIndex(entry);
+if (index >= 0) actions.setScenarioStage(index);
+}
+
+function walkTo(entryId) {
+const entries = walkEntries();
+const index = walkEntryIndex(entries, entryId);
+if (index < 0) return;
+actions.setScenarioActive(true);
+actions.setWalkCursor(entryId);
+const entry = entries[index];
+syncScenarioFromEntry(entry);
+applyWalkFocus(entries, index);
+announceStatus(walkAnnouncement(entries, index));
+updateUrlState();
+renderWalkTrack();
+renderWalkthrough();
+}
+
+function walkNext() {
+if (!walkIsActive()) {
+startWalkthrough((ARCH_SPEC.scenarios || [])[0]?.id);
+return;
+}
+const current = walkCurrent();
+if (!current) return;
+const next = current.entries[current.index + 1];
+if (next) walkTo(next.id);
+}
+
+function walkPrev() {
+if (!walkIsActive()) {
+startWalkthrough((ARCH_SPEC.scenarios || [])[0]?.id);
+return;
+}
+const current = walkCurrent();
+if (!current) return;
+const previous = current.entries[current.index - 1];
+if (previous) walkTo(previous.id);
+}
+
+function chooseOutcome(decisionId, index) {
+if (!Number.isInteger(index) || index < 0) return;
+actions.setWalkChoice(decisionId, index);
+walkTo(decisionId);
+}
+
+function startWalkthrough(scenarioId, choices) {
+const scenario = (ARCH_SPEC.scenarios || []).find((item) => item.id === scenarioId);
 if (!scenario) return;
 activateScenario();
 actions.setScenario(scenario.id);
-actions.setScenarioStage(0);
-renderScenarioStage();
+actions.setWalkChoices(choices || {});
+const entries = walkEntries();
+if (!entries.length) {
+actions.setWalkCursor(null);
+renderWalkTrack();
+renderWalkthrough();
+return;
+}
+walkTo(entries[0].id);
 }
 
-function stepScenario(delta) {
-activateScenario();
-actions.setScenarioStage(state.scenarioStage + delta);
-renderScenarioStage();
+function endWalkthrough() {
+stopWalkPlayback();
+if (typeof clearSpotlight === 'function') clearSpotlight();
+actions.setWalkCursor(null);
+actions.setScenarioActive(false);
+renderWalkTrack();
+renderWalkthrough();
+updateUrlState();
+}
+
+// Leaving the architecture view stows the walkthrough without forgetting the reader's place.
+function suspendWalkthrough() {
+if (!state.scenarioActive) return;
+stopWalkPlayback();
+actions.setScenarioActive(false);
+renderWalkTrack();
 }
 
 function stopScenarioPlayback() {
-if (state.scenarioTimer) window.clearInterval(state.scenarioTimer);
-state.scenarioTimer = null;
-const button = document.querySelector('[data-scenario-play]');
-if (button) button.setAttribute('aria-pressed', 'false');
+stopWalkPlayback();
 }
 
-function toggleScenarioPlayback() {
-if (state.scenarioTimer || state.prefersReducedMotion) {
-stopScenarioPlayback();
+function deactivateScenario() {
+endWalkthrough();
+}
+
+function selectScenario(id) {
+startWalkthrough(id);
+}
+
+function walkPlaybackNote() {
+return state.prefersReducedMotion ? 'Play is unavailable under reduced motion.' : '';
+}
+
+function startWalkPlayback() {
+const current = walkCurrent();
+if (!current) return;
+walkPlaying = true;
+renderWalkTrack();
+scheduleWalkStep();
+}
+
+function scheduleWalkStep() {
+const current = walkCurrent();
+if (!current || !walkPlaying) return;
+walkTimer = window.setTimeout(() => {
+if (!walkPlaying) return;
+const next = current.entries[current.index + 1];
+if (!next) {
+stopWalkPlayback();
 return;
 }
-activateScenario();
-document.querySelector('[data-scenario-play]').setAttribute('aria-pressed', 'true');
-state.scenarioTimer = window.setInterval(() => {
-const stages = flattenScenarioStages(selectedScenario()?.stages);
-actions.setScenarioStage(stages.length ? (state.scenarioStage + 1) % stages.length : 0);
-renderScenarioStage();
-}, 1400);
+walkTo(next.id);
+scheduleWalkStep();
+}, walkStartDelay(current.entry));
+}
+
+function stopWalkPlayback() {
+if (walkTimer) window.clearTimeout(walkTimer);
+walkTimer = null;
+if (!walkPlaying) return;
+walkPlaying = false;
+renderWalkTrack();
+}
+
+function toggleWalkPlayback() {
+if (state.prefersReducedMotion) {
+announceStatus('Play is unavailable under reduced motion.');
+return;
+}
+if (walkPlaying) stopWalkPlayback();
+else startWalkPlayback();
+}
+
+// Returns true when the event was consumed by the walkthrough; plain arrows fall through to panning.
+function handleWalkthroughKey(event) {
+if (event.ctrlKey || event.metaKey || event.altKey) return false;
+const target = event.target;
+const onControl = Boolean(target && typeof target.closest === 'function' && target.closest('button, a, input, select, textarea'));
+if (event.key === ' ' || event.key === 'Spacebar') {
+if (!walkIsActive() || onControl) return false;
+event.preventDefault();
+toggleWalkPlayback();
+return true;
+}
+const isNext = event.key === 'ArrowRight' || event.key === 'j' || event.key === 'J';
+const isPrev = event.key === 'ArrowLeft' || event.key === 'k' || event.key === 'K';
+if (!isNext && !isPrev) return false;
+if (walkIsActive()) {
+event.preventDefault();
+if (isNext) walkNext();
+else walkPrev();
+return true;
+}
+if (event.key === 'j' || event.key === 'J' || event.key === 'k' || event.key === 'K') {
+event.preventDefault();
+startWalkthrough((ARCH_SPEC.scenarios || [])[0]?.id);
+return true;
+}
+return false;
+}
+
+function walkBeadKind(entry) {
+if (entry.kind !== 'step') return entry.kind;
+return entry.parallel ? 'parallel' : 'step';
+}
+
+function walkEntryAriaLabel(entry) {
+if (entry.kind === 'decision') return `Decision: ${entry.stage?.condition || entry.id}`;
+if (entry.kind === 'end') return `Outcome: ${entry.branch?.name || 'End'}`;
+return `Step ${entry.number}: ${entry.stage?.name || entry.stage?.label || entry.id}`;
+}
+
+function buildWalkButton(className, icon, label, handler) {
+const button = document.createElement('button');
+button.type = 'button';
+button.className = className;
+button.setAttribute('aria-label', label);
+button.innerHTML = iconMarkup(icon);
+button.addEventListener('click', handler);
+return button;
+}
+
+function renderWalkTrack() {
+const track = document.querySelector('.walk-track');
+if (!track) return;
+// The track sits over the canvas, whose pointer handlers must not start a pan when it is used.
+if (!walkTrackBound) {
+walkTrackBound = true;
+['mousedown', 'touchstart'].forEach((type) => track.addEventListener(type, (event) => event.stopPropagation()));
+}
+const entries = state.scenarioActive ? walkEntries() : [];
+if (!state.scenarioActive || !entries.length) {
+track.hidden = true;
+track.replaceChildren();
+return;
+}
+track.hidden = false;
+const total = walkthroughTotal(entries);
+const cursorIndex = Math.max(0, walkEntryIndex(entries, state.walkCursor));
+const current = entries[cursorIndex] || null;
+const stepNumber = entries.slice(0, cursorIndex + 1).filter((entry) => entry.kind === 'step').length;
+
+track.replaceChildren();
+
+const controls = document.createElement('div');
+controls.className = 'walk-track-controls';
+const previous = buildWalkButton('btn-icon walk-prev', 'ui-prev', 'Previous walkthrough entry', () => walkPrev());
+previous.disabled = cursorIndex <= 0;
+const play = buildWalkButton('btn-icon walk-play', walkPlaying ? 'ui-pause' : 'ui-play', walkPlaying ? 'Pause walkthrough' : 'Play walkthrough', () => toggleWalkPlayback());
+play.setAttribute('aria-pressed', String(walkPlaying));
+if (state.prefersReducedMotion) {
+play.disabled = true;
+play.setAttribute('aria-disabled', 'true');
+play.title = 'Play unavailable under reduced motion';
+}
+const next = buildWalkButton('btn-icon walk-next', 'ui-next', 'Next walkthrough entry', () => walkNext());
+next.disabled = cursorIndex >= entries.length - 1;
+controls.append(previous, play, next);
+
+const count = document.createElement('span');
+count.className = 'walk-count';
+count.textContent = `Step ${stepNumber} of ${total}`;
+
+const beads = document.createElement('div');
+beads.className = 'walk-beads';
+beads.setAttribute('role', 'presentation');
+entries.forEach((entry) => {
+const bead = document.createElement('button');
+bead.type = 'button';
+bead.className = `walk-bead walk-bead-${walkBeadKind(entry)}`;
+bead.setAttribute('role', 'option');
+bead.setAttribute('data-walk-entry', entry.id);
+bead.setAttribute('data-walk-kind', walkBeadKind(entry));
+bead.setAttribute('aria-label', walkEntryAriaLabel(entry));
+bead.setAttribute('aria-selected', String(entry.id === state.walkCursor));
+if (entry.id === state.walkCursor) bead.classList.add('current');
+const number = document.createElement('span');
+number.className = 'walk-bead-number';
+number.textContent = entry.kind === 'step' ? String(entry.number) : (entry.kind === 'decision' ? '?' : '');
+bead.appendChild(number);
+bead.addEventListener('click', () => walkTo(entry.id));
+beads.appendChild(bead);
+});
+
+track.append(controls, count, beads);
+if (current && walkPlaybackNote()) {
+const note = document.createElement('span');
+note.className = 'walk-note';
+note.textContent = walkPlaybackNote();
+track.appendChild(note);
+}
+}
+
+function walkChapterStep(entry) {
+const item = document.createElement('li');
+item.className = 'walk-item walk-item-step';
+item.setAttribute('data-walk-entry', entry.id);
+item.setAttribute('data-walk-kind', walkBeadKind(entry));
+
+const head = document.createElement('div');
+head.className = 'walk-item-head';
+const number = document.createElement('span');
+number.className = 'walk-item-number';
+number.textContent = String(entry.number);
+const name = document.createElement('span');
+name.className = 'walk-item-name';
+name.textContent = entry.stage?.name || entry.stage?.label || entry.id;
+head.append(number, name);
+item.appendChild(head);
+
+if (entry.parallel) {
+const tag = document.createElement('span');
+tag.className = 'walk-item-tag';
+tag.textContent = 'parallel';
+item.appendChild(tag);
+}
+
+const narrative = entry.stage?.narrative;
+if (narrative) {
+const text = document.createElement('p');
+text.className = 'walk-item-narrative';
+text.textContent = narrative;
+item.appendChild(text);
+}
+if (entry.stage?.narrativeGenerated) {
+const generated = document.createElement('span');
+generated.className = 'walk-generated';
+generated.textContent = 'generated';
+item.appendChild(generated);
+}
+return item;
+}
+
+function walkChapterDecision(entry) {
+const item = document.createElement('li');
+item.className = 'walk-item walk-item-decision';
+item.setAttribute('data-walk-entry', entry.id);
+item.setAttribute('data-walk-kind', 'decision');
+
+const condition = document.createElement('p');
+condition.className = 'walk-condition';
+condition.textContent = `Decision: ${entry.stage?.condition || entry.id}`;
+item.appendChild(condition);
+
+const outcomes = document.createElement('div');
+outcomes.className = 'walk-outcomes';
+entry.branches.forEach((branch, index) => {
+const button = document.createElement('button');
+button.type = 'button';
+button.className = 'walk-outcome';
+button.setAttribute('data-walk-outcome', String(index));
+button.setAttribute('aria-pressed', String(index === entry.chosen));
+button.textContent = branch?.name || branch?.condition || `Outcome ${index + 1}`;
+button.addEventListener('click', () => chooseOutcome(entry.id, index));
+outcomes.appendChild(button);
+});
+item.appendChild(outcomes);
+return item;
+}
+
+function walkChapterEnd(entry) {
+const item = document.createElement('li');
+item.className = 'walk-item walk-item-end';
+item.setAttribute('data-walk-entry', entry.id);
+item.setAttribute('data-walk-kind', 'end');
+const name = document.createElement('p');
+name.className = 'walk-outcome-name';
+name.textContent = `Outcome: ${entry.branch?.name || 'End'}`;
+item.appendChild(name);
+return item;
+}
+
+function renderWalkthrough() {
+const list = document.querySelector('[data-walk-list]');
+const select = document.querySelector('[data-scenario-select]');
+if (select && state.scenarioId) select.value = state.scenarioId;
+if (!list) return;
+list.replaceChildren();
+const scenario = selectedScenario();
+if (!scenario) return;
+const entries = walkEntries();
+if (!entries.length) {
+const empty = document.createElement('li');
+empty.className = 'rail-muted';
+empty.textContent = 'This scenario has no steps.';
+list.appendChild(empty);
+return;
+}
+const cursorId = state.scenarioActive ? state.walkCursor : null;
+entries.forEach((entry) => {
+const item = entry.kind === 'step' ? walkChapterStep(entry)
+: entry.kind === 'decision' ? walkChapterDecision(entry)
+: walkChapterEnd(entry);
+if (cursorId && entry.id === cursorId) item.classList.add('current');
+list.appendChild(item);
+});
+if (cursorId) {
+const current = list.querySelector(`[data-walk-entry="${CSS.escape(cursorId)}"]`);
+if (current) current.scrollIntoView({ block: 'nearest' });
+}
 }
 
 function renderScenarioNavigator() {
 const target = document.querySelector('[data-navigator-section="scenarios"]');
+if (!target) return;
 const scenarios = ARCH_SPEC.scenarios || [];
 target.replaceChildren();
 if (!scenarios.length) {
 target.textContent = 'No named scenarios in this model.';
 return;
 }
-actions.setScenario(state.scenarioId || scenarios[0].id);
-const player = document.createElement('div');
-player.className = 'workbench-scenario-player';
+if (!state.scenarioId) actions.setScenario(scenarios[0].id);
 const select = document.createElement('select');
 select.className = 'workbench-scenario-control';
 select.setAttribute('data-scenario-select', '');
 select.setAttribute('aria-label', 'Scenario');
-scenarios.forEach(scenario => {
+scenarios.forEach((scenario) => {
 const option = document.createElement('option');
 option.value = scenario.id;
 option.textContent = scenario.name || scenario.id;
 select.appendChild(option);
 });
 select.value = state.scenarioId;
-select.addEventListener('change', () => selectScenario(select.value));
-const toolbar = document.createElement('div');
-toolbar.className = 'workbench-scenario-toolbar';
-const previous = document.createElement('button');
-previous.type = 'button'; previous.innerHTML = iconMarkup('ui-prev'); previous.setAttribute('aria-label', 'Previous scenario stage');
-previous.addEventListener('click', () => stepScenario(-1));
-const play = document.createElement('button');
-play.type = 'button'; play.innerHTML = iconMarkup('ui-play'); play.setAttribute('aria-label', 'Play scenario'); play.setAttribute('aria-pressed', 'false'); play.setAttribute('data-scenario-play', '');
-play.addEventListener('click', toggleScenarioPlayback);
-const next = document.createElement('button');
-next.type = 'button'; next.innerHTML = iconMarkup('ui-next'); next.setAttribute('aria-label', 'Next scenario stage');
-next.addEventListener('click', () => stepScenario(1));
-const scrubber = document.createElement('input');
-scrubber.type = 'range'; scrubber.min = '0'; scrubber.value = '0'; scrubber.setAttribute('data-scenario-scrubber', ''); scrubber.setAttribute('aria-label', 'Scenario stage');
-scrubber.addEventListener('input', () => { activateScenario(); actions.setScenarioStage(Number(scrubber.value)); renderScenarioStage(); });
-const stage = document.createElement('div');
-stage.setAttribute('data-scenario-stage', '');
-toolbar.append(previous, play, next, scrubber);
-player.append(select, toolbar, stage);
-target.appendChild(player);
-renderScenarioStage();
+select.addEventListener('change', () => startWalkthrough(select.value));
+const list = document.createElement('ol');
+list.className = 'walk-list';
+list.setAttribute('data-walk-list', '');
+target.append(select, list);
+renderWalkthrough();
 }
 
 function initMotionPreference() {
@@ -4809,6 +5518,8 @@ if (e.key === 'Escape') e.target.blur();
 return;
 }
 
+if (handleWalkthroughKey(e)) return;
+
 if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[1-4]$/.test(e.key)) {
 selectLens(LENSES[Number(e.key) - 1], { explicit: true });
 e.preventDefault();
@@ -4820,7 +5531,8 @@ case 'Escape':
 if (state.presentation) { setPresentation(false); break; }
 if (document.fullscreenElement) { document.exitFullscreen?.(); break; }
 if (state.focusMode) { setFocusMode(state.focusMode); break; }
-deactivateScenario();
+if (!document.getElementById('component-sheet')?.hidden) { hideSheetKeepSelection(); break; }
+if (state.scenarioActive) { endWalkthrough(); break; }
 closeActiveDrawer();
 closeModal();
 document.getElementById('export-menu').classList.remove('open');
@@ -4867,7 +5579,8 @@ openChapter('plan');
 return;
 }
 if (viewName !== VIEWS.SEQUENCE) stopScenarioPlayback();
-if (viewName !== VIEWS.ARCHITECTURE) actions.setScenarioActive(false);
+// Before/After is the Change lens's canvas mode, and a lens must work during any walkthrough.
+if (viewName !== VIEWS.ARCHITECTURE && viewName !== VIEWS.BEFORE_AFTER) suspendWalkthrough();
 actions.setView(viewName);
 document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
 document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
@@ -5676,7 +6389,6 @@ empty.className = 'rail-muted';
 empty.textContent = 'No scenarios recorded.';
 stagesTarget.appendChild(empty);
 } else {
-const flattened = flattenScenarioStages(scenario.stages);
 scenario.stages.forEach((stage, index) => {
 const item = document.createElement('li');
 const button = document.createElement('button');
@@ -5685,10 +6397,8 @@ button.className = 'overview-stage';
 button.setAttribute('data-overview-stage', stage.id || String(index));
 button.textContent = stage.name || stage.label || stage.id || `Stage ${index + 1}`;
 button.addEventListener('click', () => {
-selectScenario(scenario.id);
-const flatIndex = flattened.findIndex(itemStage => itemStage.id === stage.id);
-actions.setScenarioStage(flatIndex >= 0 ? flatIndex : index);
-renderScenarioStage();
+startWalkthrough(scenario.id);
+walkTo(stage.id);
 openChapter('walkthrough');
 });
 item.appendChild(button);
@@ -6970,22 +7680,25 @@ run: () => openInspectorForEdge(edge.id)
 });
 });
 
-// 5. Scenario stages
+// 5. Scenario stages: one entry per walkthrough step, decision or outcome, in path order.
 (ARCH_SPEC.scenarios || []).forEach(scenario => {
-const stages = flattenScenarioStages(scenario.stages);
-stages.forEach((stage, i) => {
-const stageTitle = stage.name || stage.label || stage.id || `Stage ${i + 1}`;
+const choices = scenario.id === state.scenarioId ? state.walkChoices : {};
+linearizeScenario(scenario, choices).forEach((entry) => {
+const label = entry.kind === 'step'
+? (entry.stage.name || entry.stage.label || entry.id)
+: entry.kind === 'decision'
+? `Decision: ${entry.stage.condition || entry.id}`
+: `Outcome: ${entry.branch?.name || 'End'}`;
 items.push({
-id: `stage-${scenario.id}-${stage.id || i}`,
+id: `stage-${scenario.id}-${entry.id}`,
 group: 'Scenario stages',
-label: stageTitle,
+label,
 hint: scenario.name || scenario.id,
-keywords: stage.id || '',
+keywords: entry.id || '',
 icon: 'ui-sequence',
 run: () => {
-selectScenario(scenario.id);
-actions.setScenarioStage(i);
-renderScenarioStage();
+startWalkthrough(scenario.id, choices);
+walkTo(entry.id);
 }
 });
 });

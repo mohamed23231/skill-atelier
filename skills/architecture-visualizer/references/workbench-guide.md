@@ -14,7 +14,7 @@
 | Chapter | Contents |
 | --- | --- |
 | Overview | Summary, facts, trust rows, primary scenario, and changes. |
-| Walkthrough | The scenario player: pick a scenario and step through its stages while the canvas spotlights each one. |
+| Walkthrough | The scenario as a path of steps, decisions and outcomes, with narratives; choose outcomes at decisions. |
 | Changes | Added, changed, removed, and moved components, blast radius, and traceability gaps. |
 | Review | Quality gate, rules, findings, assumptions, open questions, and decisions. |
 | Evidence | Component evidence states and all evidence locators. |
@@ -42,7 +42,8 @@ The lens key lists only states present. In Structure it offers Data flow only. A
 | 0 | Reset the view. |
 | + / =, - | Zoom in, zoom out. |
 | A | Toggle flow animation. |
-| Arrow keys | Pan the canvas. |
+| → / j, ← / k | Next / previous walkthrough step (arrow keys pan the canvas when no walkthrough is active). |
+| Space | Play or pause the walkthrough. |
 | Escape | Close the active workbench overlay or clear active exploration state. |
 | In the command palette: Up/Down, Home/End, Enter, Escape | Move through commands, jump to first/last, run selection, or close. |
 
@@ -60,7 +61,8 @@ The hash uses version 2 state parameters. Parameters are optional and describe t
 | `n=` | Selected node/component. |
 | `e=` | Selected connection/edge. |
 | `s=` | Scenario. |
-| `at=` | Authored stage id. |
+| `at=` | Walkthrough entry (stage id). |
+| `o=` | Non-default outcomes, as `decision:index` pairs. |
 | `step=` | Sequence step number. |
 | `cam=` | Camera world region: centre x, centre y, visible width. |
 

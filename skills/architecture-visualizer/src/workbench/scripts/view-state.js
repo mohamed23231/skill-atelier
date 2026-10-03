@@ -13,10 +13,7 @@ function selectLens(lens, { explicit = true } = {}) {
   const scenarioActive = state.scenarioActive;
   if (lens === 'change') switchView(VIEWS.BEFORE_AFTER);
   else if (state.currentView === VIEWS.BEFORE_AFTER) switchView(VIEWS.ARCHITECTURE);
-  if (scenarioActive) {
-    actions.setScenarioActive(true);
-    renderScenarioStage();
-  }
+  if (scenarioActive && state.walkCursor) walkTo(state.walkCursor);
   applyLens();
   announceStatus(`${lens.charAt(0).toUpperCase() + lens.slice(1)} lens`);
   updateUrlState();
@@ -192,8 +189,14 @@ function viewSnapshot() {
   }
   if (state.scenarioActive && state.scenarioId) {
     snapshot.scenario = state.scenarioId;
-    const stage = flattenScenarioStages(selectedScenario()?.stages)[state.scenarioStage];
-    if (stage?.id) snapshot.stage = stage.id;
+    if (state.walkCursor) snapshot.stage = state.walkCursor;
+    const outcomes = {};
+    linearizeScenario(selectedScenario(), state.walkChoices).forEach((entry) => {
+      if (entry && entry.kind === 'decision' && entry.chosen !== defaultBranchIndex(entry.stage)) {
+        outcomes[entry.id] = entry.chosen;
+      }
+    });
+    if (Object.keys(outcomes).length) snapshot.outcomes = outcomes;
   }
   if (state.userMovedView && !snapshot.scenario) snapshot.camera = cameraToWorld(state, canvasSize());
   return snapshot;
@@ -269,18 +272,24 @@ function restoreUrlState() {
       if (!scenario) {
         notices.push(`Scenario ${link.scenario} no longer exists.`);
       } else {
-        let stageIndex = link.stageIndex ?? 0;
-        if (link.stage !== undefined) {
-          stageIndex = flattenScenarioStages(scenario.stages).findIndex(stage => stage.id === link.stage);
-          if (stageIndex < 0) {
-            notices.push(`Step ${link.stage} no longer exists; showing the walkthrough start.`);
-            stageIndex = 0;
-          }
-        }
+        const choices = link.outcomes && typeof link.outcomes === 'object' ? { ...link.outcomes } : {};
         actions.setScenario(scenario.id);
-        actions.setScenarioStage(stageIndex);
-        actions.setScenarioActive(true);
-        renderScenarioNavigator();
+        actions.setWalkChoices(choices);
+        const entries = linearizeScenario(scenario, choices);
+        let entryId = entries.length ? entries[0].id : null;
+        if (link.stage !== undefined) {
+          const exact = entries.find(entry => entry.id === link.stage);
+          if (exact) {
+            entryId = exact.id;
+          } else {
+            notices.push(`Step ${link.stage} no longer exists; showing the walkthrough start.`);
+          }
+        } else if (link.stageIndex !== undefined) {
+          const flatStage = flattenScenarioStages(scenario.stages)[link.stageIndex];
+          const mapped = flatStage ? entries.find(entry => entry.id === flatStage.id) : null;
+          if (mapped) entryId = mapped.id;
+        }
+        if (entryId) walkTo(entryId);
       }
     }
     if (link.focus !== undefined) {

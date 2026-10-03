@@ -1299,7 +1299,7 @@ const cases = [
     '1e: lens canvas preserves scenario opacity through every lens and Structure toggles Data Flow',
     () => {
       const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(async function () {
-        stepScenario(3);
+        startWalkthrough('scenario_fulfillment_saga_dlq'); walkTo('stage_publish_order_created');
         await new Promise(resolve => setTimeout(resolve, 250));
         const snapshot = () => [...document.querySelectorAll('.node-group, .edge-path:not(.ghost)')].map(item => [item.id, getComputedStyle(item).opacity]);
         const before = snapshot();
@@ -1476,19 +1476,25 @@ const cases = [
   ],
 
   [
-    'Phase 0: a scenario stage spotlights its participants and edges on the canvas, names them, and Esc clears it',
+    'Phase 0: a walkthrough step spotlights its participants and edges on the canvas, and Esc clears it',
     () => {
       const SNAPSHOT = `JSON.stringify({
         edges: [...document.querySelectorAll('.edge-path.highlighted')].map((p) => p.id).sort(),
         nodes: [...document.querySelectorAll('.node-group.selected')].map((n) => n.id).sort(),
         dimmed: document.querySelectorAll('.edge-path.dimmed').length,
-        text: (document.querySelector('[data-scenario-stage]') || {}).innerText || '',
+        text: (document.querySelector('[data-walk-list] [data-walk-entry="stage_publish_order_created"]') || {}).innerText || '',
         hash: location.hash,
       })`;
       const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{
         width: 1440,
         height: 900,
-        steps: [ev(SNAPSHOT), ev(`stepScenario(3); ${SNAPSHOT}`), ev(`stepScenario(1); ${SNAPSHOT}`), ESCAPE(), ev(SNAPSHOT)],
+        steps: [
+          ev(SNAPSHOT),
+          ev(`startWalkthrough('scenario_fulfillment_saga_dlq'); walkTo('stage_publish_order_created'); ${SNAPSHOT}`),
+          ev(`walkTo('stage_parallel_fulfillment_branches'); ${SNAPSHOT}`),
+          ESCAPE(),
+          ev(SNAPSHOT),
+        ],
       }]);
       const [idle, single, parallel, cleared] = results[0].filter((step) => step.kind === 'eval').map((step) => JSON.parse(step.value));
       assert.deepStrictEqual(idle.edges, [], 'canvas must not open mid-walkthrough');
@@ -1496,12 +1502,265 @@ const cases = [
       assert.deepStrictEqual(single.nodes, ['node-kafka_broker', 'node-outbox_poller']);
       assert.ok(single.dimmed > 0, 'non-participating edges should dim');
       assert.ok(/Publish to Kafka Event Bus/.test(single.text) && /Outbox Relay Worker/.test(single.text), single.text);
-      assert.ok(!/stage_publish_order_created|outbox_poller/.test(single.text), `raw ids leaked into the stage panel: ${single.text}`);
+      assert.ok(!/stage_publish_order_created|outbox_poller/.test(single.text), `raw ids leaked into the chapter list: ${single.text}`);
       assert.ok(/[#&]s=scenario_fulfillment_saga_dlq&at=stage_publish_order_created(&|$)/.test(single.hash), single.hash);
-      assert.ok(!/cam=/.test(single.hash), `a link to a stage carries no camera: ${single.hash}`);
+      assert.ok(!/cam=/.test(single.hash), `a link to a step carries no camera: ${single.hash}`);
       assert.strictEqual(parallel.edges.length, 4, `parallel stage should light every branch: ${parallel.edges}`);
       assert.deepStrictEqual([cleared.edges.length, cleared.dimmed], [0, 0], 'Esc should end the walkthrough spotlight');
       assert.ok(!/[#&]s=/.test(cleared.hash), cleared.hash);
+    },
+  ],
+
+  [
+    '1f: walkthrough starts on example 3 with a track bead per entry and steps by key',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const PROBE = ev(`(async function () {
+        ${PAGE_HELPERS}
+        window.__obs = {};
+        __record('beforeActive', state.scenarioActive);
+        __record('beforeHidden', __q('.walk-track').hidden);
+        startWalkthrough('scenario_fulfillment_saga_dlq');
+        await __sleep(80);
+        var entries = linearizeScenario(selectedScenario(), state.walkChoices);
+        var first = entries[0];
+        var hop = first.interactions[0];
+        __record('total', walkthroughTotal(entries));
+        __record('entryCount', entries.length);
+        __record('beadCount', __qa('.walk-track .walk-bead').length);
+        __record('countText', (__q('.walk-count') || {}).textContent);
+        __record('trackHidden', __q('.walk-track').hidden);
+        __record('cursor', state.walkCursor);
+        __record('firstEntry', first.id);
+        __record('activeBead', (__q('.walk-bead[aria-selected="true"]') || {}).getAttribute('data-walk-entry'));
+        __record('announce', document.getElementById('workbench-status').textContent);
+        __record('expectedAnnounce', 'Step ' + first.number + ' of ' + walkthroughTotal(entries) + ', '
+          + (first.stage.name || first.id) + ', '
+          + (nodeById.get(hop.from).label || hop.from) + ' to ' + (nodeById.get(hop.to).label || hop.to));
+        __record('selectedNodes', __qa('.node-group.selected').map(function (n) { return n.id; }).sort());
+        return __observed();
+      })()`);
+      const AFTER_NEXT = ev(`(async function () {
+        ${PAGE_HELPERS}
+        await __sleep(80);
+        var entries = linearizeScenario(selectedScenario(), state.walkChoices);
+        var second = entries[1];
+        var hop = second.interactions[0];
+        window.__obs = {};
+        __record('cursor', state.walkCursor);
+        __record('expectedSecond', second.id);
+        __record('countText', (__q('.walk-count') || {}).textContent);
+        __record('expectedCount', 'Step ' + second.number + ' of ' + walkthroughTotal(entries));
+        __record('activeBead', (__q('.walk-bead[aria-selected="true"]') || {}).getAttribute('data-walk-entry'));
+        __record('announce', document.getElementById('workbench-status').textContent);
+        __record('expectedAnnounce', 'Step ' + second.number + ' of ' + walkthroughTotal(entries) + ', '
+          + (second.stage.name || second.id) + ', '
+          + (nodeById.get(hop.from).label || hop.from) + ' to ' + (nodeById.get(hop.to).label || hop.to));
+        __record('selectedNodes', __qa('.node-group.selected').map(function (n) { return n.id; }).sort());
+        return __observed();
+      })()`);
+      const AFTER_PREV = ev(`(async function () {
+        ${PAGE_HELPERS}
+        await __sleep(80);
+        window.__obs = {};
+        __record('cursor', state.walkCursor);
+        __record('activeBead', (__q('.walk-bead[aria-selected="true"]') || {}).getAttribute('data-walk-entry'));
+        return __observed();
+      })()`);
+      const NEXT = key('j', { code: 'KeyJ', windowsVirtualKeyCode: 74 });
+      const PREV = key('k', { code: 'KeyK', windowsVirtualKeyCode: 75 });
+      const [phase] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [PROBE, NEXT, AFTER_NEXT, PREV, AFTER_PREV] }]);
+      const [probe, afterNext, afterPrev] = phase.filter((step) => step.kind === 'eval').map((step) => step.value);
+      assert.strictEqual(probe.beforeActive, false);
+      assert.strictEqual(probe.beforeHidden, true, 'the track is hidden until a walkthrough starts');
+      assert.strictEqual(probe.trackHidden, false, 'starting shows the track');
+      assert.strictEqual(probe.beadCount, probe.entryCount, 'one bead per entry');
+      assert.strictEqual(probe.countText, 'Step 1 of ' + probe.total);
+      assert.strictEqual(probe.cursor, probe.firstEntry);
+      assert.strictEqual(probe.activeBead, probe.firstEntry, 'the cursor bead is aria-selected');
+      assert.strictEqual(probe.announce, probe.expectedAnnounce, 'the step announcement matches the format');
+      assert.strictEqual(afterNext.cursor, afterNext.expectedSecond, 'j moves to the next entry');
+      assert.strictEqual(afterNext.activeBead, afterNext.expectedSecond);
+      assert.strictEqual(afterNext.countText, afterNext.expectedCount);
+      assert.strictEqual(afterNext.announce, afterNext.expectedAnnounce, 'the next step announcement matches too');
+      assert.notDeepStrictEqual(afterNext.selectedNodes, probe.selectedNodes, 'the canvas spotlight follows the cursor');
+      assert.strictEqual(afterPrev.cursor, probe.firstEntry, 'k moves back to the first entry');
+      assert.strictEqual(afterPrev.activeBead, probe.firstEntry);
+    },
+  ],
+
+  [
+    '1f: walkthrough parallel step draws numbered markers and the warehouse decision changes the path',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const MARKERS = ev(`(async function () {
+        ${PAGE_HELPERS}
+        startWalkthrough('scenario_fulfillment_saga_dlq');
+        walkTo('stage_parallel_fulfillment_branches');
+        await __sleep(80);
+        window.__obs = {};
+        var entries = linearizeScenario(selectedScenario(), state.walkChoices);
+        var parallel = entries.find(function (e) { return e.id === 'stage_parallel_fulfillment_branches'; });
+        __record('beforeTotal', walkthroughTotal(entries));
+        __record('beforeList', __qa('[data-walk-list] .walk-item').length);
+        __record('interactions', parallel.interactions.length);
+        __record('markers', __qa('.walk-marker').map(function (m) { return m.getAttribute('data-walk-marker'); }).sort());
+        __record('parallelBeads', __qa('.walk-bead-parallel').length);
+        __record('decisionBeads', __qa('.walk-bead-decision').length);
+        __record('endBeads', __qa('.walk-bead-end').length);
+        __record('outcomePressed', __qa('[data-walk-entry="stage_warehouse_outcome_branch"] .walk-outcome').map(function (b) { return b.getAttribute('aria-pressed'); }));
+        return __observed();
+      })()`);
+      const AFTER_CHOOSE = ev(`(async function () {
+        ${PAGE_HELPERS}
+        await __sleep(60);
+        chooseOutcome('stage_warehouse_outcome_branch', 1);
+        await __sleep(80);
+        var entries = linearizeScenario(selectedScenario(), state.walkChoices);
+        window.__obs = {};
+        __record('afterTotal', walkthroughTotal(entries));
+        __record('afterList', __qa('[data-walk-list] .walk-item').length);
+        __record('hasDlq', entries.some(function (e) { return e.id === 'stage_route_dlq'; }));
+        __record('cursor', state.walkCursor);
+        __record('dlqPressed', (__q('[data-walk-entry="stage_warehouse_outcome_branch"] .walk-outcome[data-walk-outcome="1"]') || {}).getAttribute('aria-pressed'));
+        __record('otherPressed', (__q('[data-walk-entry="stage_warehouse_outcome_branch"] .walk-outcome[data-walk-outcome="0"]') || {}).getAttribute('aria-pressed'));
+        return __observed();
+      })()`);
+      const [phase] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [MARKERS, AFTER_CHOOSE] }]);
+      const [before, after] = phase.filter((step) => step.kind === 'eval').map((step) => step.value);
+      assert.deepStrictEqual(before.markers, ['1', '2', '3', '4'], 'a parallel step numbers each hop');
+      assert.strictEqual(before.markers.length, before.interactions);
+      assert.strictEqual(before.parallelBeads, 1);
+      assert.strictEqual(before.decisionBeads, 1);
+      assert.strictEqual(before.endBeads, 1);
+      assert.deepStrictEqual(before.outcomePressed, ['true', 'false']);
+      assert.ok(after.afterTotal > before.beforeTotal, 'the DLQ outcome adds steps');
+      assert.ok(after.afterList > before.beforeList, 'the chapter list grows with the path');
+      assert.strictEqual(after.hasDlq, true);
+      assert.strictEqual(after.cursor, 'stage_warehouse_outcome_branch', 'choosing moves the cursor to the decision');
+      assert.strictEqual(after.dlqPressed, 'true');
+      assert.strictEqual(after.otherPressed, 'false');
+    },
+  ],
+
+  [
+    '1f: an o= link restores the chosen outcome and step, and Esc ends the walkthrough',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const PROBE = ev(`(async function () {
+        ${PAGE_HELPERS}
+        window.__obs = {};
+        __record('active', state.scenarioActive);
+        __record('cursor', state.walkCursor);
+        __record('choices', state.walkChoices);
+        __record('trackHidden', __q('.walk-track').hidden);
+        __record('beadCount', __qa('.walk-track .walk-bead').length);
+        __record('hasDlq', linearizeScenario(selectedScenario(), state.walkChoices).some(function (e) { return e.id === 'stage_route_dlq'; }));
+        __record('pressed', (__q('[data-walk-entry="stage_warehouse_outcome_branch"] .walk-outcome[data-walk-outcome="1"]') || {}).getAttribute('aria-pressed'));
+        return __observed();
+      })()`);
+      const AFTER_ESC = ev(`(async function () {
+        ${PAGE_HELPERS}
+        await __sleep(80);
+        window.__obs = {};
+        __record('active', state.scenarioActive);
+        __record('trackHidden', __q('.walk-track').hidden);
+        __record('edges', __qa('.edge-path.highlighted').length);
+        return __observed();
+      })()`);
+      const hash = 'v=2&s=scenario_fulfillment_saga_dlq&at=stage_compensation_refund&o=stage_warehouse_outcome_branch:1';
+      const [phase] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [PROBE, ESCAPE(), AFTER_ESC] }], undefined, { hash });
+      const [before, after] = phase.filter((step) => step.kind === 'eval').map((step) => step.value);
+      assert.strictEqual(before.active, true);
+      assert.strictEqual(before.cursor, 'stage_compensation_refund');
+      assert.deepStrictEqual(before.choices, { stage_warehouse_outcome_branch: 1 });
+      assert.strictEqual(before.hasDlq, true, 'the restored choice selects the DLQ path');
+      assert.strictEqual(before.trackHidden, false);
+      assert.ok(before.beadCount > 0);
+      assert.strictEqual(before.pressed, 'true', 'the restored outcome shows as chosen');
+      assert.strictEqual(after.active, false, 'Esc ends the walkthrough');
+      assert.strictEqual(after.trackHidden, true, 'Esc removes the track');
+      assert.strictEqual(after.edges, 0);
+    },
+  ],
+
+  [
+    '1f: choosing a non-default outcome writes an o= walkthrough link',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const WRITE = ev(`(async function () {
+        startWalkthrough('scenario_fulfillment_saga_dlq');
+        chooseOutcome('stage_warehouse_outcome_branch', 1);
+        updateUrlState();
+        return location.hash;
+      })()`);
+      const [phase] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [WRITE] }]);
+      const hash = lastEvalValue(phase);
+      assert.ok(/[#&]s=scenario_fulfillment_saga_dlq(&|$)/.test(hash), hash);
+      assert.ok(/[#&]at=stage_warehouse_outcome_branch(&|$)/.test(hash), hash);
+      assert.ok(/[#&]o=stage_warehouse_outcome_branch:1(&|$)/.test(hash), hash);
+    },
+  ],
+
+  [
+    '1f: the Walkthrough chapter lists steps with narratives and reduced motion disables play',
+    () => {
+      const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+      const CHAPTER = ev(`(async function () {
+        ${PAGE_HELPERS}
+        startWalkthrough('scenario_fulfillment_saga_dlq');
+        await __sleep(80);
+        window.__obs = {};
+        var entries = linearizeScenario(selectedScenario(), state.walkChoices);
+        var first = __q('[data-walk-list] .walk-item[data-walk-entry="stage_submit_checkout"]');
+        var decision = __q('[data-walk-list] [data-walk-entry="stage_warehouse_outcome_branch"]');
+        __record('listCount', __qa('[data-walk-list] .walk-item').length);
+        __record('entryCount', entries.length);
+        __record('secondEntry', entries[1].id);
+        __record('firstNumber', first ? (first.querySelector('.walk-item-number') || {}).textContent : null);
+        __record('firstName', first ? (first.querySelector('.walk-item-name') || {}).textContent : null);
+        __record('firstNarrative', first ? (first.querySelector('.walk-item-narrative') || {}).textContent : null);
+        __record('generated', !!__q('[data-walk-list] .walk-generated'));
+        __record('currentFirst', first ? first.classList.contains('current') : false);
+        __record('condition', decision ? (decision.querySelector('.walk-condition') || {}).textContent : null);
+        __record('outcomeCount', decision ? decision.querySelectorAll('.walk-outcome').length : -1);
+        __record('endName', (__q('[data-walk-list] [data-walk-entry^="end:"] .walk-outcome-name') || {}).textContent);
+        state.prefersReducedMotion = true;
+        renderWalkTrack();
+        await __sleep(40);
+        var play = __q('.walk-play');
+        __record('playDisabled', play ? play.disabled : null);
+        __record('playPressed', play ? play.getAttribute('aria-pressed') : null);
+        __record('note', (__q('.walk-note') || {}).textContent);
+        toggleWalkPlayback();
+        await __sleep(40);
+        __record('announce', document.getElementById('workbench-status').textContent);
+        __record('stillPaused', (__q('.walk-play') || {}).getAttribute('aria-pressed'));
+        var beforeCursor = state.walkCursor;
+        walkNext();
+        await __sleep(40);
+        __record('stepped', state.walkCursor !== beforeCursor);
+        __record('steppedCursor', state.walkCursor);
+        return __observed();
+      })()`);
+      const [phase] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [CHAPTER] }]);
+      const obs = lastEvalValue(phase);
+      assert.strictEqual(obs.listCount, obs.entryCount, 'the chapter lists one item per entry');
+      assert.strictEqual(obs.firstNumber, '1');
+      assert.strictEqual(obs.firstName, 'Initiate Checkout');
+      assert.ok(obs.firstNarrative && obs.firstNarrative.length > 0, 'the step shows its narrative');
+      assert.strictEqual(obs.generated, true, 'generated narratives are marked');
+      assert.strictEqual(obs.currentFirst, true, 'the current step is highlighted');
+      assert.strictEqual(obs.condition, 'Decision: Physical items intact in warehouse bin');
+      assert.strictEqual(obs.outcomeCount, 2);
+      assert.strictEqual(obs.endName, 'Outcome: Dispatch Successful');
+      assert.strictEqual(obs.playDisabled, true, 'reduced motion disables play');
+      assert.strictEqual(obs.playPressed, 'false');
+      assert.ok(/Play is unavailable under reduced motion/.test(obs.note), obs.note);
+      assert.ok(/Play is unavailable under reduced motion/.test(obs.announce), obs.announce);
+      assert.strictEqual(obs.stillPaused, 'false', 'reduced motion does not start playback');
+      assert.strictEqual(obs.stepped, true, 'stepping still works under reduced motion');
+      assert.strictEqual(obs.steppedCursor, obs.secondEntry);
     },
   ],
 
@@ -2415,7 +2674,8 @@ const cases = [
         ${PAGE_HELPERS}
         window.__obs = {};
         __click(__q('.trust-pill[data-trust="openItems"]'));
-        await __sleep(320);
+        // Wait for the outcome, not a fixed time: under load the drawer animation can run long.
+        await __waitFor(function () { return state.chapter === 'review' && __open('rail') === 'true'; }, 3000);
         __record('chapter', state.chapter);
         __record('railOpen', __open('rail'));
         __record('tabSelected', __q('#chapter-tab-review').getAttribute('aria-selected'));
@@ -2461,6 +2721,30 @@ const cases = [
       })()`)] }])[0]);
       assert.ok(/#v=2/.test(obs.copied) && /[#&]n=api(&|$)/.test(obs.copied), `copied ${obs.copied}`);
       assert.strictEqual(obs.status, 'Link copied.');
+    },
+  ],
+
+  [
+    '1f: every lens works during a walkthrough, including Change, without ending it',
+    () => {
+      const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(async function () {
+        startWalkthrough('scenario_fulfillment_saga_dlq');
+        walkTo('stage_publish_order_created');
+        const out = [];
+        for (const lens of ['change', 'risk', 'evidence', 'structure']) {
+          selectLens(lens, { explicit: true });
+          await new Promise((resolve) => setTimeout(resolve, 120));
+          out.push([lens, state.scenarioActive, state.walkCursor, !!document.querySelector('.walk-track:not([hidden])'),
+            [...document.querySelectorAll('.edge-path.highlighted')].map((p) => p.id).sort().join(',')]);
+        }
+        return JSON.stringify(out);
+      })()`)] }])[0]));
+      obs.forEach(([lens, active, cursor, track, lit]) => {
+        assert.strictEqual(active, true, `${lens}: the walkthrough ended`);
+        assert.strictEqual(cursor, 'stage_publish_order_created', `${lens}: the cursor moved`);
+        assert.ok(track, `${lens}: the track disappeared`);
+        assert.strictEqual(lit, 'path-e_poller_kafka', `${lens}: the step's spotlight changed`);
+      });
     },
   ],
 ];

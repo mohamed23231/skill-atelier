@@ -127,6 +127,43 @@ const cases = [
   ],
 
   [
+    'walkthrough outcomes encode after at as decision:index pairs',
+    () => {
+      assert.strictEqual(
+        encodeViewHash({ scenario: 's1', stage: 'stage-two', outcomes: { dec: 1, other: 0 } }),
+        'v=2&s=s1&at=stage-two&o=dec:1,other:0'
+      );
+      assert.deepStrictEqual(camp('v=2&s=s1&at=stage-two&o=dec:1,other:0'), {
+        version: 2,
+        scenario: 's1',
+        stage: 'stage-two',
+        outcomes: { dec: 1, other: 0 },
+      });
+    },
+  ],
+
+  [
+    'outcomes keep a stable key order and stay behind at but before step',
+    () => {
+      assert.strictEqual(encodeViewHash({ outcomes: { z: 1, a: 0 } }), 'v=2&o=a:0,z:1');
+      assert.strictEqual(
+        encodeViewHash({ scenario: 's1', stage: 'e1', outcomes: { dec: 1 }, step: 3 }),
+        'v=2&s=s1&at=e1&o=dec:1&step=3'
+      );
+    },
+  ],
+
+  [
+    'malformed outcome pairs are dropped rather than guessed',
+    () => {
+      assert.strictEqual('outcomes' in camp('v=2'), false);
+      assert.deepStrictEqual(camp('v=2&o=dec:1,neg:-1,bad,frac:1.5').outcomes, { dec: 1 });
+      assert.strictEqual(camp('v=2&o=bad').outcomes, undefined);
+      assert.strictEqual(encodeViewHash({ outcomes: { dec: -1, none: 'x' } }), 'v=2');
+    },
+  ],
+
+  [
     'chapter defaults to overview and is omitted',
     () => {
       assert.strictEqual(encodeViewHash({ chapter: 'overview', node: 'api' }), 'v=2&n=api');

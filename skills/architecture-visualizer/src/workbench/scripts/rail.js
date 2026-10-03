@@ -248,7 +248,6 @@ function renderOverviewChapter() {
       empty.textContent = 'No scenarios recorded.';
       stagesTarget.appendChild(empty);
     } else {
-      const flattened = flattenScenarioStages(scenario.stages);
       scenario.stages.forEach((stage, index) => {
         const item = document.createElement('li');
         const button = document.createElement('button');
@@ -257,10 +256,8 @@ function renderOverviewChapter() {
         button.setAttribute('data-overview-stage', stage.id || String(index));
         button.textContent = stage.name || stage.label || stage.id || `Stage ${index + 1}`;
         button.addEventListener('click', () => {
-          selectScenario(scenario.id);
-          const flatIndex = flattened.findIndex(itemStage => itemStage.id === stage.id);
-          actions.setScenarioStage(flatIndex >= 0 ? flatIndex : index);
-          renderScenarioStage();
+          startWalkthrough(scenario.id);
+          walkTo(stage.id);
           openChapter('walkthrough');
         });
         item.appendChild(button);

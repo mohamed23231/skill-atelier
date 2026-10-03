@@ -33,6 +33,31 @@ function urlParseCamera(raw) {
   return { x, y, w };
 }
 
+// Walkthrough choices are `decisionId:branchIndex` pairs, comma separated. Anything malformed is
+// dropped rather than guessed, and an empty result is reported as absent.
+function urlParseOutcomes(raw) {
+  if (!urlSet(raw)) return null;
+  const result = {};
+  String(raw).split(',').forEach((pair) => {
+    const parts = pair.split(':');
+    if (parts.length !== 2) return;
+    const [id, indexRaw] = parts;
+    const index = Number(indexRaw);
+    if (!urlSet(id) || !Number.isInteger(index) || index < 0) return;
+    result[id] = index;
+  });
+  return Object.keys(result).length ? result : null;
+}
+
+function urlEncodeOutcomes(outcomes) {
+  if (!outcomes || typeof outcomes !== 'object') return '';
+  return Object.keys(outcomes)
+    .filter((id) => urlSet(id) && Number.isInteger(outcomes[id]) && outcomes[id] >= 0)
+    .sort()
+    .map((id) => `${id}:${outcomes[id]}`)
+    .join(',');
+}
+
 // Version 1 keeps the stage and step as indices into the authored arrays; version 2 stores the
 // authored stage id and step number instead. Both live on different keys so the caller can tell.
 function urlParseV1(params) {
@@ -82,6 +107,8 @@ function urlParseV2(params) {
   if (urlSet(scenario)) result.scenario = scenario;
   const stage = params.get('at');
   if (urlSet(stage)) result.stage = stage;
+  const outcomes = urlParseOutcomes(params.get('o'));
+  if (outcomes) result.outcomes = outcomes;
   const step = urlIndexOf(params.get('step'));
   if (step !== null) result.step = step;
   const filter = params.get('filter');
@@ -106,6 +133,8 @@ function encodeViewHash(snapshot) {
   if (urlSet(source.edge)) params.set('e', String(source.edge));
   if (urlSet(source.scenario)) params.set('s', String(source.scenario));
   if (urlSet(source.stage)) params.set('at', String(source.stage));
+  const outcomes = urlEncodeOutcomes(source.outcomes);
+  if (outcomes) params.set('o', outcomes);
   const step = urlIndexOf(source.step);
   if (step !== null) params.set('step', String(step));
   if (urlSet(source.filter)) params.set('filter', String(source.filter));
@@ -119,7 +148,8 @@ function encodeViewHash(snapshot) {
       camSuffix = `&cam=${urlRound1(x)},${urlRound1(y)},${urlRound1(w)}`;
     }
   }
-  return params.toString() + camSuffix;
+  // The colon and comma are part of the outcome grammar, so the value is left unencoded.
+  return params.toString().replace(/([?&]o=)([^&]*)/, (match, prefix, value) => prefix + decodeURIComponent(value)) + camSuffix;
 }
 
 function parseViewHash(hash) {

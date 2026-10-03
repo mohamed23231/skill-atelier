@@ -61,5 +61,7 @@ const state = {
   scenarioStage: 0,
   scenarioActive: false,
   scenarioTimer: null,
+  walkChoices: {},
+  walkCursor: null,
   prefersReducedMotion: false
 };

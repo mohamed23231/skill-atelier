@@ -187,22 +187,25 @@ function paletteBuildAllItems() {
     });
   });
 
-  // 5. Scenario stages
+  // 5. Scenario stages: one entry per walkthrough step, decision or outcome, in path order.
   (ARCH_SPEC.scenarios || []).forEach(scenario => {
-    const stages = flattenScenarioStages(scenario.stages);
-    stages.forEach((stage, i) => {
-      const stageTitle = stage.name || stage.label || stage.id || `Stage ${i + 1}`;
+    const choices = scenario.id === state.scenarioId ? state.walkChoices : {};
+    linearizeScenario(scenario, choices).forEach((entry) => {
+      const label = entry.kind === 'step'
+        ? (entry.stage.name || entry.stage.label || entry.id)
+        : entry.kind === 'decision'
+          ? `Decision: ${entry.stage.condition || entry.id}`
+          : `Outcome: ${entry.branch?.name || 'End'}`;
       items.push({
-        id: `stage-${scenario.id}-${stage.id || i}`,
+        id: `stage-${scenario.id}-${entry.id}`,
         group: 'Scenario stages',
-        label: stageTitle,
+        label,
         hint: scenario.name || scenario.id,
-        keywords: stage.id || '',
+        keywords: entry.id || '',
         icon: 'ui-sequence',
         run: () => {
-          selectScenario(scenario.id);
-          actions.setScenarioStage(i);
-          renderScenarioStage();
+          startWalkthrough(scenario.id, choices);
+          walkTo(entry.id);
         }
       });
     });

@@ -256,6 +256,8 @@ function handleKeyDown(e) {
     return;
   }
 
+  if (handleWalkthroughKey(e)) return;
+
   if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[1-4]$/.test(e.key)) {
     selectLens(LENSES[Number(e.key) - 1], { explicit: true });
     e.preventDefault();
@@ -267,7 +269,8 @@ function handleKeyDown(e) {
       if (state.presentation) { setPresentation(false); break; }
       if (document.fullscreenElement) { document.exitFullscreen?.(); break; }
       if (state.focusMode) { setFocusMode(state.focusMode); break; }
-      deactivateScenario();
+      if (!document.getElementById('component-sheet')?.hidden) { hideSheetKeepSelection(); break; }
+      if (state.scenarioActive) { endWalkthrough(); break; }
       closeActiveDrawer();
       closeModal();
       document.getElementById('export-menu').classList.remove('open');
@@ -314,7 +317,8 @@ function switchView(viewName) {
     return;
   }
   if (viewName !== VIEWS.SEQUENCE) stopScenarioPlayback();
-  if (viewName !== VIEWS.ARCHITECTURE) actions.setScenarioActive(false);
+  // Before/After is the Change lens's canvas mode, and a lens must work during any walkthrough.
+  if (viewName !== VIEWS.ARCHITECTURE && viewName !== VIEWS.BEFORE_AFTER) suspendWalkthrough();
   actions.setView(viewName);
   document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
   document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);

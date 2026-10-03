@@ -1,6 +1,7 @@
 // The only writer of view state. Reads stay as `state.x`; every write goes through an action here.
 const STORE_FIELDS = Object.freeze(['theme', 'chapter', 'lens', 'lensExplicit', 'currentView', 'deltaMode', 'selectedNodeId', 'selectedEdgeId',
   'activeFilter', 'searchQuery', 'focusMode', 'presentation', 'scenarioId', 'scenarioStage', 'scenarioActive',
+  'walkChoices', 'walkCursor',
   'sequenceIndex', 'zoom', 'panX', 'panY', 'userMovedView']);
 
 const actions = Object.freeze({
@@ -19,6 +20,9 @@ const actions = Object.freeze({
   setScenario(id) { state.scenarioId = id; },
   setScenarioStage(index) { state.scenarioStage = index; },
   setScenarioActive(active) { state.scenarioActive = active; },
+  setWalkChoices(choices) { state.walkChoices = choices && typeof choices === 'object' ? { ...choices } : {}; },
+  setWalkChoice(decisionId, index) { state.walkChoices = { ...state.walkChoices, [decisionId]: index }; },
+  setWalkCursor(id) { state.walkCursor = id; },
   setSequenceIndex(index) { state.sequenceIndex = index; },
   // Any subset of { zoom, panX, panY, userMoved }; omitted keys are left as they are.
   setCamera({ zoom, panX, panY, userMoved } = {}) {
