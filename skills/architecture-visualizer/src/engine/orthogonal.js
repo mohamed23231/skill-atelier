@@ -188,19 +188,21 @@
   }
 
   function routeOrthogonal(input, options = {}) {
+    const headerHeight = input.config?.boundaryHeaderHeight ?? HEADER_HEIGHT;
+    const cardMargin = input.config ? Math.min(14, input.config.nodeGapX / 2, input.config.nodeGapY / 2) : 14;
     // Rotate the routing grid for TB, preserving horizontal label dimensions.
     // Enter cards from below so their boundary headers remain clear.
     if (options.direction === 'TB') {
       const transpose = n => ({ ...n, x: n.y, y: n.x, width: n.height, height: n.width });
       const labelWidths = Object.fromEntries((input.edges || []).map(e => [e.id, 18]));
       const labelHeights = Object.fromEntries((input.edges || []).map(e => [e.id, options.labelWidths?.[e.id] ?? e.labelWidth ?? 80]));
-      const margin = options.margin ?? 14;
+      const margin = options.margin ?? cardMargin;
       const headers = (input.boundaries || []).map(b => ({
-        left: b.y - margin, right: b.y + Math.min(HEADER_HEIGHT, b.height) + margin,
+        left: b.y - margin, right: b.y + Math.min(headerHeight, b.height) + margin,
         top: b.x - margin, bottom: b.x + b.width + margin
       }));
       const result = routeOrthogonal({ ...input, nodes: input.nodes.map(transpose), boundaries: (input.boundaries || []).map(transpose) },
-        { ...options, direction: 'LR', labelWidths, labelHeights, headers, targetFace: 'right' });
+        { ...options, direction: 'LR', labelWidths, labelHeights, headers, targetFace: 'right', compactExterior: true });
       Object.values(result.routes).forEach(route => {
         route.points = route.points.map(p => ({ x: p.y, y: p.x }));
         if (route.labelSlot) {
@@ -216,7 +218,7 @@
       });
       return result;
     }
-    const { cornerRadius = 6, jumpRadius = 5, portSpacing = null, trackSpacing = 10, margin = 14, labelWidths = {} } = options;
+    const { cornerRadius = 6, jumpRadius = 5, portSpacing = null, trackSpacing = 10, margin = cardMargin, labelWidths = {} } = options;
     if (![cornerRadius, jumpRadius, ...(portSpacing == null ? [] : [portSpacing]), margin].every(n => Number.isFinite(n) && n >= 0) || !Number.isFinite(trackSpacing) || trackSpacing <= 0) {
       throw new RangeError('Router spacing and radii must be finite and nonnegative; trackSpacing must be positive.');
     }
@@ -227,7 +229,7 @@
     const boxes = nodes.map(n => ({ ...rect(n, margin), id: n.id }));
     const headers = options.headers || boundaries.flatMap(b => {
       const members = nodes.filter(n => n.boundary === b.id);
-      const headerBottom = b.y + Math.min(HEADER_HEIGHT, b.height);
+      const headerBottom = b.y + Math.min(headerHeight, b.height);
       const bottom = Math.min(headerBottom, ...(members.length ? members.map(n => n.y) : [headerBottom])) + margin;
       return bottom > b.y - margin ? [{ left: b.x - margin, right: b.x + b.width + margin, top: b.y - margin, bottom }] : [];
     });
@@ -265,15 +267,15 @@
     const merged = [];
     slabs.forEach(slab => {
       const last = merged[merged.length - 1];
-      if (last && slab.left <= last.right) last.right = Math.max(last.right, slab.right);
+      if (last && slab.left < last.right) last.right = Math.max(last.right, slab.right);
       else merged.push({ ...slab });
     });
-    const extent = (edges.length + 2) * trackSpacing;
+    const extent = (edges.length + 2) * trackSpacing * (options.compactExterior ? 1 : 2);
     const left = Math.min(merged[0].left, ...headers.map(h => h.left));
     const right = Math.max(merged[merged.length - 1].right, ...headers.map(h => h.right));
-    const gaps = [{ left: left - extent * 2, right: left - trackSpacing, segments: [] }];
+    const gaps = [{ left: left - extent, right: left - trackSpacing, segments: [] }];
     for (let i = 0; i + 1 < merged.length; i++) gaps.push({ left: merged[i].right, right: merged[i + 1].left, segments: [] });
-    gaps.push({ left: right + trackSpacing, right: right + extent * 2, segments: [] });
+    gaps.push({ left: right + trackSpacing, right: right + extent, segments: [] });
     gaps.forEach(gap => {
       headers.forEach(header => {
         if (header.left <= gap.left && header.right > gap.left && header.right < gap.right) gap.left = header.right;
@@ -305,7 +307,7 @@
         backward: port.kind === 'backward',
         endDirection: port.target.face === 'left' ? 0 : 2,
         top: Math.min(...involved.map(n => n.y - margin), ...involvedHeaders.map(b => b.y - margin)),
-        bottom: Math.max(...involved.map(n => n.y + n.height + margin), ...involvedHeaders.map(b => b.y + Math.min(HEADER_HEIGHT, b.height) + margin))
+        bottom: Math.max(...involved.map(n => n.y + n.height + margin), ...involvedHeaders.map(b => b.y + Math.min(headerHeight, b.height) + margin))
       };
       if (port.kind === 'self' || port.kind === 'same-column') {
         rule.right = Math.max(...nodes.filter(n => n.rank === source.rank).map(n => n.x + n.width + margin)) + trackSpacing / 2;
@@ -336,7 +338,16 @@
       }
       segments.forEach((segment, i) => {
         const count = Math.min(segments.length, capacity);
-        const x = (gap.left + gap.right) / 2 + (i % count - (count - 1) / 2) * trackSpacing;
+        let x = (gap.left + gap.right) / 2 + (i % count - (count - 1) / 2) * trackSpacing;
+        // Keep the final bend beyond the marker gap (10), its straight
+        // approach (12), and the corner radius, within the clear corridor.
+        if (input.config && segment.index === segment.route.points.length - 3) {
+          const target = segment.route.points.at(-1);
+          const sign = Math.sign(x - target.x);
+          const approach = target.x + sign * (22 + cornerRadius);
+          x = sign > 0 ? Math.min(gap.right, Math.max(x, approach))
+            : Math.max(gap.left, Math.min(x, approach));
+        }
         segment.route.points[segment.index].x = x;
         segment.route.points[segment.index + 1].x = x;
       });
@@ -422,7 +433,25 @@
       stats.bends += Math.max(0, routes[edge.id].points.length - 2);
     });
     place(0, []);
-    labelOrder.forEach((edge, i) => { routes[edge.id].labelSlot = best[i] ? best[i].slot : null; });
+    labelOrder.forEach((edge, i) => {
+      const route = routes[edge.id];
+      route.labelSlot = best[i] ? best[i].slot : null;
+      if (route.labelSlot) return;
+      // Compact card gaps may fit the tracks but leave no room for a label.
+      const width = labelWidths[edge.id] ?? edge.labelWidth ?? 80;
+      const source = nodeMap.get(edge.source);
+      const target = nodeMap.get(edge.target);
+      gaps.slice(1, -1).forEach((gap, index) => {
+        if (gap.left < Math.min(source.x, target.x) || gap.right > Math.max(source.x + source.width, target.x + target.width)) return;
+        const available = gap.right - gap.left + 2 * margin;
+        const demand = width + 16 + 2 * margin;
+        if (demand <= available) return;
+        if (!stats.gapDemand) stats.gapDemand = {};
+        if (!stats.gapAvailable) stats.gapAvailable = {};
+        stats.gapAvailable[index] = available;
+        stats.gapDemand[index] = Math.max(stats.gapDemand[index] || 0, demand);
+      });
+    });
     stats.jumps = computeJumps(routes);
     stats.crossings = stats.jumps;
     edges.forEach(edge => { routes[edge.id].path = makePath(routes[edge.id], cornerRadius, jumpRadius); });

@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { computeLayout: computeDefaultLayout, buildEdgeGeometry, cubicPointAt, curveSanityScore, resolveLabelCollisions } = require('../src/engine/layout.js');
 // Existing geometry cases explicitly exercise the curved fallback.
-const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { ...config, router: 'curved' });
+const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { direction: spec.layout?.direction || 'LR', ...config, router: 'curved' });
 const geometry = require('../src/engine/geometry.js');
 const { loadTemplate } = require('../src/workbench/assemble.js');
 const {
@@ -232,49 +232,21 @@ const cases = [
   ],
 
   [
-    'shaped nodes: endpoints land on the chevron, pill and cylinder outlines, not the bounding box',
+    'all component kinds share rounded card attachment geometry',
     () => {
-      // Chevron (queue/topic): backward edges arrive on the pointed right face.
-      // With a port offset the outline sits left of the rectangular edge.
-      const queue = { id: 'q', label: 'Q', type: 'topic', x: 100, y: 100, width: 200, height: 80 };
-      const right1 = { id: 'r1', label: 'R1', type: 'service', x: 500, y: 40, width: 160, height: 70 };
-      const g1 = buildEdgeGeometry(right1, queue, true, { targetPortOffset: 24 });
-      assert.strictEqual(g1.points.targetFace, 'right');
-      const chevronOutline = geometry.shapeRightX(queue, 24);
-      assert.ok(
-        chevronOutline < queue.x + queue.width - 5,
-        `chevron outline at offset should recede from the rectangular edge (got ${chevronOutline}, rect edge ${queue.x + queue.width})`
-      );
-      assert.ok(
-        Math.abs(g1.points.x2 - (chevronOutline + geometry.EDGE_END_GAP)) < 0.01,
-        `chevron endpoint x=${g1.points.x2} does not sit one gap off the outline at ${chevronOutline}`
-      );
-
-      // Pill (actor): the right cap is a semicircle, so an off-centre backward
-      // connection must land on the arc, not the corner of the bounding box.
-      const actor = { id: 'a', label: 'A', type: 'actor', x: 400, y: 300, width: 120, height: 60 };
-      const svcLeft = { id: 's', label: 'S', type: 'service', x: 0, y: 300, width: 160, height: 70 };
-      const g2 = buildEdgeGeometry(svcLeft, actor, true, { targetPortOffset: 20 });
-      assert.strictEqual(g2.points.targetFace, 'left');
-      const pillOutline = geometry.shapeLeftX(actor, 20);
-      assert.ok(pillOutline > actor.x + 5, `pill outline at offset should recede from the rectangular edge (got ${pillOutline})`);
-      assert.ok(
-        Math.abs(g2.points.x2 - (pillOutline - geometry.EDGE_END_GAP)) < 0.01,
-        `pill endpoint x=${g2.points.x2} does not sit one gap off the outline at ${pillOutline}`
-      );
-
-      // Cylinder (database/storage): the domed top rises above the rectangular
-      // top edge, so an off-centre top connection follows the dome.
-      const db = { id: 'd', label: 'D', type: 'database', x: 100, y: 500, width: 180, height: 80 };
-      const above = { id: 't', label: 'T', type: 'service', x: 120, y: 300, width: 160, height: 70 };
-      const g3 = buildEdgeGeometry(above, db, false, { targetPortOffset: 40 });
-      assert.strictEqual(g3.points.targetFace, 'top');
-      const domeOutline = geometry.shapeTopY(db, 40);
-      assert.ok(domeOutline > db.y + 1, `cylinder dome at offset should sit below the corner height (got ${domeOutline})`);
-      assert.ok(
-        Math.abs(g3.points.y2 - (domeOutline - geometry.EDGE_END_GAP)) < 0.01,
-        `cylinder endpoint y=${g3.points.y2} does not sit one gap off the dome at ${domeOutline}`
-      );
+      const card = { x: 100, y: 100, width: 220, height: 72 };
+      for (const type of ['service', 'database', 'storage', 'queue', 'topic', 'actor', 'worker', 'cloud_function', 'external']) {
+        const n = { ...card, type };
+        assert.strictEqual(geometry.shapeRightX(n, 24), 320);
+        assert.strictEqual(geometry.shapeLeftX(n, 24), 100);
+        assert.strictEqual(geometry.shapeTopY(n, 40), 100);
+        assert.strictEqual(geometry.shapeBottomY(n, 40), 172);
+        assert.strictEqual(geometry.shapeRightX(n, 36), 308);
+        assert.strictEqual(geometry.shapeLeftX(n, 36), 112);
+        assert.strictEqual(geometry.shapeTopY(n, 110), 112);
+        assert.strictEqual(geometry.shapeBottomY(n, 110), 160);
+        assert.strictEqual(geometry.shapeHorizontalPortOffset(n, 110), 98);
+      }
     },
   ],
 
@@ -1022,6 +994,27 @@ cases.push(['orthogonal layout is the default and widens overfull column gaps', 
     assert.strictEqual(left - b.x, narrow.config.boundaryPaddingX, 'whole boundary moves with its columns');
   });
   assert.deepStrictEqual(narrow, computeDefaultLayout(spec, { boundaryGapX: 0 }));
+}]);
+
+cases.push(['auto selects the larger reference fit with LR winning ties', () => {
+  const specs = [VALID_SPEC, ADVERSARIAL_RECIPROCAL_SPEC, ADVERSARIAL_DENSE_PORTS_SPEC,
+    ADVERSARIAL_CLIPPED_BOUNDS_SPEC, ADVERSARIAL_SIBLING_SPEC, ADVERSARIAL_COLLISION_SPEC];
+  for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
+    specs.push(JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8')));
+  }
+  const fit = ({ totalVisualBounds: b }) => Math.min(1040 / (b.width + 48), 806 / (b.height + 48), 1.4);
+  for (const spec of specs) {
+    for (const router of ['orthogonal', 'curved']) {
+      const lr = computeDefaultLayout(spec, { direction: 'LR', router });
+      const tb = computeDefaultLayout(spec, { direction: 'TB', router });
+      const auto = computeDefaultLayout(spec, { direction: 'auto', router });
+      assert.deepStrictEqual(auto, fit(tb) > fit(lr) ? tb : lr);
+      assert.deepStrictEqual(auto, computeDefaultLayout(spec, { direction: 'auto', router }));
+      auto.nodes.forEach(n => assert.deepStrictEqual([n.width, n.height], [220, 72]));
+      if (router === 'orthogonal') assert.strictEqual(auto.routingStats.cardCrossings, 0);
+    }
+  }
+  assert.throws(() => computeDefaultLayout(VALID_SPEC, { direction: 'diagonal' }), /direction/);
 }]);
 
 module.exports = { name: 'Layout Engine', cases };

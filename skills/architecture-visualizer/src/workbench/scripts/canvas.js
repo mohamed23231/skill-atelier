@@ -1,30 +1,6 @@
 // Rendering
 function nodeShape(node) {
-  const w = node.width;
-  const h = node.height;
-  switch (node.type) {
-    case 'database':
-    case 'storage': {
-      const r = 12;
-      const d = `M 0 ${r} C 0 0, ${w} 0, ${w} ${r} L ${w} ${h - r} C ${w} ${h}, 0 ${h}, 0 ${h - r} Z`;
-      return el('path', { class: 'node-rect shape-cylinder', d });
-    }
-    case 'queue':
-    case 'topic': {
-      const notch = 16;
-      const d = `M 0 0 L ${w - notch} 0 L ${w} ${h / 2} L ${w - notch} ${h} L 0 ${h} Z`;
-      return el('path', { class: 'node-rect shape-queue', d });
-    }
-    case 'external':
-      return el('rect', { class: 'node-rect shape-external', width: w, height: h, rx: 14 });
-    case 'actor':
-      return el('rect', { class: 'node-rect shape-actor', width: w, height: h, rx: h / 2 });
-    case 'cloud_function':
-    case 'worker':
-      return el('rect', { class: 'node-rect shape-worker', width: w, height: h, rx: 22 });
-    default:
-      return el('rect', { class: 'node-rect', width: w, height: h, rx: 10 });
-  }
+  return el('rect', { class: 'node-rect', width: node.width, height: node.height, rx: 12 });
 }
 
 function renderDiagram() {
@@ -217,14 +193,14 @@ function renderNodeCard(g, n) {
   const w = n.width;
   const sans = cssToken('--sans');
 
-  g.appendChild(el('rect', { class: 'node-tile', x: 14, y: 18, width: 32, height: 32, rx: 8 }));
-  g.appendChild(el('use', { class: 'node-icon', href: `#${getNodeIcon(n.type)}`, x: 22, y: 26, width: 16, height: 16, 'aria-hidden': 'true' }));
+  g.appendChild(el('rect', { class: 'node-tile', x: 12, y: 12, width: 28, height: 28, rx: 8 }));
+  g.appendChild(el('use', { class: 'node-icon', href: `#${getNodeIcon(n.type)}`, x: 18, y: 18, width: 16, height: 16, 'aria-hidden': 'true' }));
 
-  const nameFont = `620 13.5px ${sans}`;
-  const nameLines = wrapText(n.label, nameFont, w - 56 - 14, 2);
-  const name = el('text', { class: 'node-name', x: 56, y: nameLines.length > 1 ? 30 : 39 });
+  const nameFont = `600 13px ${sans}`;
+  const nameLines = wrapText(n.label, nameFont, w - 50 - 32, 2);
+  const name = el('text', { class: 'node-name', x: 50, y: nameLines.length > 1 ? 23 : 31 });
   nameLines.forEach((line, i) => {
-    const span = el('tspan', { x: 56, dy: i === 0 ? 0 : 17 });
+    const span = el('tspan', { x: 50, dy: i === 0 ? 0 : 16 });
     span.textContent = line;
     name.appendChild(span);
   });
@@ -244,7 +220,7 @@ function renderNodeLensDetails(g, n, badge, marker) {
   if (badge) {
     const { text: label, tone } = badge;
     badgeWidth = measureText(label, `600 10.5px ${sans}`) + 14;
-    const badgeGroup = el('g', { class: `node-badge ${tone}`, transform: `translate(${w - 14 - badgeWidth}, ${h - 32})` });
+    const badgeGroup = el('g', { class: `node-badge ${tone}`, transform: `translate(${w - 12 - badgeWidth}, ${h - 26})` });
     badgeGroup.appendChild(el('rect', { class: 'base', width: badgeWidth, height: 20, rx: 6 }));
     badgeGroup.appendChild(el('rect', { class: 'tint', width: badgeWidth, height: 20, rx: 6 }));
     const badgeText = el('text', { x: 7, y: 14 });
@@ -254,12 +230,12 @@ function renderNodeLensDetails(g, n, badge, marker) {
   }
 
   const techFull = n.technology || n.type;
-  const tech = el('text', { class: 'node-tech', x: 14, y: h - 18 });
-  tech.textContent = fitText(techFull, `400 11px ${mono}`, w - 28 - (badgeWidth ? badgeWidth + 8 : 0));
+  const tech = el('text', { class: 'node-tech', x: 12, y: h - 12 });
+  tech.textContent = fitText(techFull, `400 10.5px ${mono}`, w - 24 - (badgeWidth ? badgeWidth + 8 : 0));
   g.appendChild(tech);
 
   if (marker === 'exception-ring') {
-    const ring = el('circle', { class: 'node-exception', cx: w - 22, cy: 16, r: 4.5 });
+    const ring = el('circle', { class: 'node-exception', cx: w - 16, cy: 16, r: 4.5 });
     withTooltip(ring, `${String(n.status).toLowerCase()}: not verified by evidence`);
     g.appendChild(ring);
   }

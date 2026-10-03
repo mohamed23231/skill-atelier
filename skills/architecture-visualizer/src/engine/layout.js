@@ -27,16 +27,16 @@ const { routeOrthogonal, buildRouteGeometry } = require('./orthogonal.js');
 
 const DEFAULT_CONFIG = {
   router: 'orthogonal',
-  direction: 'LR',
-  nodeWidth: 200,
-  nodeHeight: 96,
-  nodeGapY: 34,
-  nodeGapX: 50,
-  boundaryPaddingX: 20,
-  boundaryPaddingY: 28,
-  boundaryHeaderHeight: 36,
-  boundaryGapX: 120,
-  boundaryGapY: 80,
+  direction: 'auto',
+  nodeWidth: 220,
+  nodeHeight: 72,
+  nodeGapY: 24,
+  nodeGapX: 24,
+  boundaryPaddingX: 16,
+  boundaryPaddingY: 16,
+  boundaryHeaderHeight: 32,
+  boundaryGapX: 96,
+  boundaryGapY: 96,
   barycenterSweeps: 4,
 };
 
@@ -70,7 +70,14 @@ function computeLayout(spec, customConfig = {}) {
 
   const config = { ...DEFAULT_CONFIG, ...(spec.layout || {}), ...customConfig };
   if (!['curved', 'orthogonal'].includes(config.router)) throw new RangeError('router must be curved or orthogonal.');
-  const isLR = config.direction !== 'TB';
+  if (!['LR', 'TB', 'auto'].includes(config.direction)) throw new RangeError('direction must be LR, TB or auto.');
+  if (config.direction === 'auto') {
+    const lr = computeLayout(spec, { ...config, direction: 'LR' });
+    const tb = computeLayout(spec, { ...config, direction: 'TB' });
+    const fit = ({ totalVisualBounds: b }) => Math.min(1040 / (b.width + 48), 806 / (b.height + 48), 1.4);
+    return fit(tb) > fit(lr) ? tb : lr;
+  }
+  const isLR = config.direction === 'LR';
 
   const nodeMap = new Map();
   spec.nodes.forEach((n) => {
@@ -194,7 +201,8 @@ function computeLayout(spec, customConfig = {}) {
       });
 
       computedBoundaries.push(b);
-      currentBoundaryCoord += boundaryHeight + config.boundaryGapY;
+      // In TB the 96px card-to-card gap includes the next row header and padding.
+      currentBoundaryCoord += boundaryHeight + Math.max(0, config.boundaryGapY - config.boundaryHeaderHeight - config.boundaryPaddingY * 2);
     }
   });
 
@@ -258,18 +266,19 @@ function computeLayout(spec, customConfig = {}) {
 
   if (config.router === 'orthogonal') {
     const labelWidths = Object.fromEntries(computedEdges.map(e => [e.id, estimateLabelWidth(e.label || e.packetLabel)]));
-    const input = { nodes: computedNodes, boundaries: computedBoundaries, edges: computedEdges.filter(e => nodeMap.has(e.source) && nodeMap.has(e.target)) };
+    const input = { config, nodes: computedNodes, boundaries: computedBoundaries, edges: computedEdges.filter(e => nodeMap.has(e.source) && nodeMap.has(e.target)) };
     let result;
     for (let pass = 0; pass <= 3; pass++) {
       result = routeOrthogonal(input, { labelWidths, direction: config.direction });
       if (pass === 3 || !result.stats.gapDemand) break;
       // Router gap indexes refer to merged occupied x slabs, including subcolumns.
       const columns = [];
+      const margin = Math.min(14, config.nodeGapX / 2, config.nodeGapY / 2);
       const axis = isLR ? 'x' : 'y';
       const size = isLR ? 'width' : 'height';
       computedNodes.map(n => ({ left: n[axis], right: n[axis] + n[size] })).sort((a, b) => a.left - b.left).forEach(box => {
         const last = columns[columns.length - 1];
-        if (last && box.left - 14 <= last.right + 14) last.right = Math.max(last.right, box.right);
+        if (last && box.left - margin < last.right + margin) last.right = Math.max(last.right, box.right);
         else columns.push({ ...box });
       });
       let widened = false;

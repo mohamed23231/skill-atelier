@@ -157,14 +157,14 @@ svg#arch-svg {
 }
 
 .node-name {
-  font-size: 13.5px;
-  font-weight: 620;
+  font-size: 13px;
+  font-weight: 600;
   fill: var(--ink);
 }
 
 .node-tech {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   fill: var(--muted);
 }
 

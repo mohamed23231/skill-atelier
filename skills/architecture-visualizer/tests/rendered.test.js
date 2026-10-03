@@ -1184,6 +1184,53 @@ function riskRender(spec, script) {
 }
 
 const cases = [
+  ['p2: fit every example at 1440×900 with the rail docked at zoom ≥ 0.75', () => {
+    for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
+      const [phase] = runPhases(`examples/${name}/architecture.json`, [{ width: 1440, height: 900, steps: [ev(`(function () {
+        const b = computeTotalVisualBounds();
+        const r = svg.getBoundingClientRect();
+        return { zoom: state.zoom, width: r.width, height: r.height,
+          rail: document.querySelector('[data-region="rail"]').getAttribute('data-open'),
+          left: state.panX + b.minX * state.zoom, right: state.panX + b.maxX * state.zoom,
+          top: state.panY + b.minY * state.zoom, bottom: state.panY + b.maxY * state.zoom };
+      })()`)] }]);
+      const m = lastEvalValue(phase);
+      assert.strictEqual(m.rail, 'true', name);
+      assert.ok(m.zoom >= 0.75, `${name}: zoom ${m.zoom}`);
+      assert.ok(m.left >= 0 && m.top >= 0 && m.right <= m.width && m.bottom <= m.height, `${name}: diagram leaves canvas`);
+    }
+  }],
+  ['p2: compact cards keep names, technology, badges and exception rings clear in every lens', () => {
+    for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
+      const [phase] = runPhases(`examples/${name}/architecture.json`, [{ width: 1440, height: 900, steps: [ev(`(function () {
+        const problems = [];
+        const overlap = (a, b) => a && b && a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+        for (const lens of ['structure', 'evidence', 'change', 'risk']) {
+          selectLens(lens);
+          for (const n of LAYOUT_DATA.nodes) {
+            const g = document.getElementById('node-' + n.id);
+            const shape = g.querySelector('.node-rect');
+            const tile = g.querySelector('.node-tile');
+            const title = g.querySelector('.node-name');
+            const tech = g.querySelector('.node-tech');
+            const badge = g.querySelector('.node-badge');
+            const ring = g.querySelector('.node-exception');
+            const badgeBox = badge ? badge.getBBox() : null;
+            if (badgeBox) { const t = badge.transform.baseVal.consolidate().matrix; badgeBox.x += t.e; badgeBox.y += t.f; }
+            if (shape.tagName !== 'rect' || shape.getAttribute('rx') !== '12' || n.width !== 220 || n.height !== 72) problems.push(n.id + ': shape');
+            if ([tile.getAttribute('x'), tile.getAttribute('y'), tile.getAttribute('width'), tile.getAttribute('height')].join(',') !== '12,12,28,28') problems.push(n.id + ': tile');
+            if (title.getAttribute('x') !== '50' || title.children.length > 2 || tech.getAttribute('y') !== '60') problems.push(n.id + ': text');
+            if (getComputedStyle(title).fontSize !== '13px' || getComputedStyle(title).fontWeight !== '600' || getComputedStyle(tech).fontSize !== '10.5px') problems.push(n.id + ': typography');
+            if (ring && (ring.getAttribute('cx') !== '204' || ring.getAttribute('cy') !== '16')) problems.push(n.id + ': ring');
+            if (overlap(title.getBBox(), tech.getBBox()) || overlap(title.getBBox(), badgeBox) || overlap(tech.getBBox(), badgeBox) || overlap(title.getBBox(), ring && ring.getBBox())) problems.push(n.id + ': overlap in ' + lens);
+          }
+        }
+        return problems;
+      })()`)] }]);
+      assert.deepStrictEqual(lastEvalValue(phase), [], name);
+    }
+  }],
+
   [
     'p2: orthogonal paths use lines and bounded arcs with arrowheads',
     () => {

@@ -13,35 +13,19 @@
   const EDGE_END_GAP = 10;
   const LABEL_MAX_CHARS = 20;
   const ROUTE_SAMPLES = 48;
-  // Must match nodeShape() in src/workbench/scripts/canvas.js: queue/topic chevron notch depth
-  const CHEVRON_NOTCH = 16;
-  const CYLINDER_R = 12;
-  const PILL_RX = 0.5; // actor: rx = height * 0.5 (stadium shape)
-  const WORKER_RX = 22;
-  const EXTERNAL_RX = 14;
-  const DEFAULT_RX = 10;
+  // Every component uses the same rounded card as nodeShape().
+  const DEFAULT_RX = 12;
 
   function nodeCornerRadius(node) {
-    const h = node.height || 0;
-    if (node.type === 'external') return Math.min(EXTERNAL_RX, h / 2);
-    if (node.type === 'worker' || node.type === 'cloud_function') return Math.min(WORKER_RX, h / 2);
-    return Math.min(DEFAULT_RX, h / 2);
+    return Math.min(DEFAULT_RX, (node.height || 0) / 2);
   }
 
   // Right-face x of the *drawn* shape outline at a vertical offset from the face centre.
-  // Rectangular bounds overstate the width of chevrons, pills and rounded cards.
+  // Rounded corners recede from the rectangular bounds.
   function shapeRightX(node, offset) {
     const w = node.width || 0;
     const h = node.height || 0;
     const dy = Math.min(Math.abs(offset || 0), h / 2);
-    if (node.type === 'queue' || node.type === 'topic') {
-      const notch = Math.min(CHEVRON_NOTCH, w * 0.25);
-      return h > 0 ? node.x + w - notch * (dy / (h / 2)) : node.x + w;
-    }
-    if (node.type === 'actor') {
-      const r = h * PILL_RX;
-      return node.x + w - r + Math.sqrt(Math.max(0, r * r - dy * dy));
-    }
     const rx = nodeCornerRadius(node);
     const straight = h / 2 - rx;
     if (dy > straight && rx > 0) {
@@ -55,11 +39,6 @@
   function shapeLeftX(node, offset) {
     const h = node.height || 0;
     const dy = Math.min(Math.abs(offset || 0), h / 2);
-    if (node.type === 'queue' || node.type === 'topic') return node.x; // flat rear edge
-    if (node.type === 'actor') {
-      const r = h * PILL_RX;
-      return node.x + r - Math.sqrt(Math.max(0, r * r - dy * dy));
-    }
     const rx = nodeCornerRadius(node);
     const straight = h / 2 - rx;
     if (dy > straight && rx > 0) {
@@ -69,48 +48,21 @@
     return node.x;
   }
 
-  // Top/bottom-face y of the drawn shape outline at a horizontal offset from the centre.
-  // Only the cylinder (database/storage) deviates measurably from the rectangle.
+  // Horizontal ports stay on the flat portion of the rounded card.
+  function shapeHorizontalPortOffset(node, offset) {
+    const limit = Math.max(0, (node.width || 0) / 2 - nodeCornerRadius(node));
+    return Math.max(-limit, Math.min(limit, offset || 0));
+  }
+
   function shapeTopY(node, offset) {
-    const w = node.width || 0;
-    if ((node.type === 'database' || node.type === 'storage') && w > 0) {
-      const dx = Math.min(Math.abs(offset || 0), w / 2);
-      const rise = 0.75 * CYLINDER_R * Math.sqrt(Math.max(0, 1 - ((2 * dx) / w) ** 2));
-      return node.y + CYLINDER_R - rise;
-    }
-    return node.y;
+    const rx = nodeCornerRadius(node);
+    const dx = Math.min(Math.abs(offset || 0), (node.width || 0) / 2);
+    const d = Math.max(0, dx - ((node.width || 0) / 2 - rx));
+    return node.y + rx - Math.sqrt(Math.max(0, rx * rx - d * d));
   }
 
   function shapeBottomY(node, offset) {
-    const w = node.width || 0;
-    const h = node.height || 0;
-    if ((node.type === 'database' || node.type === 'storage') && w > 0) {
-      const dx = Math.min(Math.abs(offset || 0), w / 2);
-      const rise = 0.75 * CYLINDER_R * Math.sqrt(Math.max(0, 1 - ((2 * dx) / w) ** 2));
-      return node.y + h - CYLINDER_R + rise;
-    }
-    return node.y + h;
-  }
-
-  // Clamp a horizontal port offset so top/bottom connections stay on the flat
-  // part of chevron (notched right side) and pill/rounded (corner caps) shapes.
-  function shapeHorizontalPortOffset(node, offset) {
-    const w = node.width || 0;
-    const h = node.height || 0;
-    let insetLeft = 0;
-    let insetRight = 0;
-    if (node.type === 'queue' || node.type === 'topic') {
-      insetRight = Math.min(CHEVRON_NOTCH, w * 0.25);
-    } else if (node.type === 'actor') {
-      insetLeft = h * PILL_RX;
-      insetRight = insetLeft;
-    } else {
-      insetLeft = nodeCornerRadius(node);
-      insetRight = insetLeft;
-    }
-    const minOffset = insetLeft - w / 2;
-    const maxOffset = w / 2 - insetRight;
-    return Math.max(minOffset, Math.min(maxOffset, offset || 0));
+    return node.y + (node.height || 0) - (shapeTopY(node, offset) - node.y);
   }
 
   function labelDisplayText(text) {
@@ -778,7 +730,7 @@
     }
 
     if (kind === 'backward') {
-      const approach = Math.max(40, Math.min(200, dist * 0.38));
+      const approach = Math.max(70, Math.min(200, dist * 0.38));
       if (isLR) {
         const reach = Math.max(Math.abs(x2 - x1) * 0.45, 50);
         const bow = points.isReciprocal ? 36 : 0;
@@ -857,7 +809,6 @@
   return {
     LABEL_HEIGHT,
     EDGE_END_GAP,
-    CHEVRON_NOTCH,
     labelDisplayText,
     estimateLabelWidth,
     findLabelAnchor,

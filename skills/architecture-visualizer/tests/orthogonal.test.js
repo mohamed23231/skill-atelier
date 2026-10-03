@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { routeOrthogonal, computeJumps } = require('../src/engine/orthogonal.js');
-const { computeLayout } = require('../src/engine/layout.js');
+const { computeLayout: computeDefaultLayout } = require('../src/engine/layout.js');
+const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { direction: 'LR', ...config });
 const fixtures = require('./fixtures.js');
 
 const node = (id, x, y, rank = 0) => ({ id, x, y, width: 100, height: 60, rank });
@@ -17,7 +18,7 @@ const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bot
 const cardBox = (n, margin = 0) => ({ left: n.x - margin, right: n.x + n.width + margin, top: n.y - margin, bottom: n.y + n.height + margin });
 const slotBox = slot => ({ left: slot.x - slot.width / 2 - 8, right: slot.x + slot.width / 2 + 8, top: slot.y - 9, bottom: slot.y + 9 });
 
-function verify(layout, result, margin = 14, rounded = true) {
+function verify(layout, result, margin = layout.config ? 12 : 14, rounded = true) {
   assert.equal(result.stats.cardCrossings, 0);
   const slots = [];
   let bends = 0;
@@ -44,7 +45,7 @@ function verify(layout, result, margin = 14, rounded = true) {
       assert(a.x !== b.x || a.y !== b.y);
       layout.boundaries.forEach(boundary => {
         const members = layout.nodes.filter(n => n.boundary === boundary.id);
-        const bottom = Math.min(boundary.y + Math.min(36, boundary.height), ...(members.length ? members.map(n => n.y) : [Infinity])) + margin;
+        const bottom = Math.min(boundary.y + Math.min(layout.config?.boundaryHeaderHeight ?? 36, boundary.height), ...(members.length ? members.map(n => n.y) : [Infinity])) + margin;
         assert(!crosses(a, b, { left: boundary.x - margin, right: boundary.x + boundary.width + margin, top: boundary.y - margin, bottom }), `${e.id} crosses a boundary header`);
       });
       layout.nodes.forEach(n => {
@@ -78,7 +79,7 @@ function verify(layout, result, margin = 14, rounded = true) {
       layout.nodes.forEach(n => assert(!overlaps(box, cardBox(n))));
       layout.boundaries.forEach(boundary => assert(!overlaps(box, {
         left: boundary.x, right: boundary.x + boundary.width,
-        top: boundary.y, bottom: boundary.y + Math.min(36, boundary.height)
+        top: boundary.y, bottom: boundary.y + Math.min(layout.config?.boundaryHeaderHeight ?? 36, boundary.height)
       })));
       slots.forEach(other => assert(!overlaps(box, other)));
       slots.push(box);
@@ -339,6 +340,31 @@ cases.push(['all architecture examples preserve routing invariants', () => {
   console.log(report.join('\n'));
 }]);
 
+cases.push(['compact example cards leave a straight 12px marker approach in both directions', () => {
+  const examples = path.join(__dirname, '../examples');
+  for (const name of fs.readdirSync(examples).sort()) {
+    const file = path.join(examples, name, 'architecture.json');
+    if (!fs.existsSync(file)) continue;
+    const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
+    for (const direction of ['LR', 'TB']) {
+      const layout = computeLayout(spec, { direction });
+      for (const e of layout.edges) {
+        // Measure the actual final line after all corner and jump arcs,
+        // including the workbench's endpoint gap, rather than the raw route.
+        const commands = e.path.match(/[MLA] [^MLA]+/g);
+        assert(commands.at(-1).startsWith('L '));
+        const endpoint = command => command.trim().split(/\s+/).slice(-2).map(Number);
+        const [x1, y1] = endpoint(commands.at(-2));
+        const [x2, y2] = endpoint(commands.at(-1));
+        assert(Math.hypot(x2 - x1, y2 - y1) >= 12 - 1e-8,
+          `${name}/${direction}/${e.id} needs a straight marker approach`);
+        assert(Math.abs(e.terminalTangent.x * (y2 - y1) - e.terminalTangent.y * (x2 - x1)) < 1e-8);
+        assert(e.terminalTangent.x * (x2 - x1) + e.terminalTangent.y * (y2 - y1) > 0);
+      }
+    }
+  }
+}]);
+
 cases.push(['integrated layouts preserve routes, slots, jumps and bounds across examples and adversarial fixtures', () => {
   const specs = Object.entries(fixtures).filter(([name]) => name.startsWith('ADVERSARIAL_'));
   const examples = path.join(__dirname, '../examples');
@@ -347,7 +373,7 @@ cases.push(['integrated layouts preserve routes, slots, jumps and bounds across 
     if (fs.existsSync(file)) specs.push([name, JSON.parse(fs.readFileSync(file, 'utf8'))]);
   });
   for (const [name, spec] of specs) {
-    for (const direction of ['LR', 'TB']) {
+    for (const direction of ['LR', 'TB', 'auto']) {
       const layout = computeLayout(spec, { direction });
       assert.deepEqual(layout, computeLayout(spec, { direction }), `${name} is deterministic`);
       assert.equal(layout.routingStats.cardCrossings, 0);
