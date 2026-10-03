@@ -986,6 +986,61 @@ padding-bottom: 10px;
 /* The explanation voice: descriptions written for people. */
 #ins-description { font-family: var(--serif); font-size: 14px; line-height: 1.55; }
 
+/* Overview chapter */
+.voice-serif { font-family: var(--serif); font-size: 14px; line-height: 1.55; color: var(--ink); margin: 0 0 10px; }
+.rail-muted { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+.overview-facts { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 4px; padding: 0; }
+.overview-fact { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+.overview-fact dt { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.overview-fact dd { margin: 0; color: var(--ink); font-size: 16px; font-weight: 650; }
+.overview-trust { display: flex; flex-direction: column; }
+.ov-trust-row { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 2px 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ov-trust-row:last-child { border-bottom: none; }
+.trust-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
+.trust-dot[data-state="ok"] { background: var(--ok); }
+.trust-dot[data-state="warn"] { background: var(--warn); }
+.trust-dot[data-state="risk"] { background: var(--risk); }
+.trust-dot[data-state="neutral"] { background: var(--faint); }
+.trust-dot[data-state="unchecked"] { width: 8px; height: 8px; background: transparent; border: 2px solid var(--faint); box-sizing: border-box; }
+.ov-trust-label { color: var(--ink); font-size: 13px; font-weight: 600; }
+.ov-trust-detail { grid-column: 2; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.ov-trust-open { grid-column: 2; justify-self: start; height: 26px; margin-top: 4px; }
+.overview-stages { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.overview-stage { width: 100%; padding: 6px 8px; text-align: left; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.overview-stage:hover { border-color: var(--accent); }
+.overview-changes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.overview-changes .rail-muted { margin: 0; }
+
+/* Changes chapter */
+.change-group { margin-bottom: 14px; }
+.change-group:last-child { margin-bottom: 0; }
+.change-component { display: flex; align-items: center; gap: 8px; width: 100%; margin-bottom: 6px; padding: 7px 8px; text-align: left; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.change-component:hover { border-color: var(--accent); }
+.change-icon { flex: none; display: inline-flex; color: var(--muted); }
+.change-name { flex: 1; min-width: 0; font-weight: 600; }
+.change-tech { flex: none; color: var(--muted); font-size: 11px; }
+.blast-item { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.blast-item:last-child { border-bottom: none; }
+.blast-item > summary { cursor: pointer; color: var(--ink); font-weight: 600; }
+.blast-names { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.trace-line { font-size: 12px; color: var(--ink); margin-bottom: 6px; }
+.trace-gap { color: var(--warn); }
+
+/* Evidence chapter */
+.evidence-row { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.evidence-row:last-child { border-bottom: none; }
+.evidence-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.evidence-icon { flex: none; display: inline-flex; color: var(--muted); }
+.evidence-name { flex: 1; min-width: 0; padding: 0; text-align: left; color: var(--ink); background: none; border: none; font: inherit; font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
+.evidence-chip { flex: none; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); background: var(--surface-2); }
+.evidence-chip[data-evidence-state="verified"] { color: var(--ok); background: var(--ok-soft); }
+.evidence-chip[data-evidence-state="missing"], .evidence-chip[data-evidence-state="stale"] { color: var(--risk); background: var(--risk-soft); }
+.evidence-chip[data-evidence-state="declared"], .evidence-chip[data-evidence-state="declared-unchecked"], .evidence-chip[data-evidence-state="asserted"], .evidence-chip[data-evidence-state="planned"] { color: var(--warn); background: var(--warn-soft); }
+.evidence-locators { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.evidence-locator { width: 100%; padding: 6px 8px; text-align: left; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; font-family: var(--mono); font-size: 11px; cursor: pointer; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+.evidence-locator:hover { border-color: var(--accent); }
+.evidence-empty { color: var(--muted); font-size: 11px; }
+
 /* --- 1.1.0 additions --- */
 .hidden { display: none !important; }
 
@@ -1169,44 +1224,16 @@ color: var(--ink);
 white-space: pre-wrap;
 }
 
-.workbench-navigator {
-position: fixed;
-top: 56px;
-bottom: 0;
-left: 0;
-width: min(86vw, 300px);
-z-index: 60;
-display: flex;
-flex-direction: column;
-background: var(--surface);
-border-right: 1px solid var(--line);
-overflow: hidden;
-transform: translateX(-105%);
-pointer-events: none;
-transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.workbench-navigator[data-open="true"] {
-transform: translateX(0);
-pointer-events: auto;
-}
-.workbench-panel-header { min-height: 48px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line); }
-.workbench-panel-body { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 16px; }
-.workbench-panel-body h2 { margin: 0 0 6px; color: var(--ink); font-size: 12px; }
-.workbench-panel-body section { min-width: 0; }
-.workbench-panel-body section > div { min-width: 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
-.workbench-search-result, .workbench-outline-item { width: 100%; margin: 0 0 6px; padding: 7px 8px; text-align: left; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font: inherit; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
 [data-focus-member="true"] .node-rect, [data-focus-member="true"].edge-path { stroke-width: 3 !important; }
 [data-focus-member="false"] { opacity: 0.12 !important; }
 body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-affected { border-style: double; }
 body[data-presentation="true"] header,
 body[data-presentation="true"] .filter-bar,
-body[data-presentation="true"] .workbench-navigator,
 body[data-presentation="true"] .rail,
 body[data-presentation="true"] .legend-box { display: none !important; }
 body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }
 body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }
-.workbench-close, .workbench-mobile-toggle { min-width: 32px; }
-.workbench-mobile-toggle, .workbench-close { display: inline-flex; }
+.workbench-mobile-toggle { min-width: 32px; display: inline-flex; }
 .workbench-backdrop { display: none; position: fixed; inset: var(--chrome-top) 0 0; z-index: 54; border: 0; background: var(--scrim); }
 .workbench-minimap { position: absolute; left: 16px; bottom: 16px; width: 176px; height: 116px; z-index: 35; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); }
 .workbench-minimap svg { width: 100%; height: 100%; display: block; }
@@ -1221,7 +1248,6 @@ body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; rig
 .rail { width: 340px; }
 body:has(.rail[data-open="true"]) { --canvas-right: 340px; }
 body:has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 340px); }
-body:has(.workbench-navigator[data-open="true"]):has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 580px); }
 body:has(.rail[data-open="true"]) .viewport-controls { right: 360px; }
 }
 
@@ -1229,15 +1255,10 @@ body:has(.rail[data-open="true"]) .viewport-controls { right: 360px; }
 .rail { width: 400px; }
 body:has(.rail[data-open="true"]) { --canvas-right: 400px; }
 body:has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 400px); }
-body:has(.workbench-navigator[data-open="true"]):has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 640px); }
 body:has(.rail[data-open="true"]) .viewport-controls { right: 420px; }
 }
 
 @media (min-width: 1100px) {
-.workbench-navigator { width: 240px; }
-body:has(.workbench-navigator[data-open="true"]) { --canvas-left: 240px; }
-body:has(.workbench-navigator[data-open="true"]) #canvas-container { margin-left: 240px; width: calc(100% - 240px); }
-body:has(.workbench-navigator[data-open="true"]) .filter-bar { left: 256px; }
 /* The legend stacks above the minimap, inside the column the playback bar's clearance already keeps free. */
 .legend-box { left: calc(var(--canvas-left) + 16px); bottom: 140px; }
 }
@@ -1246,9 +1267,8 @@ body:has(.workbench-navigator[data-open="true"]) .filter-bar { left: 256px; }
 .workbench-minimap { left: 8px; width: 112px; height: 76px; }
 }
 
-/* Below the workbench breakpoint both panels are overlay drawers */
+/* Below the workbench breakpoint the rail is an overlay drawer */
 @media (max-width: 1099px) {
-body:has(.workbench-navigator[data-open="true"]) .workbench-backdrop,
 body:has(.rail[data-open="true"]) .workbench-backdrop { display: block; }
 .viewport-controls { right: 8px; }
 .legend-box { display: none; }
@@ -1479,7 +1499,6 @@ margin-left: 2px;
 <div class="header-actions">
 <button id="btn-palette" class="btn-icon" aria-keyshortcuts="Control+K Meta+K" aria-label="Search and commands"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-search"></use></svg><span>Search</span><kbd>Ctrl K</kbd></button>
 <button id="btn-copy-link" class="btn-icon" title="Copy a link to this exact view"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Copy link</span></button>
-<button class="btn-icon icon-only workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-menu"></use></svg></button>
 <button class="btn-icon icon-only workbench-mobile-toggle" data-action="rail-toggle" aria-label="Open reading rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-panel"></use></svg></button>
 <button id="btn-theme" class="btn-icon icon-only" title="Toggle Light/Dark Theme" aria-label="Toggle light and dark theme">
 <span id="theme-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-moon"></use></svg></span>
@@ -1570,14 +1589,6 @@ margin-left: 2px;
 </div>
 
 <button class="workbench-backdrop" data-action="drawer-backdrop" aria-label="Close open panel"></button>
-<aside class="workbench-navigator" data-region="navigator" data-open="false" aria-label="Architecture navigator" aria-modal="false">
-<div class="workbench-panel-header"><strong>Navigator</strong><button class="btn-icon workbench-close" data-action="navigator-close" aria-label="Close navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button></div>
-<div class="workbench-panel-body">
-<section><h2>Model outline</h2><div data-navigator-section="outline">Select a component to inspect it.</div></section>
-<section><h2>Search results</h2><div data-navigator-section="search">Type in search to find nodes and relationships.</div></section>
-<section><h2>Evidence</h2><div data-navigator-section="evidence">No evidence selected.</div></section>
-</div>
-</aside>
 
 <!-- Interactive SVG Canvas Container -->
 <div id="canvas-container" data-region="canvas">
@@ -1630,9 +1641,29 @@ margin-left: 2px;
 <button class="btn-icon icon-only" data-action="rail-close" aria-label="Close rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
 </div>
 <div class="rail-body">
-<section id="chapter-walkthrough" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-walkthrough" data-chapter-panel="walkthrough">
+<section id="chapter-overview" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-overview" data-chapter-panel="overview">
+<h2 id="overview-title">Overview</h2>
+<p id="overview-description" class="voice-serif"></p>
+<p id="overview-meta" class="rail-muted"></p>
+<dl id="overview-facts" class="overview-facts"></dl>
+<h3>Trust</h3>
+<div id="overview-trust" class="overview-trust"></div>
+<h3>How it works</h3>
+<ol id="overview-stages" class="overview-stages"></ol>
+<h3>What changes</h3>
+<div id="overview-changes" class="overview-changes"></div>
+</section>
+<section id="chapter-walkthrough" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-walkthrough" data-chapter-panel="walkthrough" hidden>
 <h2>Walkthrough</h2>
 <div data-navigator-section="scenarios">No scenario selected.</div>
+</section>
+<section id="chapter-changes" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-changes" data-chapter-panel="changes" hidden>
+<h2>Changes</h2>
+<div id="changes-deltas"></div>
+<h3>Blast radius</h3>
+<div id="changes-blast"></div>
+<h3>Traceability</h3>
+<div id="changes-traceability"></div>
 </section>
 <section id="chapter-review" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-review" data-chapter-panel="review" hidden>
 <h2>Review</h2>
@@ -1661,6 +1692,10 @@ margin-left: 2px;
 <h3>Decisions</h3>
 <div id="review-decisions"></div>
 </section>
+</section>
+<section id="chapter-evidence" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-evidence" data-chapter-panel="evidence" hidden>
+<h2>Evidence</h2>
+<div id="evidence-list"></div>
 </section>
 <section id="chapter-data" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-data" data-chapter-panel="data" hidden>
 <h2>Data model</h2>
@@ -2664,7 +2699,7 @@ const DESIGN_TOKENS = ['--bg', '--surface', '--surface-2', '--lane', '--ink', '-
 
 const state = {
 theme: THEMES.DARK,
-chapter: 'walkthrough',
+chapter: 'overview',
 currentView: VIEWS.ARCHITECTURE,
 deltaMode: DELTA_MODES.DIFF,
 animatingFlow: false,
@@ -2870,9 +2905,6 @@ if (!region) return;
 const overlay = isOverlayPanels();
 const wasOpen = region.getAttribute('data-open') === 'true';
 if (open && overlay) {
-const otherKind = kind === 'navigator' ? 'rail' : 'navigator';
-const other = document.querySelector(`[data-region="${otherKind}"]`);
-if (other) other.setAttribute('data-open', 'false');
 activeDrawer = kind;
 drawerReturnFocus = opener || document.activeElement;
 }
@@ -2964,64 +2996,6 @@ const y = edge.labelAnchor?.y ?? edge.labelY ?? ((edge.points?.y1 || 0) + (edge.
 focusModelPoint(x, y);
 applyFocusMode();
 updateUrlState();
-}
-
-function renderSearchResults(query) {
-const target = document.querySelector('[data-navigator-section="search"]');
-if (!target) return;
-target.replaceChildren();
-if (!query) {
-target.textContent = 'Type in search to find nodes and relationships.';
-return;
-}
-const matches = [];
-(LAYOUT_DATA.nodes || []).forEach(node => {
-const text = `${node.label || ''} ${node.id || ''} ${node.type || ''} ${node.technology || ''}`.toLowerCase();
-if (text.includes(query)) matches.push({ kind: 'node', id: node.id, label: node.label || node.id });
-});
-(LAYOUT_DATA.edges || []).forEach(edge => {
-const text = `${edge.label || ''} ${edge.packetLabel || ''} ${edge.id || ''} ${edge.source || ''} ${edge.target || ''}`.toLowerCase();
-if (text.includes(query)) matches.push({ kind: 'edge', id: edge.id, label: edge.label || edge.packetLabel || edge.id });
-});
-if (matches.length === 0) {
-target.textContent = 'No matching components or relationships.';
-return;
-}
-matches.forEach(match => {
-const button = document.createElement('button');
-button.type = 'button';
-button.className = 'workbench-search-result';
-button.setAttribute('data-search-result', '');
-button.setAttribute('data-model-id', match.id);
-button.setAttribute('data-model-kind', match.kind);
-button.textContent = `${match.kind === 'node' ? 'Component' : 'Relationship'} · ${match.label}`;
-const activateResult = () => {
-if (match.kind === 'node') openInspectorForNode(match.id);
-else openInspectorForEdge(match.id);
-};
-button.addEventListener('click', activateResult);
-button.addEventListener('keydown', event => {
-if (event.key === 'Enter' || event.key === ' ') {
-event.preventDefault();
-activateResult();
-}
-});
-target.appendChild(button);
-});
-}
-
-function renderNavigatorOutline() {
-const target = document.querySelector('[data-navigator-section="outline"]');
-if (!target) return;
-target.replaceChildren();
-(LAYOUT_DATA.nodes || []).forEach(node => {
-const button = document.createElement('button');
-button.type = 'button';
-button.className = 'workbench-outline-item';
-button.textContent = node.label || node.id;
-button.addEventListener('click', () => openInspectorForNode(node.id));
-target.appendChild(button);
-});
 }
 
 function renderMinimap() {
@@ -3846,7 +3820,7 @@ const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
 const params = new URLSearchParams();
 let camSuffix = '';
 params.set('v', '2');
-if (urlSet(source.chapter) && source.chapter !== 'walkthrough') params.set('c', String(source.chapter));
+if (urlSet(source.chapter) && source.chapter !== 'overview') params.set('c', String(source.chapter));
 if (urlSet(source.view) && source.view !== URL_CODEC_DEFAULT_VIEW) params.set('view', String(source.view));
 if (urlSet(source.node)) params.set('n', String(source.node));
 if (urlSet(source.edge)) params.set('e', String(source.edge));
@@ -4114,12 +4088,12 @@ notices.push(`This link uses a newer format (version ${link.version}); showing t
 return notices;
 }
 if (link.chapter !== undefined) {
-const available = typeof availableChapters === 'function' ? availableChapters().map(c => c.id) : ['walkthrough', 'review', 'data', 'plan'];
+const available = typeof availableChapters === 'function' ? availableChapters().map(c => c.id) : ['overview', 'walkthrough', 'changes', 'review', 'evidence', 'data', 'plan'];
 if (available.includes(link.chapter)) {
 openChapter(link.chapter);
 } else {
-notices.push(`Chapter ${link.chapter} does not exist; showing the walkthrough.`);
-openChapter('walkthrough');
+notices.push(`Chapter ${link.chapter} does not exist; showing the overview.`);
+openChapter('overview');
 }
 }
 if (link.view !== undefined) {
@@ -4263,18 +4237,67 @@ return button;
 }
 
 function renderReviewNavigator() {
-const evidenceTarget = document.querySelector('[data-navigator-section="evidence"]');
 const findingTarget = document.querySelector('[data-navigator-section="findings"]');
-evidenceTarget.replaceChildren();
+if (!findingTarget) return;
 findingTarget.replaceChildren();
-evidenceTarget.className = 'workbench-review-list';
 findingTarget.className = 'workbench-review-list';
-const evidence = ARCH_SPEC.review?.evidenceManifest || ARCH_SPEC.evidence || [];
 const findings = ARCH_SPEC.findings || ARCH_SPEC.review?.policyFindings || [];
-if (!evidence.length) evidenceTarget.textContent = 'No evidence records in this model.';
-evidence.forEach(item => evidenceTarget.appendChild(makeReviewButton('evidence', item, item.id || item.type || 'Evidence', item.verification)));
-if (!findings.length) findingTarget.textContent = 'No policy or evidence findings.';
+if (!findings.length) {
+findingTarget.textContent = 'No policy or evidence findings.';
+return;
+}
 findings.forEach(item => findingTarget.appendChild(makeReviewButton('finding', item, item.id || item.message || 'Finding', item.severity)));
+}
+
+// The Evidence chapter: one row per component in canvas order, each listing every locator behind it.
+function renderEvidenceChapter() {
+const target = document.getElementById('evidence-list');
+if (!target) return;
+target.replaceChildren();
+(LAYOUT_DATA.nodes || []).forEach(node => {
+const evidence = nodeEvidence(ARCH_SPEC, node.id);
+const row = document.createElement('div');
+row.className = 'evidence-row';
+row.setAttribute('data-evidence-node', node.id);
+
+const head = document.createElement('div');
+head.className = 'evidence-head';
+const icon = document.createElement('span');
+icon.className = 'evidence-icon';
+icon.innerHTML = iconMarkup(getNodeIcon(node.type));
+const name = document.createElement('button');
+name.type = 'button';
+name.className = 'evidence-name';
+name.setAttribute('data-evidence-node-label', node.id);
+name.textContent = node.label || node.id;
+name.addEventListener('click', () => openInspectorForNode(node.id));
+const chip = document.createElement('span');
+chip.className = 'evidence-chip';
+chip.setAttribute('data-evidence-state', evidence.state);
+chip.textContent = evidence.label;
+head.append(icon, name, chip);
+
+const locators = document.createElement('div');
+locators.className = 'evidence-locators';
+if (evidence.locators.length === 0) {
+const empty = document.createElement('span');
+empty.className = 'evidence-empty';
+empty.textContent = 'No evidence records';
+locators.appendChild(empty);
+} else {
+evidence.locators.forEach(record => {
+const button = document.createElement('button');
+button.type = 'button';
+button.className = 'evidence-locator';
+button.textContent = trustLocatorKey(record.locator);
+button.addEventListener('click', () => openReviewInspector('evidence', record));
+locators.appendChild(button);
+});
+}
+
+row.append(head, locators);
+target.appendChild(row);
+});
 }
 
 function flattenScenarioStages(stages, group = 'serial', depth = 0) {
@@ -4451,9 +4474,7 @@ stopScenarioPlayback();
 let lastOverlayMode = null;
 function syncResponsiveRegions(force) {
 const overlay = isOverlayPanels();
-const navigator = document.querySelector('[data-region="navigator"]');
 const railRegion = document.querySelector('[data-region="rail"]');
-navigator.setAttribute('aria-modal', overlay ? 'true' : 'false');
 if (railRegion) {
 railRegion.setAttribute('aria-modal', overlay && railRegion.getAttribute('data-open') === 'true' ? 'true' : 'false');
 }
@@ -4461,7 +4482,6 @@ if (!force && overlay === lastOverlayMode) return;
 lastOverlayMode = overlay;
 activeDrawer = null;
 drawerReturnFocus = null;
-navigator.setAttribute('data-open', overlay ? 'false' : 'true');
 if (railRegion) {
 railRegion.setAttribute('data-open', overlay ? 'false' : 'true');
 }
@@ -4485,7 +4505,6 @@ initTheme();
 initMotionPreference();
 setupEventListeners();
 renderDiagram();
-renderNavigatorOutline();
 renderReviewNavigator();
 renderScenarioNavigator();
 renderMinimap();
@@ -4494,6 +4513,9 @@ renderImplementationPlanView();
 renderQualityGate();
 renderTrustStrip();
 initRail();
+renderOverviewChapter();
+renderChangesChapter();
+renderEvidenceChapter();
 renderReviewChapter();
 applyVisibility();
 fitToScreen();
@@ -4619,11 +4641,8 @@ container.addEventListener('touchstart', handleTouchStart, { passive: false });
 container.addEventListener('touchmove', handleTouchMove, { passive: false });
 container.addEventListener('touchend', handleTouchEnd);
 
-const navigatorToggle = document.querySelector('[data-action="navigator-toggle"]');
 const railToggle = document.querySelector('[data-action="rail-toggle"]');
-navigatorToggle.addEventListener('click', () => toggleDrawer('navigator', navigatorToggle));
 if (railToggle) railToggle.addEventListener('click', () => toggleDrawer('rail', railToggle));
-document.querySelector('[data-action="navigator-close"]').addEventListener('click', () => setDrawerOpen('navigator', false));
 document.querySelector('[data-action="rail-close"]')?.addEventListener('click', () => setDrawerOpen('rail', false));
 document.querySelector('[data-action="sheet-back"]')?.addEventListener('click', hideSheetKeepSelection);
 document.querySelector('[data-action="inspector-close"]').addEventListener('click', closeInspector);
@@ -4643,7 +4662,6 @@ if (notices.length) announceStatus(notices.join(' '));
 
 document.getElementById('search-box').addEventListener('input', e => {
 actions.setSearchQuery(e.target.value.toLowerCase().trim());
-renderSearchResults(state.searchQuery);
 applyVisibility();
 });
 
@@ -5242,8 +5260,11 @@ setDrawerOpen('rail', false);
 
 function availableChapters() {
 const chapters = [
+{ id: 'overview', label: 'Overview' },
 { id: 'walkthrough', label: 'Walkthrough' },
-{ id: 'review', label: 'Review' }
+{ id: 'changes', label: 'Changes' },
+{ id: 'review', label: 'Review' },
+{ id: 'evidence', label: 'Evidence' }
 ];
 if (ARCH_SPEC.views?.database_er?.tables?.length > 0) {
 chapters.push({ id: 'data', label: 'Data' });
@@ -5272,7 +5293,7 @@ panel.remove();
 renderRailTabs();
 
 // Ensure current chapter is set and panel is visible
-const initialChapter = availableIds.has(state.chapter) ? state.chapter : 'walkthrough';
+const initialChapter = availableIds.has(state.chapter) ? state.chapter : 'overview';
 openChapter(initialChapter);
 }
 
@@ -5346,7 +5367,7 @@ targetTab?.focus();
 function openChapter(id) {
 const chapters = availableChapters();
 const found = chapters.find(c => c.id === id);
-const targetId = found ? id : (chapters[0]?.id || 'walkthrough');
+const targetId = found ? id : (chapters[0]?.id || 'overview');
 const targetChapter = found || chapters[0] || { id: targetId, label: targetId };
 
 actions.setChapter(targetId);
@@ -5398,6 +5419,259 @@ const rail = document.getElementById('rail');
 if (rail) rail.setAttribute('data-sheet', kind);
 const railToggle = document.querySelector('[data-action="rail-toggle"]');
 setDrawerOpen('rail', true, railToggle);
+}
+
+function chapterLabel(id) {
+const chapter = availableChapters().find(item => item.id === id);
+return chapter ? chapter.label : id;
+}
+
+function renderOverviewChapter() {
+if (!document.getElementById('chapter-overview')) return;
+const meta = ARCH_SPEC.meta || {};
+
+const title = document.getElementById('overview-title');
+if (title) title.textContent = meta.title || 'Overview';
+
+const description = document.getElementById('overview-description');
+if (description) description.textContent = meta.description || '';
+
+const metaLine = document.getElementById('overview-meta');
+if (metaLine) {
+metaLine.textContent = [meta.status, meta.author, meta.date].filter(part => part != null && part !== '').join(' · ');
+}
+
+const facts = document.getElementById('overview-facts');
+if (facts) {
+facts.replaceChildren();
+[
+['Components', (ARCH_SPEC.nodes || []).length],
+['Connections', (ARCH_SPEC.edges || []).length],
+['Boundaries', (ARCH_SPEC.boundaries || []).length],
+['Scenarios', (ARCH_SPEC.scenarios || []).length],
+].forEach(([label, count]) => {
+const item = document.createElement('div');
+item.className = 'overview-fact';
+const term = document.createElement('dt');
+term.textContent = label;
+const value = document.createElement('dd');
+value.textContent = String(count);
+item.append(term, value);
+facts.appendChild(item);
+});
+}
+
+const trust = document.getElementById('overview-trust');
+if (trust && typeof trustSummary === 'function') {
+trust.replaceChildren();
+Object.entries(trustSummary(ARCH_SPEC, QUALITY_GATE)).forEach(([key, entry]) => {
+const row = document.createElement('div');
+row.className = 'ov-trust-row';
+row.setAttribute('data-trust-key', key);
+
+const dot = document.createElement('span');
+dot.className = 'trust-dot';
+dot.setAttribute('data-state', entry.state);
+
+const label = document.createElement('span');
+label.className = 'ov-trust-label';
+label.textContent = entry.label;
+
+const detail = document.createElement('span');
+detail.className = 'ov-trust-detail';
+detail.textContent = entry.detail;
+
+const open = document.createElement('button');
+open.type = 'button';
+open.className = 'btn-icon ov-trust-open';
+open.setAttribute('data-trust-chapter', entry.chapter);
+open.textContent = `Open ${chapterLabel(entry.chapter)}`;
+open.addEventListener('click', () => openChapter(entry.chapter));
+
+row.append(dot, label, detail, open);
+trust.appendChild(row);
+});
+}
+
+const stagesTarget = document.getElementById('overview-stages');
+if (stagesTarget) {
+stagesTarget.replaceChildren();
+const scenario = (ARCH_SPEC.scenarios || [])[0];
+if (!scenario || !scenario.stages || scenario.stages.length === 0) {
+const empty = document.createElement('li');
+empty.className = 'rail-muted';
+empty.textContent = 'No scenarios recorded.';
+stagesTarget.appendChild(empty);
+} else {
+const flattened = flattenScenarioStages(scenario.stages);
+scenario.stages.forEach((stage, index) => {
+const item = document.createElement('li');
+const button = document.createElement('button');
+button.type = 'button';
+button.className = 'overview-stage';
+button.setAttribute('data-overview-stage', stage.id || String(index));
+button.textContent = stage.name || stage.label || stage.id || `Stage ${index + 1}`;
+button.addEventListener('click', () => {
+selectScenario(scenario.id);
+const flatIndex = flattened.findIndex(itemStage => itemStage.id === stage.id);
+actions.setScenarioStage(flatIndex >= 0 ? flatIndex : index);
+renderScenarioStage();
+openChapter('walkthrough');
+});
+item.appendChild(button);
+stagesTarget.appendChild(item);
+});
+}
+}
+
+const changes = document.getElementById('overview-changes');
+if (changes) {
+changes.replaceChildren();
+const counts = { ADDED: 0, CHANGED: 0, REMOVED: 0, MOVED: 0 };
+(ARCH_SPEC.nodes || []).forEach(node => {
+if (counts[node.delta] !== undefined) counts[node.delta] += 1;
+});
+const summary = document.createElement('span');
+summary.className = 'rail-muted';
+summary.textContent = `Added ${counts.ADDED} · Changed ${counts.CHANGED} · Removed ${counts.REMOVED} · Moved ${counts.MOVED}`;
+const open = document.createElement('button');
+open.type = 'button';
+open.className = 'btn-icon';
+open.setAttribute('data-overview-open-changes', '');
+open.textContent = 'Open Changes';
+open.addEventListener('click', () => openChapter('changes'));
+changes.append(summary, open);
+}
+}
+
+const CHANGE_DELTAS = [
+['ADDED', 'Added'],
+['CHANGED', 'Changed'],
+['REMOVED', 'Removed'],
+['MOVED', 'Moved'],
+];
+
+function renderChangesChapter() {
+const deltas = document.getElementById('changes-deltas');
+if (!deltas) return;
+
+const nodesById = new Map((ARCH_SPEC.nodes || []).map(node => [node.id, node]));
+const review = ARCH_SPEC.review || {};
+const changed = Array.isArray(review.changedComponents) && review.changedComponents.length
+? review.changedComponents
+: (ARCH_SPEC.nodes || [])
+.filter(node => node.delta && node.delta !== 'UNCHANGED')
+.map(node => ({ id: node.id, label: node.label, delta: node.delta }));
+
+deltas.replaceChildren();
+CHANGE_DELTAS.forEach(([delta, label]) => {
+const components = changed.filter(entry => entry.delta === delta);
+if (components.length === 0) return;
+const group = document.createElement('section');
+group.className = 'change-group';
+group.setAttribute('data-change-delta', delta);
+const heading = document.createElement('h3');
+heading.textContent = label;
+group.appendChild(heading);
+components.forEach(entry => {
+const node = nodesById.get(entry.id) || entry;
+const button = document.createElement('button');
+button.type = 'button';
+button.className = 'change-component';
+button.setAttribute('data-change-component', entry.id);
+const icon = document.createElement('span');
+icon.className = 'change-icon';
+icon.innerHTML = iconMarkup(getNodeIcon(node.type));
+const name = document.createElement('span');
+name.className = 'change-name';
+name.textContent = entry.label || node.label || entry.id;
+const tech = document.createElement('span');
+tech.className = 'change-tech';
+tech.textContent = node.technology || node.type || '';
+button.append(icon, name, tech);
+button.addEventListener('click', () => openInspectorForNode(entry.id));
+group.appendChild(button);
+});
+deltas.appendChild(group);
+});
+if (!deltas.childElementCount) {
+const empty = document.createElement('div');
+empty.className = 'rail-muted';
+empty.textContent = 'No changed components.';
+deltas.appendChild(empty);
+}
+
+const blastTarget = document.getElementById('changes-blast');
+if (blastTarget) {
+blastTarget.replaceChildren();
+const blast = Array.isArray(review.blastRadius) ? review.blastRadius : [];
+if (blast.length === 0) {
+const empty = document.createElement('div');
+empty.className = 'rail-muted';
+empty.textContent = 'No blast radius recorded.';
+blastTarget.appendChild(empty);
+} else {
+blast.forEach(entry => {
+const node = nodesById.get(entry.nodeId) || {};
+const upstream = entry.upstream || [];
+const downstream = entry.downstream || [];
+const details = document.createElement('details');
+details.className = 'blast-item';
+details.setAttribute('data-blast-node', entry.nodeId);
+details.setAttribute('data-blast-up', String(upstream.length));
+details.setAttribute('data-blast-down', String(downstream.length));
+const summary = document.createElement('summary');
+summary.textContent = `${node.label || entry.nodeId} — ${upstream.length} upstream · ${downstream.length} downstream`;
+const names = document.createElement('div');
+names.className = 'blast-names';
+const nameOf = id => nodesById.get(id)?.label || id;
+if (!upstream.length && !downstream.length) {
+names.textContent = 'No upstream or downstream components.';
+} else {
+if (upstream.length) names.append(`Upstream: ${upstream.map(nameOf).join(', ')}`);
+if (upstream.length && downstream.length) names.append(document.createElement('br'));
+if (downstream.length) names.append(`Downstream: ${downstream.map(nameOf).join(', ')}`);
+}
+details.append(summary, names);
+blastTarget.appendChild(details);
+});
+}
+}
+
+const traceTarget = document.getElementById('changes-traceability');
+if (traceTarget) {
+traceTarget.replaceChildren();
+const trace = review.traceability;
+if (!trace || typeof trace !== 'object') {
+const empty = document.createElement('div');
+empty.className = 'rail-muted';
+empty.textContent = 'No traceability recorded.';
+traceTarget.appendChild(empty);
+} else {
+const mapped = Array.isArray(trace.mapped) ? trace.mapped : [];
+const changedIds = Array.isArray(trace.changed) ? trace.changed : [];
+const gaps = Array.isArray(trace.gaps) ? trace.gaps : [];
+const line = document.createElement('div');
+line.className = 'trace-line';
+line.setAttribute('data-trace-summary', '');
+line.textContent = `${mapped.length} of ${changedIds.length} changed components mapped`;
+traceTarget.appendChild(line);
+if (gaps.length === 0) {
+const none = document.createElement('div');
+none.className = 'trace-line';
+none.textContent = 'No gaps';
+traceTarget.appendChild(none);
+} else {
+gaps.forEach(id => {
+const gap = document.createElement('div');
+gap.className = 'trace-line trace-gap';
+gap.setAttribute('data-trace-gap', id);
+gap.textContent = nodesById.get(id)?.label || id;
+traceTarget.appendChild(gap);
+});
+}
+}
+}
 }
 
 function renderReviewChapter() {
