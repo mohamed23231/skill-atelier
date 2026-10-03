@@ -440,6 +440,107 @@ const cases = [
       });
     },
   ],
+  [
+    'example 3 embeds and marks a generated narrative for every stage and interaction',
+    () => {
+      const examplePath = path.join(__dirname, '..', 'examples', '3-async-event-driven-workflow', 'architecture.json');
+      const spec = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
+      const result = compileArchitecture(spec);
+      const embedded = readEmbeddedSpec(result.html);
+
+      assert.ok(Array.isArray(embedded.scenarios) && embedded.scenarios.length > 0);
+      const stages = [];
+      const visit = (stage) => {
+        stages.push(stage);
+        (stage.branches || []).forEach((branch) => (branch.stages || []).forEach(visit));
+      };
+      embedded.scenarios.forEach((scenario) => (scenario.stages || []).forEach(visit));
+
+      assert.ok(stages.length > 0);
+      stages.forEach((stage) => {
+        assert.strictEqual(typeof stage.narrative, 'string', `stage ${stage.id} must carry a narrative`);
+        assert.ok(stage.narrative.length > 0, `stage ${stage.id} narrative must not be empty`);
+        (stage.interactions || []).forEach((interaction) => {
+          assert.strictEqual(typeof interaction.narrative, 'string', `interaction ${interaction.id} must carry a narrative`);
+          assert.ok(interaction.narrative.length > 0, `interaction ${interaction.id} narrative must not be empty`);
+        });
+      });
+      assert.ok(stages.every((stage) => stage.narrativeGenerated === true), 'generated stages must be flagged');
+    },
+  ],
+
+  [
+    'keeps an authored narrative and never flags it',
+    () => {
+      const spec = clone(VALID_SPEC);
+      spec.schemaVersion = 2;
+      spec.scenarios = [
+        {
+          id: 'authored',
+          name: 'Authored',
+          stages: [
+            {
+              id: 's1',
+              name: 'Authored stage',
+              kind: 'interaction',
+              narrative: 'A hand-written stage.',
+              interactions: [
+                { id: 'i1', from: 'api', to: 'db', label: 'Insert', edgeId: 'e1', narrative: 'A hand-written hop.' },
+              ],
+            },
+          ],
+        },
+      ];
+      const result = compileArchitecture(spec);
+      const stage = readEmbeddedSpec(result.html).scenarios[0].stages[0];
+      assert.strictEqual(stage.narrative, 'A hand-written stage.');
+      assert.strictEqual(stage.narrativeGenerated, undefined);
+      assert.strictEqual(stage.interactions[0].narrative, 'A hand-written hop.');
+      assert.strictEqual(stage.interactions[0].narrativeGenerated, undefined);
+    },
+  ],
+
+  [
+    'markdown report tells each scenario as numbered steps and marks generated sentences',
+    () => {
+      const examplePath = path.join(__dirname, '..', 'examples', '3-async-event-driven-workflow', 'architecture.json');
+      const spec = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
+      const result = compileArchitecture(spec);
+
+      assert.ok(result.markdown.includes('## Scenarios'));
+      assert.ok(result.markdown.includes('### Order Fulfillment Saga with Parallel Execution & DLQ Compensation'));
+      assert.ok(result.markdown.includes(' _(generated)_'));
+      assert.ok(/1\. \*\*[^*]+\*\*: /.test(result.markdown), 'top-level stages are a numbered list');
+      assert.ok(result.markdown.includes('   - **Dispatch Successful**'), 'branch outcomes are nested bullets');
+    },
+  ],
 ];
+
+function readEmbeddedSpec(html) {
+  const marker = 'const ARCH_SPEC = ';
+  const markerIndex = html.indexOf(marker);
+  assert.ok(markerIndex !== -1, 'embedded ARCH_SPEC must be present');
+  const start = html.indexOf('{', markerIndex);
+  assert.ok(start !== -1, 'embedded ARCH_SPEC must be JSON');
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < html.length; i++) {
+    const ch = html[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return JSON.parse(html.slice(start, i + 1));
+    }
+  }
+  throw new Error('Unterminated embedded ARCH_SPEC');
+}
 
 module.exports = { name: 'Compiler & Exporter', cases };

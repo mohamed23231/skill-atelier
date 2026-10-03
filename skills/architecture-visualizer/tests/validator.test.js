@@ -909,6 +909,49 @@ const cases = [
       assert.ok(res.errors.some((e) => e.includes('invalid "to" node "ghost"')), res.errors.join('\n'));
     },
   ],
+  [
+    'notices a scenario without any authored narrative instead of warning about it',
+    () => {
+      const spec = clone(VALID_SPEC);
+      spec.schemaVersion = 2;
+      spec.scenarios = [
+        {
+          id: 'flat',
+          name: 'Flat',
+          stages: [
+            { id: 's1', kind: 'interaction', interactions: [{ id: 'i1', from: 'api', to: 'db', label: 'Write', edgeId: 'e1' }] },
+          ],
+        },
+      ];
+      const res = validateArchitecture(spec);
+      assert.ok(res.notices.some((n) => n.includes('Scenario "flat"') && n.includes('no authored narrative')));
+      assert.ok(!res.warnings.some((w) => w.includes('no authored narrative')), 'this must not be a warning');
+      assert.deepStrictEqual(res.errors, []);
+    },
+  ],
+  [
+    'does not notice a scenario that has an authored narrative',
+    () => {
+      const spec = clone(VALID_SPEC);
+      spec.schemaVersion = 2;
+      spec.scenarios = [
+        {
+          id: 'authored',
+          name: 'Authored',
+          stages: [
+            {
+              id: 's1',
+              kind: 'interaction',
+              interactions: [{ id: 'i1', from: 'api', to: 'db', label: 'Write', edgeId: 'e1', narrative: 'Hand written.' }],
+            },
+          ],
+        },
+      ];
+      const res = validateArchitecture(spec);
+      assert.ok(!res.notices.some((n) => n.includes('no authored narrative')));
+      assert.ok(!res.warnings.some((w) => w.includes('no authored narrative')));
+    },
+  ],
 ];
 
 module.exports = { name: 'Validator', cases };

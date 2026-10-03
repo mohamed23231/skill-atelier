@@ -6,6 +6,7 @@ const { spawn } = require('node:child_process');
 const { compileArchitecture, validateArchitecture, exportToMermaid, RepoInspector } = require('../src/index.js');
 const { STARTER_SPEC } = require('../src/utils/starter-spec.js');
 const { scaffoldFromDiff } = require('../src/utils/diff-scaffold.js');
+const { currentCommit, applyFreshness, getLocatorPath } = require('../src/utils/freshness.js');
 
 const HELP = `
 architecture-visualizer (arch-viz) CLI
@@ -40,6 +41,8 @@ Options for 'validate':
   --strict                 Exit non-zero on quality warnings, not just errors
   --repo-root <dir>        Root used to resolve VERIFIED file paths (default: cwd)
   --json                   Emit the raw validation result as JSON
+  --stamp                  Record the current commit as meta.groundedAt after clean validation
+  --fresh                  Check evidence freshness against meta.groundedAt
 
 Options for 'mermaid':
   --view <flowchart|sequence|er>   Which diagram to print (default: flowchart)
@@ -80,6 +83,10 @@ function parseOptions(args) {
       opts.strict = true;
     } else if (arg === '--json') {
       opts.json = true;
+    } else if (arg === '--stamp') {
+      opts.stamp = true;
+    } else if (arg === '--fresh') {
+      opts.fresh = true;
     } else if (arg === '--no-open') {
       opts.noOpen = true;
     } else if (arg.startsWith('-')) {
@@ -141,8 +148,90 @@ function printGate(gate) {
 
 function commandValidate(args) {
   const opts = parseOptions(args);
-  const spec = readSpec(opts._[0]);
-  const result = validateArchitecture(spec, { repoRoot: opts.repoRoot ? path.resolve(opts.repoRoot) : process.cwd() });
+  const specPath = opts._[0];
+  const spec = readSpec(specPath);
+  const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : process.cwd();
+
+  if (opts.stamp) {
+    if (spec.meta?.grounding === 'illustrative') {
+      console.log('Not stamped: illustrative specs are not checked against a repository.');
+      process.exit(0);
+    }
+
+    const result = validateArchitecture(spec, { repoRoot });
+    if (result.errors.length > 0) {
+      console.log('\n--- Architecture Quality Gate Report ---');
+      console.log(`\nErrors (${result.errors.length}):`);
+      result.errors.forEach((e) => console.log(`  ❌ ${e}`));
+      console.log('\nResult: FAILED ❌\n');
+      process.exit(1);
+    }
+
+    let sha;
+    try {
+      sha = currentCommit(repoRoot);
+    } catch (err) {
+      fail(err.message);
+    }
+
+    const resolvedPath = path.resolve(specPath);
+    let raw;
+    try {
+      raw = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+    } catch {
+      raw = spec;
+    }
+    raw.meta = raw.meta || {};
+    raw.meta.groundedAt = sha;
+    fs.writeFileSync(resolvedPath, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
+
+    const sha7 = sha.slice(0, 7);
+    console.log(`Stamped groundedAt ${sha7}.`);
+    process.exit(0);
+  }
+
+  if (opts.fresh) {
+    if (spec.meta?.grounding === 'illustrative') {
+      console.log('Not checked: illustrative specs are not checked against a repository.');
+      process.exit(0);
+    }
+
+    if (!spec.meta || !spec.meta.groundedAt) {
+      console.error('Not stamped; run validate --stamp first.');
+      process.exit(1);
+    }
+
+    let freshness;
+    try {
+      freshness = applyFreshness(spec, repoRoot);
+    } catch (err) {
+      fail(err.message);
+    }
+
+    if (freshness.errors && freshness.errors.length > 0) {
+      freshness.errors.forEach((e) => console.error(`Error: ${e}`));
+      process.exit(1);
+    }
+
+    const sha7 = String(spec.meta.groundedAt).slice(0, 7);
+
+    if (freshness.stale.length > 0) {
+      const staleSet = new Set(freshness.stale);
+      const evidence = Array.isArray(spec.evidence) ? spec.evidence : [];
+      evidence.forEach((rec) => {
+        if (staleSet.has(rec.id)) {
+          const locPath = getLocatorPath(rec) || '';
+          console.error(`stale: ${rec.id} ${locPath} changed since ${sha7}`);
+        }
+      });
+      process.exit(1);
+    }
+
+    console.log(`Fresh against ${sha7}.`);
+    process.exit(0);
+  }
+
+  const result = validateArchitecture(spec, { repoRoot });
 
   const failed = !result.valid || (opts.strict && result.warnings.length > 0);
 

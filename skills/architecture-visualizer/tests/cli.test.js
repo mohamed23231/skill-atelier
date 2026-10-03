@@ -152,8 +152,107 @@ const cases = [
     assert.strictEqual(run(['build', EXAMPLE, '-o', html, '--direction', 'TB', '--no-open']).code, 0);
     assert.ok(fs.readFileSync(html, 'utf8').includes('"direction":"TB"'));
     fs.rmSync(dir, { recursive: true, force: true });
+  }],
+
+  ['validate --fresh exits 0 before a cited file changes and 1 with the stale line after', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-fresh-cli-'));
+    const git = (args) => execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'ignore'] });
+    git(['init', '-q']);
+    git(['config', 'user.email', 'test@example.com']);
+    git(['config', 'user.name', 'Test']);
+    fs.writeFileSync(path.join(dir, 'README.md'), '# test\n');
+    git(['add', '-A']);
+    git(['commit', '-qm', 'initial']);
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+    const sha7 = sha.slice(0, 7);
+
+    const spec = {
+      meta: { title: 'Fresh CLI', description: 'd', groundedAt: sha },
+      boundaries: [{ id: 'b', label: 'B' }],
+      nodes: [{ id: 'n', label: 'N', boundary: 'b', status: 'VERIFIED' }],
+      edges: [],
+      evidence: [{ id: 'ev_readme', type: 'file', locator: { path: 'README.md' }, verification: 'verified' }],
+    };
+    const specPath = path.join(dir, 'spec.json');
+    fs.writeFileSync(specPath, JSON.stringify(spec, null, 2), 'utf8');
+
+    const freshBefore = run(['validate', specPath, '--fresh', '--repo-root', dir]);
+    assert.strictEqual(freshBefore.code, 0);
+    assert.ok(freshBefore.stdout.includes(`Fresh against ${sha7}.`));
+
+    fs.appendFileSync(path.join(dir, 'README.md'), 'changed\n');
+
+    const freshAfter = run(['validate', specPath, '--fresh', '--repo-root', dir]);
+    assert.strictEqual(freshAfter.code, 1);
+    assert.ok(freshAfter.stdout.includes(`stale: ev_readme README.md changed since ${sha7}`));
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  }],
+
+  ['validate --stamp updates the file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-stamp-cli-'));
+    const git = (args) => execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'ignore'] });
+    git(['init', '-q']);
+    git(['config', 'user.email', 'test@example.com']);
+    git(['config', 'user.name', 'Test']);
+    fs.writeFileSync(path.join(dir, 'README.md'), '# test\n');
+    git(['add', '-A']);
+    git(['commit', '-qm', 'initial']);
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+    const sha7 = sha.slice(0, 7);
+
+    const spec = {
+      meta: { title: 'Stamp CLI', description: 'd' },
+      boundaries: [{ id: 'b', label: 'B' }],
+      nodes: [{ id: 'n', label: 'N', boundary: 'b', status: 'VERIFIED' }],
+      edges: [],
+      evidence: [{ id: 'ev_readme', type: 'file', locator: { path: 'README.md' }, verification: 'verified' }],
+    };
+    const specPath = path.join(dir, 'spec.json');
+    fs.writeFileSync(specPath, JSON.stringify(spec, null, 2), 'utf8');
+
+    const stamped = run(['validate', specPath, '--stamp', '--repo-root', dir]);
+    assert.strictEqual(stamped.code, 0);
+    assert.ok(stamped.stdout.includes(`Stamped groundedAt ${sha7}.`));
+
+    const updated = JSON.parse(fs.readFileSync(specPath, 'utf8'));
+    assert.strictEqual(updated.meta.groundedAt, sha);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  }],
+
+  ['build embeds verification:stale for the changed record', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-build-stale-'));
+    const git = (args) => execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'ignore'] });
+    git(['init', '-q']);
+    git(['config', 'user.email', 'test@example.com']);
+    git(['config', 'user.name', 'Test']);
+    fs.writeFileSync(path.join(dir, 'README.md'), '# test\n');
+    git(['add', '-A']);
+    git(['commit', '-qm', 'initial']);
+    const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
+
+    const spec = {
+      meta: { title: 'Build Stale CLI', description: 'd', groundedAt: sha },
+      boundaries: [{ id: 'b', label: 'B' }],
+      nodes: [{ id: 'n', label: 'N', boundary: 'b', status: 'VERIFIED' }],
+      edges: [],
+      evidence: [{ id: 'ev_readme', type: 'file', locator: { path: 'README.md' }, verification: 'verified' }],
+    };
+    const specPath = path.join(dir, 'spec.json');
+    fs.writeFileSync(specPath, JSON.stringify(spec, null, 2), 'utf8');
+
+    fs.appendFileSync(path.join(dir, 'README.md'), 'changed\n');
+
+    const htmlPath = path.join(dir, 'out.html');
+    const buildRes = run(['build', specPath, '-o', htmlPath, '--repo-root', dir, '--no-open']);
+    assert.strictEqual(buildRes.code, 0);
+
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    assert.ok(html.includes('"verification":"stale"'));
+
+    fs.rmSync(dir, { recursive: true, force: true });
   }]
 ];
-
 
 module.exports = { name: 'CLI', cases };

@@ -1,4 +1,5 @@
 const { RepoInspector, resolveRepoPath, EVIDENCE_TYPE, EVIDENCE_VERIFICATION, EVIDENCE_ORIGIN } = require('../utils/repo-inspector.js');
+const { isCommit } = require('../utils/freshness.js');
 
 const VALID_NODE_TYPES = new Set(['actor', 'frontend', 'mobile', 'api_gateway', 'service', 'worker', 'database', 'cache', 'queue', 'topic', 'storage', 'external', 'cloud_function', 'boundary_group']);
 
@@ -218,7 +219,11 @@ function resolveModelEvidence(model, options) {
       return cloned;
     }
     const inspected = inspector.inspectEvidence(cloned);
-    cloned.verification = inspected.verification;
+    if (cloned.verification === EVIDENCE_VERIFICATION.STALE && inspected.verification !== EVIDENCE_VERIFICATION.UNRESOLVED) {
+      cloned.verification = EVIDENCE_VERIFICATION.STALE;
+    } else {
+      cloned.verification = inspected.verification;
+    }
     if (Object.prototype.hasOwnProperty.call(inspected, 'exists')) {
       cloned.exists = inspected.exists;
     }
@@ -450,6 +455,21 @@ function walkStages(stages, visit) {
       (stage.branches || []).forEach((branch) => walkStages(branch.stages, visit));
     }
   });
+}
+
+function hasAuthoredNarrative(item) {
+  return Boolean(item) && typeof item.narrative === 'string' && item.narrative.trim() !== '';
+}
+
+function scenarioHasAuthoredNarrative(scenario) {
+  let found = false;
+  walkStages(scenario.stages, (stage) => {
+    if (hasAuthoredNarrative(stage)) found = true;
+    (stage.interactions || []).forEach((interaction) => {
+      if (hasAuthoredNarrative(interaction)) found = true;
+    });
+  });
+  return found;
 }
 
 function validateScenarios(model, nodeIds, edgeKeySet, errors, warnings) {
@@ -800,6 +820,7 @@ function normalizeArchitecture(spec) {
 function validateArchitecture(spec, options = {}) {
   const errors = [];
   const warnings = [];
+  const notices = [];
   const repoRoot = options.repoRoot || process.cwd();
 
   if (!spec || typeof spec !== 'object') {
@@ -807,6 +828,7 @@ function validateArchitecture(spec, options = {}) {
       valid: false,
       errors: ['Specification must be a non-null object'],
       warnings: [],
+      notices: [],
       stats: {},
       gate: [],
       model: null,
@@ -834,6 +856,11 @@ function validateArchitecture(spec, options = {}) {
     }
     if (!spec.meta.description || typeof spec.meta.description !== 'string') {
       warnings.push('spec.meta.description is missing or empty.');
+    }
+    if (spec.meta.groundedAt && !illustrative) {
+      if (!isCommit(repoRoot, spec.meta.groundedAt)) {
+        errors.push(`meta.groundedAt ${spec.meta.groundedAt} is not a commit in this repository.`);
+      }
     }
   }
 
@@ -1044,6 +1071,12 @@ function validateArchitecture(spec, options = {}) {
 
   validateScenarios(model, nodeIds, edgeKeySet, errors, warnings);
 
+  (model.scenarios || []).forEach((scenario) => {
+    if (!scenarioHasAuthoredNarrative(scenario)) {
+      notices.push(`Scenario "${scenario.id}" has no authored narrative; generated sentences will be shown.`);
+    }
+  });
+
   // 6. Database ER view
   if (spec.views && spec.views.database_er) {
     const er = spec.views.database_er;
@@ -1145,6 +1178,7 @@ function validateArchitecture(spec, options = {}) {
     valid,
     errors,
     warnings,
+    notices,
     stats,
     gate,
     model,

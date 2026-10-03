@@ -1,10 +1,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { validateArchitecture } = require('./validator.js');
+const { narrateInteraction, narrateStage } = require('./narrative.js');
 const { computeLayout } = require('./layout.js');
 const { exportToMermaid } = require('../utils/mermaid-exporter.js');
 const { displayRepoPath } = require('../utils/repo-inspector.js');
 const { loadTemplate } = require('../workbench/assemble.js');
+const { currentCommit, applyFreshness } = require('../utils/freshness.js');
 
 const FILE_LOCATOR_KEYS = ['path', 'file', 'document'];
 
@@ -37,9 +39,22 @@ function publishablePaths(source, repoRoot) {
  * Compiles an architecture spec into a self-contained interactive HTML file
  * and a companion Markdown architecture document.
  */
-function compileArchitecture(spec, options = {}) {
+function compileArchitecture(inputSpec, options = {}) {
+  const repoRoot = options.repoRoot ? path.resolve(options.repoRoot) : process.cwd();
+  const spec = JSON.parse(JSON.stringify(inputSpec || {}));
+
+  // Only a repository-grounded spec is tied to a commit; an illustrative one stays reproducible.
+  if (spec && spec.meta && typeof spec.meta === 'object' && spec.meta.grounding !== 'illustrative') {
+    try {
+      spec.meta.builtFrom = currentCommit(repoRoot);
+      applyFreshness(spec, repoRoot);
+    } catch {
+      // Not a git repository: nothing to stamp, and the validator reports an unusable groundedAt.
+    }
+  }
+
   const validation = validateArchitecture(spec, {
-    repoRoot: options.repoRoot,
+    repoRoot,
     verifyFiles: options.verifyFiles,
   });
 
@@ -55,7 +70,6 @@ function compileArchitecture(spec, options = {}) {
     throw new Error(`Architecture validation failed:\n- ${validation.errors.join('\n- ')}`);
   }
 
-  const repoRoot = options.repoRoot || process.cwd();
   const publishedSpec = publishablePaths(spec, repoRoot);
   const publishedValidation = {
     ...validation,
@@ -64,11 +78,12 @@ function compileArchitecture(spec, options = {}) {
       ? { ...validation.review, evidenceManifest: publishablePaths({ evidence: validation.review.evidenceManifest || [] }, repoRoot).evidence }
       : validation.review,
   };
+  const embeddedSpec = embedGeneratedNarratives(publishedValidation.model || publishedSpec);
   const layout = computeLayout(publishedSpec, options.layoutOverrides);
   const mermaid = exportToMermaid(publishedSpec, { direction: layout.config.direction });
-  const markdown = generateMarkdownReport(publishedSpec, publishedValidation, mermaid);
+  const markdown = generateMarkdownReport(embeddedSpec, publishedValidation, mermaid);
   const payload = {
-    ...(publishedValidation.model || publishedSpec),
+    ...embeddedSpec,
     findings: validation.findings || [],
     review: publishedValidation.review || null,
   };
@@ -162,6 +177,41 @@ function normalizeFailureMode(entry) {
     impact: entry.impact || '',
     mitigation: entry.mitigation || '',
   };
+}
+
+function hasAuthoredNarrative(item) {
+  return Boolean(item) && typeof item.narrative === 'string' && item.narrative.trim() !== '';
+}
+
+function nodeLabelResolver(spec) {
+  const labels = new Map(
+    (spec.nodes || []).filter((node) => node && node.id).map((node) => [node.id, node.label || node.id])
+  );
+  return (id) => (labels.has(id) ? labels.get(id) : id);
+}
+
+/**
+ * Fills in a generated sentence for every stage and interaction that has no
+ * authored narrative, marking each generated value so the report can say so.
+ * Authored narratives are never touched.
+ */
+function embedGeneratedNarratives(model) {
+  const nodeLabel = nodeLabelResolver(model);
+  const visitStage = (stage) => {
+    if (!stage || typeof stage !== 'object') return;
+    if (!hasAuthoredNarrative(stage)) {
+      stage.narrative = narrateStage(stage, nodeLabel);
+      stage.narrativeGenerated = true;
+    }
+    (stage.interactions || []).forEach((interaction) => {
+      if (hasAuthoredNarrative(interaction)) return;
+      interaction.narrative = narrateInteraction(interaction, nodeLabel);
+      interaction.narrativeGenerated = true;
+    });
+    (stage.branches || []).forEach((branch) => (branch.stages || []).forEach(visitStage));
+  };
+  (model.scenarios || []).forEach((scenario) => (scenario.stages || []).forEach(visitStage));
+  return model;
 }
 
 function generateMarkdownReport(spec, validation, mermaid) {
@@ -295,6 +345,7 @@ function generateMarkdownReport(spec, validation, mermaid) {
   lines.push('');
 
   appendReviewMarkdown(lines, validation);
+  appendScenariosMarkdown(lines, spec);
 
   return lines.join('\n');
 }
@@ -404,6 +455,46 @@ function appendReviewMarkdown(lines, validation) {
     lines.push(`- Gaps: ${formatIdList(trace.gaps)}`);
     lines.push('');
   }
+}
+
+function narrativeWithMarker(item) {
+  if (!item || typeof item !== 'object') return '';
+  const narrative = typeof item.narrative === 'string' ? item.narrative : '';
+  return item.narrativeGenerated ? `${narrative} _(generated)_` : narrative;
+}
+
+function appendScenariosMarkdown(lines, spec) {
+  const scenarios = Array.isArray(spec.scenarios) ? spec.scenarios : [];
+  if (scenarios.length === 0) return;
+
+  lines.push('## Scenarios');
+  lines.push('');
+
+  scenarios.forEach((scenario) => {
+    lines.push(`### ${scenario.name || scenario.id}`);
+    if (scenario.description) {
+      lines.push('');
+      lines.push(scenario.description);
+    }
+    lines.push('');
+
+    const stages = Array.isArray(scenario.stages) ? scenario.stages : [];
+    stages.forEach((stage, index) => {
+      const stageName = stage.name || stage.id || `Step ${index + 1}`;
+      lines.push(`${index + 1}. **${stageName}**: ${narrativeWithMarker(stage)}`);
+      if (stage.kind === 'branch') {
+        (stage.branches || []).forEach((branch) => {
+          const condition = branch.condition ? ` (${branch.condition})` : '';
+          lines.push(`   - **${branch.name || 'Outcome'}**${condition}`);
+          (branch.stages || []).forEach((child) => {
+            lines.push(`     - ${child.name || child.id || 'Step'}: ${narrativeWithMarker(child)}`);
+          });
+        });
+      }
+    });
+
+    lines.push('');
+  });
 }
 
 function escapeHtml(str) {

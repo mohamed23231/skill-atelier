@@ -117,7 +117,7 @@ For lifecycle gates and verification truth, see [`references/review-and-release.
 ```bash
 arch-viz inspect [dir]                                                                      # Detect framework, DB, and queue signatures
 arch-viz scaffold [-o spec.json] [--base <ref>] [--repo-root .] [--ignore <prefix>]        # Draft a spec from git diffs and import dependencies
-arch-viz validate <spec.json> [--strict] [--repo-root .] [--json]                          # Run 14-point quality gate and policy checks
+arch-viz validate <spec.json> [--strict] [--repo-root .] [--json] [--stamp] [--fresh]      # Run 14-point quality gate and policy checks
 arch-viz build <spec.json> [-o out.html] [--md out.md] [--strict] [--direction LR|TB]     # Build standalone HTML workbench and Markdown report
 arch-viz mermaid <spec.json> [--view flowchart|sequence|er]                                # Export to Mermaid diagram syntax
 arch-viz init [output.json]                                                                # Scaffold clean starter specification
@@ -125,6 +125,8 @@ arch-viz init [output.json]                                                     
 
 - `--strict`: Treats quality gate and policy warnings as non-zero build failures (recommended for CI pipelines).
 - `--repo-root <dir>`: Sets the base path where `VERIFIED` files and evidence locators are resolved on disk.
+- `--stamp`: Records the current commit as `meta.groundedAt` after clean validation.
+- `--fresh`: Verifies evidence freshness against `meta.groundedAt` and exits non-zero on drift.
 - `--no-open` or `ARCH_VIZ_NO_OPEN=1`: Prevents automatic browser launch after building.
 
 ---
