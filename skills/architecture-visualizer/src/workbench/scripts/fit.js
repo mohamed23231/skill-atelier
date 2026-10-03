@@ -88,7 +88,10 @@ function fitToScreen() {
   const rect = svg.getBoundingClientRect();
   const overlays = canvasOverlayRects();
   const nodes = (LAYOUT_DATA.nodes || []).filter(node => !isNodeHidden(node));
-  const marks = nodes.concat((LAYOUT_DATA.edges || []).filter(edge => edge.labelBounds)
+  // Lane titles sit in the gutter at each boundary's top-left; they must stay readable too.
+  const titles = (LAYOUT_DATA.boundaries || []).map(boundary => ({ x: boundary.x, y: boundary.y,
+    width: Math.min(160, boundary.width), height: Math.min(52, boundary.height) }));
+  const marks = nodes.concat(titles, (LAYOUT_DATA.edges || []).filter(edge => edge.labelBounds)
     .map(edge => ({ x: edge.labelBounds.left, y: edge.labelBounds.top,
       width: edge.labelBounds.width, height: edge.labelBounds.height })));
   const initialZoom = Math.min((rect.width - 32) / Math.max(1, bounds.width),

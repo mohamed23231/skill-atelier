@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { routeOrthogonal, computeJumps } = require('../src/engine/orthogonal.js');
 const { computeLayout: computeDefaultLayout } = require('../src/engine/layout.js');
-const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { direction: 'LR', ...config });
+const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { layout: 'columns', direction: 'LR', ...config });
 const fixtures = require('./fixtures.js');
 
 const node = (id, x, y, rank = 0) => ({ id, x, y, width: 100, height: 60, rank });
@@ -91,7 +91,8 @@ function verify(layout, result, margin = layout.config ? 12 : 14, rounded = true
         for (const [c, d] of segments(other)) {
           if (c.x !== d.x) continue;
           if (c.x > Math.min(a.x, b.x) && c.x < Math.max(a.x, b.x) && a.y > Math.min(c.y, d.y) && a.y < Math.max(c.y, d.y)) {
-            assert(route.jumps.some(jump => jump.x === c.x && jump.y === a.y && jump.segment === i), 'Crossing lacks a jump');
+            // The horizontal route carries the bridge, unless the crossing sits at its end: then the vertical one does.
+            assert(route.jumps.some(jump => jump.x === c.x && jump.y === a.y && jump.segment === i) || other.jumps.some(jump => jump.x === c.x && jump.y === a.y), 'Crossing lacks a jump');
           }
         }
       }
@@ -440,6 +441,72 @@ cases.push(['browser drag reroutes all edges with the same geometry as Node', ()
     assert.equal(JSON.stringify(e.polyline), JSON.stringify(expected.polyline));
     assert.equal(JSON.stringify(e.labelBounds), JSON.stringify(expected.labelBounds));
   });
+}]);
+
+cases.push(['browser lane drag uses the same routes and labels as Node', () => {
+  const layout = computeDefaultLayout(fixtures.clone(fixtures.ADVERSARIAL_DENSE_PORTS_SPEC));
+  const ctx = { LAYOUT_DATA: layout, nodeById: new Map(layout.nodes.map(n => [n.id, n])),
+    document: { getElementById: () => null } };
+  vm.createContext(ctx);
+  for (const file of ['engine/geometry.js', 'engine/orthogonal.js', 'workbench/scripts/drag.js']) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), ctx);
+  }
+  ctx.estimateLabelWidth = ctx.ArchVizGeometry.estimateLabelWidth;
+  const before = layout.edges.map(e => e.path);
+  layout.nodes.find(n => n.id === 'hub').x += 35;
+  ctx.recalculateNodeEdges('hub');
+  assert.equal(layout.routingStats.cardCrossings, 0);
+  assert(layout.edges.some((e, i) => e.path !== before[i]));
+  const widths = Object.fromEntries(layout.edges.map(e => [e.id, e.labelWidth]));
+  const result = routeOrthogonal(layout, { direction: 'TB', labelWidths: widths });
+  const { buildRouteGeometry } = require('../src/engine/orthogonal.js');
+  const geometry = require('../src/engine/geometry.js');
+  layout.edges.forEach(e => {
+    const expected = buildRouteGeometry(result.routes[e.id], widths[e.id], geometry,
+      { source: ctx.nodeById.get(e.source), target: ctx.nodeById.get(e.target) });
+    assert.equal(e.path, expected.path);
+    assert.equal(JSON.stringify(e.labelBounds), JSON.stringify(expected.labelBounds));
+  });
+}]);
+
+cases.push(['lane routes clear every card and gutter, pack every label, and stay deterministic', () => {
+  const specs = Object.entries(fixtures).filter(([key]) => key.startsWith('ADVERSARIAL_'));
+  for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
+    specs.push([name, JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8'))]);
+  }
+  for (const [name, spec] of specs) {
+    const layout = computeDefaultLayout(spec);
+    const widths = Object.fromEntries(layout.edges.map(e => [e.id, e.labelWidth]));
+    const result = routeOrthogonal(layout, { direction: 'TB', labelWidths: widths });
+    assert.deepStrictEqual(result, routeOrthogonal(layout, { direction: 'TB', labelWidths: widths }));
+    assert.equal(result.stats.cardCrossings, 0, name);
+    const labels = [];
+    for (const edge of layout.edges) {
+      const route = result.routes[edge.id];
+      for (const [a, b] of segments(route)) {
+        assert(a.x === b.x || a.y === b.y, name);
+        layout.nodes.forEach(n => assert(!crosses(a, b, cardBox(n)), `${name}/${edge.id}/${n.id}`));
+        layout.boundaries.forEach(lane => assert(!crosses(a, b, { left: lane.x, right: lane.x + lane.gutterWidth,
+          top: lane.y, bottom: lane.y + lane.height }), `${name}/${edge.id}/gutter`));
+      }
+      if (edge.labelWidth > 0) {
+        assert(edge.labelSlot, `${name}/${edge.id} label`);
+        layout.nodes.forEach(n => assert(!overlaps(edge.labelBounds, cardBox(n)), `${name}/${edge.id} label/card`));
+        labels.forEach(box => assert(!overlaps(edge.labelBounds, box), `${name}/${edge.id} label/label`));
+        layout.boundaryHeaderBoxes.forEach(b => assert(!overlaps(edge.labelBounds,
+          { left: b.x, right: b.x + b.width, top: b.y, bottom: b.y + b.height })));
+        labels.push(edge.labelBounds);
+      }
+    }
+    const jumps = Object.values(result.routes).reduce((sum, route) => sum + route.jumps.length, 0);
+    assert.equal(jumps, result.stats.crossings);
+    if (name.startsWith('3-')) {
+      const short = layout.edges.filter(e => e.polyline.length <= 4).length;
+      const straight = layout.edges.filter(e => e.polyline.length === 2).length;
+      assert(short / layout.edges.length >= 0.6, `${short}/${layout.edges.length} short`);
+      assert(straight >= 4, `${straight} straight`);
+    }
+  }
 }]);
 
 module.exports = { name: 'Orthogonal router', cases };

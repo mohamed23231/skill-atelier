@@ -20,6 +20,39 @@
     return a.x > box.left && a.x < box.right && Math.min(a.y, b.y) < box.bottom && Math.max(a.y, b.y) > box.top;
   }
 
+  // An arrowhead takes its angle from the last segment, so a route must leave and enter a card
+  // with a straight stub at least minStub long. When the stub is shorter, slide the parallel run
+  // before it away from the card (moving both of its ends keeps it axis-aligned), unless that
+  // would cut through another card.
+  function ensureStubs(points, boxes, edge, minStub) {
+    const clear = (pts, from, to) => {
+      for (let i = from; i < to; i++) {
+        for (const box of boxes) {
+          if ((i === 0 && box.id === edge.source) || (i === pts.length - 2 && box.id === edge.target)) continue;
+          if (intersects(pts[i], pts[i + 1], box)) return false;
+        }
+      }
+      return true;
+    };
+    const fixEnd = (pts) => {
+      const n = pts.length;
+      if (n < 4) return pts;
+      const a = pts[n - 2];
+      const b = pts[n - 1];
+      const len = distance(a, b);
+      if (len >= minStub || len === 0) return pts;
+      const dx = Math.sign(b.x - a.x);
+      const dy = Math.sign(b.y - a.y);
+      const shift = minStub - len;
+      const next = pts.map(p => ({ x: p.x, y: p.y }));
+      next[n - 2] = { x: a.x - dx * shift, y: a.y - dy * shift };
+      next[n - 3] = { x: next[n - 3].x - dx * shift, y: next[n - 3].y - dy * shift };
+      return clear(next, Math.max(0, n - 4), n - 1) ? next : pts;
+    };
+    const end = fixEnd(points);
+    return fixEnd(end.slice().reverse()).reverse();
+  }
+
   function simplify(points) {
     const result = [];
     points.forEach(p => {
@@ -79,7 +112,7 @@
     const records = new Map();
     const heap = [];
     const keyFor = (x, y, d, visited) => (((y * nx + x) * 4 + d) * 2 + Number(visited));
-    const first = { x: sx, y: sy, d: 0, visited: rule.right == null, bends: 0, length: 0, prev: null, shortest: rule.backward };
+    const first = { x: sx, y: sy, d: rule.startDirection ?? 0, visited: rule.right == null, bends: 0, length: 0, prev: null, shortest: rule.backward };
     first.key = keyFor(first.x, first.y, first.d, first.visited);
     records.set(first.key, first);
     heapPush(heap, first);
@@ -88,8 +121,8 @@
       const state = heapPop(heap);
       if (records.get(state.key) !== state) continue;
       if (best && (rule.backward ? state.length > best.length : state.bends > best.bends)) break;
-      if (state.x === ex && state.y === ey && state.visited && (state.d % 2 !== 0 || state.d === rule.endDirection)) {
-        const candidate = { ...state, bends: state.bends + Number(state.d % 2 !== 0) };
+      if (state.x === ex && state.y === ey && state.visited && (state.d % 2 !== rule.endDirection % 2 || state.d === rule.endDirection)) {
+        const candidate = { ...state, bends: state.bends + Number(state.d % 2 !== rule.endDirection % 2) };
         if (!best || less(candidate, best)) best = candidate;
         continue;
       }
@@ -98,7 +131,7 @@
         const x = state.x + dx;
         const y = state.y + dy;
         if (x < 0 || x >= nx || y < 0 || y >= ny) continue;
-        if (dy && !channels.has(a.x)) continue;
+        if (dy && !rule.lanes && !channels.has(a.x)) continue;
         if (dx < 0 && rule.forward) continue;
         const b = { x: xs[x], y: ys[y] };
         if (obstacles.some(box => intersects(a, b, box))) continue;
@@ -119,6 +152,9 @@
     return points.reverse();
   }
 
+  // Jump radius + the arrowhead gap the layout trims + clearance.
+  const JUMP_END_ZONE = 24;
+
   function computeJumps(routes) {
     const list = Object.keys(routes).sort().map(id => routes[id]);
     list.forEach(route => { route.jumps = []; });
@@ -135,16 +171,25 @@
             const d = vertical.points[v + 1];
             if (c.x !== d.x || c.y === d.y) continue;
             if (c.x <= Math.min(a.x, b.x) || c.x >= Math.max(a.x, b.x) || a.y <= Math.min(c.y, d.y) || a.y >= Math.max(c.y, d.y)) continue;
+            // A bridge next to a route's end would bend the arrowhead (it takes its angle from the
+            // last few pixels), so near an end the vertical route carries the bridge instead.
+            const at = { x: c.x, y: a.y };
+            const nearEnd = (route) => {
+              const first = route.points[0];
+              const last = route.points[route.points.length - 1];
+              return distance(first, at) < JUMP_END_ZONE || distance(last, at) < JUMP_END_ZONE;
+            };
+            const carrier = nearEnd(horizontal) && !nearEnd(vertical) ? { route: vertical, segment: v } : { route: horizontal, segment: h };
             // Coincident crossings need only one visible bridge.
-            if (!horizontal.jumps.some(jump => jump.segment === h && jump.x === c.x && jump.y === a.y)) {
-              horizontal.jumps.push({ x: c.x, y: a.y, segment: h });
+            if (!carrier.route.jumps.some(jump => jump.segment === carrier.segment && jump.x === at.x && jump.y === at.y)) {
+              carrier.route.jumps.push({ x: at.x, y: at.y, segment: carrier.segment });
               count++;
             }
           }
         });
       }
-      horizontal.jumps.sort((a, b) => a.segment - b.segment || a.x - b.x || a.y - b.y);
     });
+    list.forEach(route => route.jumps.sort((a, b) => a.segment - b.segment || a.x - b.x || a.y - b.y));
     return count;
   }
 
@@ -188,21 +233,22 @@
   }
 
   function routeOrthogonal(input, options = {}) {
+    options = { lanes: input.config?.layout === 'lanes' || (input.boundaries || []).some(b => b.gutterWidth), ...options };
     const headerHeight = input.config?.boundaryHeaderHeight ?? HEADER_HEIGHT;
     const cardMargin = input.config ? Math.min(14, input.config.nodeGapX / 2, input.config.nodeGapY / 2) : 14;
     // Rotate the routing grid for TB, preserving horizontal label dimensions.
-    // Enter cards from below so their boundary headers remain clear.
+    // Columns enter cards from below; lanes reserve only the title gutter.
     if (options.direction === 'TB') {
       const transpose = n => ({ ...n, x: n.y, y: n.x, width: n.height, height: n.width });
       const labelWidths = Object.fromEntries((input.edges || []).map(e => [e.id, 18]));
       const labelHeights = Object.fromEntries((input.edges || []).map(e => [e.id, options.labelWidths?.[e.id] ?? e.labelWidth ?? 80]));
       const margin = options.margin ?? cardMargin;
       const headers = (input.boundaries || []).map(b => ({
-        left: b.y - margin, right: b.y + Math.min(headerHeight, b.height) + margin,
-        top: b.x - margin, bottom: b.x + b.width + margin
+        left: b.y - margin, right: b.y + (options.lanes ? b.height : Math.min(headerHeight, b.height)) + margin,
+        top: b.x - margin, bottom: b.x + (options.lanes ? (b.gutterWidth || 150) : b.width) + margin
       }));
       const result = routeOrthogonal({ ...input, nodes: input.nodes.map(transpose), boundaries: (input.boundaries || []).map(transpose) },
-        { ...options, direction: 'LR', labelWidths, labelHeights, headers, targetFace: 'right', compactExterior: true });
+        { ...options, direction: 'LR', labelWidths, labelHeights, headers, targetFace: options.lanes ? null : 'right', compactExterior: true });
       Object.values(result.routes).forEach(route => {
         route.points = route.points.map(p => ({ x: p.y, y: p.x }));
         if (route.labelSlot) {
@@ -247,7 +293,10 @@
       const kind = source.id === target.id ? 'self' : target.rank > source.rank ? 'forward' : target.rank < source.rank ? 'backward' : 'same-column';
       if (ports.has(edge.id)) throw new Error(`Duplicate edge id ${edge.id}.`);
       ports.set(edge.id, { kind });
-      [['source', source, target, 'right'], ['target', target, source, options.targetFace || (kind === 'self' || kind === 'same-column' ? 'right' : 'left')]].forEach(([end, node, other, face]) => {
+      const local = options.lanes && kind === 'same-column' && source.x === target.x;
+      const sourceFace = local ? (target.y > source.y ? 'bottom' : 'top') : options.lanes && kind === 'backward' ? 'left' : 'right';
+      const targetFace = local ? (target.y > source.y ? 'top' : 'bottom') : options.lanes && kind === 'backward' ? 'right' : options.targetFace || (kind === 'self' || kind === 'same-column' ? 'right' : 'left');
+      [['source', source, target, sourceFace], ['target', target, source, targetFace]].forEach(([end, node, other, face]) => {
         const key = `${node.id}:${face}`;
         if (!faceGroups.has(key)) faceGroups.set(key, []);
         faceGroups.get(key).push({ edge, end, node, other, face });
@@ -255,11 +304,15 @@
     });
     [...faceGroups.keys()].sort().forEach(key => {
       const group = faceGroups.get(key).sort((a, b) => a.other.y + a.other.height / 2 - b.other.y - b.other.height / 2 || byId(a.edge, b.edge) || (a.end < b.end ? -1 : 1));
-      const height = group[0].node.height;
+      const verticalFace = ['top', 'bottom'].includes(group[0].face);
+      const height = verticalFace ? group[0].node.width : group[0].node.height;
       const step = Math.max(8, portSpacing == null ? 0.7 * height / (group.length + 1) : portSpacing);
       if ((group.length - 1) * step >= height) throw new RangeError(`Too many ports on face ${key} for 8px spacing.`);
       group.forEach((entry, i) => {
-        ports.get(entry.edge.id)[entry.end] = { x: entry.node.x + (entry.face === 'right' ? entry.node.width : 0), y: entry.node.y + entry.node.height / 2 + (i - (group.length - 1) / 2) * step, face: entry.face };
+        const offset = (i - (group.length - 1) / 2) * step;
+        ports.get(entry.edge.id)[entry.end] = verticalFace
+          ? { x: entry.node.x + entry.node.width / 2 + offset, y: entry.node.y + (entry.face === 'bottom' ? entry.node.height : 0), face: entry.face }
+          : { x: entry.node.x + (entry.face === 'right' ? entry.node.width : 0), y: entry.node.y + entry.node.height / 2 + offset, face: entry.face };
       });
     });
 
@@ -285,8 +338,9 @@
     const baseYs = obstacles.flatMap(b => [b.top, b.bottom]);
     edges.forEach(edge => {
       const port = ports.get(edge.id);
-      const start = { x: port.source.x + margin, y: port.source.y };
-      const end = { x: port.target.x + (port.target.face === 'left' ? -margin : margin), y: port.target.y };
+      const escape = p => ({ x: p.x + (p.face === 'right' ? margin : p.face === 'left' ? -margin : 0), y: p.y + (p.face === 'bottom' ? margin : p.face === 'top' ? -margin : 0) });
+      const start = escape(port.source);
+      const end = escape(port.target);
       const available = new Map();
       gaps.forEach(gap => {
         const count = gap.segments.length;
@@ -304,12 +358,14 @@
       const involvedHeaders = boundaries.filter(b => involved.some(n => n.boundary === b.id));
       const rule = {
         forward: port.kind === 'forward' && port.target.face === 'left',
+        lanes: options.lanes,
+        startDirection: { right: 0, bottom: 1, left: 2, top: 3 }[port.source.face],
         backward: port.kind === 'backward',
-        endDirection: port.target.face === 'left' ? 0 : 2,
+        endDirection: { left: 0, top: 1, right: 2, bottom: 3 }[port.target.face],
         top: Math.min(...involved.map(n => n.y - margin), ...involvedHeaders.map(b => b.y - margin)),
         bottom: Math.max(...involved.map(n => n.y + n.height + margin), ...involvedHeaders.map(b => b.y + Math.min(headerHeight, b.height) + margin))
       };
-      if (port.kind === 'self' || port.kind === 'same-column') {
+      if (port.kind === 'self' || (port.kind === 'same-column' && !options.lanes)) {
         rule.right = Math.max(...nodes.filter(n => n.rank === source.rank).map(n => n.x + n.width + margin)) + trackSpacing / 2;
       }
       if (rule.backward) ys.push(rule.top, rule.bottom);
@@ -322,7 +378,7 @@
       for (let i = 0; i + 1 < points.length; i++) {
         if (points[i].x === points[i + 1].x) {
           const gap = available.get(points[i].x);
-          gap.segments.push({ route, index: i, id: edge.id, entry: points[i].y, exit: points[i + 1].y });
+          if (gap) gap.segments.push({ route, index: i, id: edge.id, entry: points[i].y, exit: points[i + 1].y });
         }
       }
     });
@@ -419,7 +475,8 @@
     };
     // Count crossings once; candidate generation can be revisited during packing.
     edges.forEach(edge => {
-      routes[edge.id].points = simplify(routes[edge.id].points);
+      // The layout trims EDGE_END_GAP (10px) off the end for the arrowhead, so the stub covers that too.
+      routes[edge.id].points = ensureStubs(simplify(routes[edge.id].points), boxes, edge, options.minStub ?? (options.cornerRadius ?? 6) + 20);
       const route = routes[edge.id];
       for (let i = 0; i + 1 < route.points.length; i++) {
         const a = route.points[i];

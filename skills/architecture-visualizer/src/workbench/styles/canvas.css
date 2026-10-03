@@ -47,8 +47,8 @@ svg#arch-svg {
 
 .boundary-count {
   font-size: 11px;
-  font-weight: 500;
-  fill: var(--muted);
+  font-weight: 400;
+  fill: var(--faint, var(--muted));
 }
 
 .boundary-chevron {

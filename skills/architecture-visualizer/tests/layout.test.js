@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { computeLayout: computeDefaultLayout, buildEdgeGeometry, cubicPointAt, curveSanityScore, resolveLabelCollisions } = require('../src/engine/layout.js');
 // Existing geometry cases explicitly exercise the curved fallback.
-const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { direction: spec.layout?.direction || 'LR', ...config, router: 'curved' });
+const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { layout: 'columns', direction: spec.layout?.direction || 'LR', ...config, router: 'curved' });
 const geometry = require('../src/engine/geometry.js');
 const { loadTemplate } = require('../src/workbench/assemble.js');
 const {
@@ -617,7 +617,7 @@ const cases = [
       const { compileArchitecture } = require('../src/engine/compiler.js');
       const nodeGeometry = require('../src/engine/geometry.js');
       const spec = require(path.join(__dirname, '../examples/1-crud-business-feature/architecture.json'));
-      const compiled = compileArchitecture(spec, { layoutOverrides: { router: 'curved' } });
+      const compiled = compileArchitecture(spec, { layoutOverrides: { layout: 'columns', router: 'curved' } });
       const geometrySource = fs.readFileSync(path.join(__dirname, '../src/engine/geometry.js'), 'utf8');
 
       assert.ok(compiled.html.includes(require('../src/workbench/assemble.js').compactSource(geometrySource)), 'generated HTML must contain the exact geometry runtime code');
@@ -669,7 +669,7 @@ const cases = [
         assert.deepStrictEqual(JSON.parse(JSON.stringify(fromBrowser)), JSON.parse(JSON.stringify(fromNode)), `live drag recomputation diverged on edge ${edge.id}`);
       });
 
-      const recipCompiled = compileArchitecture(clone(ADVERSARIAL_RECIPROCAL_SPEC), { layoutOverrides: { router: 'curved' } });
+      const recipCompiled = compileArchitecture(clone(ADVERSARIAL_RECIPROCAL_SPEC), { layoutOverrides: { layout: 'columns', router: 'curved' } });
       const makeEl = () => ({
         querySelector: () => makeEl(),
         querySelectorAll: () => [],
@@ -1022,7 +1022,7 @@ const cases = [
 
 cases.push(['orthogonal layout is the default and widens overfull column gaps', () => {
   const spec = clone(ADVERSARIAL_DENSE_PORTS_SPEC);
-  const narrow = computeDefaultLayout(spec, { boundaryGapX: 0 });
+  const narrow = computeDefaultLayout(spec, { layout: 'columns', boundaryGapX: 0 });
   const curved = computeLayout(spec, { boundaryGapX: 0 });
   assert.strictEqual(narrow.config.router, 'orthogonal');
   assert.strictEqual(narrow.routingStats.cardCrossings, 0);
@@ -1032,7 +1032,7 @@ cases.push(['orthogonal layout is the default and widens overfull column gaps', 
     const left = Math.min(...narrow.nodes.filter(n => n.boundary === b.id).map(n => n.x));
     assert.strictEqual(left - b.x, narrow.config.boundaryPaddingX, 'whole boundary moves with its columns');
   });
-  assert.deepStrictEqual(narrow, computeDefaultLayout(spec, { boundaryGapX: 0 }));
+  assert.deepStrictEqual(narrow, computeDefaultLayout(spec, { layout: 'columns', boundaryGapX: 0 }));
 }]);
 
 cases.push(['auto selects the larger reference fit with LR winning ties', () => {
@@ -1044,16 +1044,60 @@ cases.push(['auto selects the larger reference fit with LR winning ties', () => 
   const fit = ({ totalVisualBounds: b }) => Math.min(1040 / (b.width + 48), 806 / (b.height + 48), 1.4);
   for (const spec of specs) {
     for (const router of ['orthogonal', 'curved']) {
-      const lr = computeDefaultLayout(spec, { direction: 'LR', router });
-      const tb = computeDefaultLayout(spec, { direction: 'TB', router });
-      const auto = computeDefaultLayout(spec, { direction: 'auto', router });
+      const lr = computeDefaultLayout(spec, { layout: 'columns', direction: 'LR', router });
+      const tb = computeDefaultLayout(spec, { layout: 'columns', direction: 'TB', router });
+      const auto = computeDefaultLayout(spec, { layout: 'columns', direction: 'auto', router });
       assert.deepStrictEqual(auto, fit(tb) > fit(lr) ? tb : lr);
-      assert.deepStrictEqual(auto, computeDefaultLayout(spec, { direction: 'auto', router }));
+      assert.deepStrictEqual(auto, computeDefaultLayout(spec, { layout: 'columns', direction: 'auto', router }));
       auto.nodes.forEach(n => assert.deepStrictEqual([n.width, n.height], [220, 72]));
       if (router === 'orthogonal') assert.strictEqual(auto.routingStats.cardCrossings, 0);
     }
   }
   assert.throws(() => computeDefaultLayout(VALID_SPEC, { direction: 'diagonal' }), /direction/);
+}]);
+
+cases.push(['lanes share a full-width grid, keep spec ties, and contain every card', () => {
+  const fixtures = require('./fixtures.js');
+  const specs = Object.entries(fixtures).filter(([key]) => key.startsWith('ADVERSARIAL_')).map(([, value]) => value);
+  for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
+    specs.push(JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8')));
+  }
+  specs.push({ boundaries: [{ id: 'z', type: 'container' }, { id: 'a', type: 'container' }],
+    nodes: Array.from({ length: 9 }, (_, i) => ({ id: `n${i}`, boundary: i < 8 ? 'z' : 'a' })), edges: [] });
+  for (const spec of specs) {
+    const before = JSON.stringify(spec);
+    const layout = computeDefaultLayout(spec);
+    assert.strictEqual(layout.config.layout, 'lanes');
+    assert.strictEqual(layout.config.direction, 'TB');
+    assert.deepStrictEqual(layout, computeDefaultLayout(spec));
+    assert.strictEqual(JSON.stringify(spec), before, 'input is immutable');
+    const k = Math.min(4, Math.max(...layout.boundaries.map(b => layout.nodes.filter(n => n.boundary === b.id).length)));
+    layout.boundaries.forEach((b, i) => {
+      assert.strictEqual(b.x, 24);
+      assert.strictEqual(b.width, layout.boundaries[0].width);
+      if (i) assert.strictEqual(b.y - layout.boundaries[i - 1].y - layout.boundaries[i - 1].height, 56);
+      const members = layout.nodes.filter(n => n.boundary === b.id);
+      assert.strictEqual(b.height, Math.max(1, Math.ceil(members.length / k)) * 128 - 8);
+      members.forEach(n => {
+        assert.ok(n.x >= b.x + b.gutterWidth);
+        assert.ok(n.x + n.width <= b.x + b.width && n.y >= b.y && n.y + n.height <= b.y + b.height);
+        assert.strictEqual((n.x - b.x - 170) % 390, 0);
+        assert.ok(n.slot < k);
+      });
+    });
+    assert.strictEqual(layout.routingStats.cardCrossings, 0);
+  }
+  const tied = computeDefaultLayout(specs[specs.length - 1]);
+  assert.deepStrictEqual(tied.boundaries.map(b => b.id), ['z', 'a']);
+}]);
+
+cases.push(['sparse lanes leave gaps that align connected cards', () => {
+  const spec = { boundaries: [{ id: 'top', order: 0 }, { id: 'bottom', order: 1 }],
+    nodes: [{ id: 'a', boundary: 'top' }, { id: 'b', boundary: 'top' }, { id: 'c', boundary: 'top' }, { id: 'd', boundary: 'bottom' }],
+    edges: [{ id: 'link', source: 'c', target: 'd', label: 'call' }] };
+  const layout = computeDefaultLayout(spec, { direction: 'LR' });
+  assert.strictEqual(layout.nodes.find(n => n.id === 'd').slot, 2);
+  assert.strictEqual(layout.edges[0].polyline.length, 2);
 }]);
 
 module.exports = { name: 'Layout Engine', cases };

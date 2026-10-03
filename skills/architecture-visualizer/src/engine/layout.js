@@ -26,6 +26,7 @@ const geometry = require('./geometry.js');
 const { routeOrthogonal, buildRouteGeometry } = require('./orthogonal.js');
 
 const DEFAULT_CONFIG = {
+  layout: 'lanes',
   router: 'orthogonal',
   direction: 'auto',
   nodeWidth: 220,
@@ -71,6 +72,9 @@ function computeLayout(spec, customConfig = {}) {
   const config = { ...DEFAULT_CONFIG, ...(spec.layout || {}), ...customConfig };
   if (!['curved', 'orthogonal'].includes(config.router)) throw new RangeError('router must be curved or orthogonal.');
   if (!['LR', 'TB', 'auto'].includes(config.direction)) throw new RangeError('direction must be LR, TB or auto.');
+  if (!['lanes', 'columns'].includes(config.layout)) throw new RangeError('layout must be lanes or columns.');
+  const isLanes = config.layout === 'lanes';
+  if (isLanes) config.direction = 'TB';
   if (config.direction === 'auto') {
     const lr = computeLayout(spec, { ...config, direction: 'LR' });
     const tb = computeLayout(spec, { ...config, direction: 'TB' });
@@ -130,6 +134,7 @@ function computeLayout(spec, customConfig = {}) {
   }
 
   boundaries.sort((a, b) => {
+    if (isLanes) return (a.order ?? getTierRank(a.id, a.type, a.label)) - (b.order ?? getTierRank(b.id, b.type, b.label));
     const hasOrderA = typeof a.order === 'number';
     const hasOrderB = typeof b.order === 'number';
     if (hasOrderA && hasOrderB) return a.order - b.order || a.id.localeCompare(b.id);
@@ -141,10 +146,12 @@ function computeLayout(spec, customConfig = {}) {
     return a.id.localeCompare(b.id);
   });
 
-  const populatedBoundaries = boundaries.filter((b) => b.nodes.length > 0);
-  orderNodesByBarycenter(populatedBoundaries, spec.edges || [], config.barycenterSweeps);
+  const populatedBoundaries = isLanes ? boundaries : boundaries.filter((b) => b.nodes.length > 0);
+  if (isLanes) assignLaneSlots(populatedBoundaries, spec.edges || []);
+  else orderNodesByBarycenter(populatedBoundaries, spec.edges || [], config.barycenterSweeps);
+  const slotCount = Math.min(4, Math.max(...populatedBoundaries.map(b => b.nodes.length), 1));
 
-  let currentBoundaryCoord = 60;
+  let currentBoundaryCoord = isLanes ? 24 : 60;
   const computedBoundaries = [];
   const computedNodes = [];
 
@@ -154,7 +161,21 @@ function computeLayout(spec, customConfig = {}) {
       node.rank = rankIndex;
     });
 
-    if (isLR) {
+    if (isLanes) {
+      b.x = 24;
+      b.y = currentBoundaryCoord;
+      b.gutterWidth = 150;
+      b.width = 170 + slotCount * config.nodeWidth + (slotCount - 1) * 170 + 24;
+      const rows = Math.max(1, Math.ceil(nodes.length / slotCount));
+      b.height = rows * config.nodeHeight + 48 + (rows - 1) * 56;
+      nodes.forEach(node => {
+        node.x = b.x + 170 + node.slot * (config.nodeWidth + 170);
+        node.y = b.y + 24 + node.row * (config.nodeHeight + 56);
+        computedNodes.push(node);
+      });
+      computedBoundaries.push(b);
+      currentBoundaryCoord += b.height + 56;
+    } else if (isLR) {
       const subColumns = nodes.length > 4 ? 2 : 1;
       const rowsPerSubCol = Math.ceil(nodes.length / subColumns);
 
@@ -209,8 +230,8 @@ function computeLayout(spec, customConfig = {}) {
   const boundaryHeaderBoxes = computedBoundaries.map((b) => ({
     x: b.x + 12,
     y: b.y + 8,
-    width: Math.min(b.width - 24, Math.max(String(b.label || '').length * 7.5, 60)),
-    height: 24,
+    width: isLanes ? 138 : Math.min(b.width - 24, Math.max(String(b.label || '').length * 7.5, 60)),
+    height: isLanes ? 64 : 24,
   }));
 
   const band = computedNodes.reduce(
@@ -269,8 +290,8 @@ function computeLayout(spec, customConfig = {}) {
     const input = { config, nodes: computedNodes, boundaries: computedBoundaries, edges: computedEdges.filter(e => nodeMap.has(e.source) && nodeMap.has(e.target)) };
     let result;
     for (let pass = 0; pass <= 3; pass++) {
-      result = routeOrthogonal(input, { labelWidths, direction: config.direction });
-      if (pass === 3 || !result.stats.gapDemand) break;
+      result = routeOrthogonal(input, { labelWidths, direction: config.direction, lanes: isLanes });
+      if (isLanes || pass === 3 || !result.stats.gapDemand) break;
       // Router gap indexes refer to merged occupied x slabs, including subcolumns.
       const columns = [];
       const margin = Math.min(14, config.nodeGapX / 2, config.nodeGapY / 2);
@@ -394,6 +415,38 @@ function computeLayout(spec, customConfig = {}) {
     nodes: computedNodes,
     edges: computedEdges,
   };
+}
+
+/** Assign shared slots in two deterministic sweeps, retaining spec order on ties. */
+function assignLaneSlots(boundaries, edges) {
+  const k = Math.min(4, Math.max(...boundaries.map(b => b.nodes.length), 1));
+  const neighbors = new Map();
+  edges.forEach(e => {
+    for (const [id, other] of [[e.source, e.target], [e.target, e.source]]) {
+      if (!neighbors.has(id)) neighbors.set(id, []);
+      neighbors.get(id).push(other);
+    }
+  });
+  const placed = new Map();
+  for (const sweep of [boundaries, [...boundaries].reverse()]) {
+    sweep.forEach(b => {
+      b.nodes.forEach(n => placed.delete(n.id));
+      const occupied = new Set();
+      b.nodes.forEach((n, index) => {
+        const adjacent = (neighbors.get(n.id) || []).filter(id => placed.has(id));
+        const center = adjacent.length
+          ? adjacent.reduce((sum, id) => sum + placed.get(id), 0) / adjacent.length
+          : index % k;
+        const row = Math.floor(index / k);
+        const free = Array.from({ length: k }, (_, slot) => slot).filter(slot => !occupied.has(`${row}:${slot}`));
+        free.sort((a, c) => Math.abs(a - center) - Math.abs(c - center) || a - c);
+        n.slot = free[0];
+        n.row = row;
+        occupied.add(`${row}:${n.slot}`);
+        placed.set(n.id, n.slot);
+      });
+    });
+  }
 }
 
 /**

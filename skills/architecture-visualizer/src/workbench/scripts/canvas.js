@@ -15,6 +15,7 @@ function renderDiagram() {
 
   (LAYOUT_DATA.boundaries || []).forEach(b => {
     const collapsed = state.collapsedBoundaries.has(b.id);
+    const lane = LAYOUT_DATA.config.layout === 'lanes';
     const g = el('g', { class: `boundary-group${collapsed ? ' collapsed' : ''}`, id: `boundary-${b.id}` });
 
     const rect = el('rect', {
@@ -30,8 +31,8 @@ function renderDiagram() {
       class: 'boundary-hit-rect',
       x: b.x,
       y: b.y,
-      width: b.width,
-      height: 36,
+      width: lane && !collapsed ? b.gutterWidth || 150 : b.width,
+      height: lane && !collapsed ? b.height : 36,
       fill: 'transparent',
       'pointer-events': 'all'
     });
@@ -44,8 +45,22 @@ function renderDiagram() {
     const text = el('text', { class: 'boundary-header', x: b.x + 34, y: b.y + 26 });
     const memberCount = (LAYOUT_DATA.nodes || []).filter(n => n.boundary === b.id).length;
     const headerText = collapsed ? `${b.label || b.id} (${memberCount} hidden)` : (b.label || b.id);
-    text.textContent = fitText(headerText, `600 12px ${cssToken('--sans')}`, b.width - 46);
-    if (text.textContent !== headerText) withTooltip(text, headerText);
+    if (lane && !collapsed) {
+      const available = (b.gutterWidth || 150) - 46;
+      const lines = wrapText(headerText, `600 12px ${cssToken('--sans')}`, available, 2);
+      lines.forEach((line, index) => {
+        const span = el('tspan', { x: b.x + 34, dy: index ? 16 : 0 });
+        span.textContent = fitText(line, `600 12px ${cssToken('--sans')}`, available);
+        text.appendChild(span);
+      });
+      const count = el('text', { class: 'boundary-count', x: b.x + 34, y: b.y + 26 + lines.length * 16 + 2 });
+      count.textContent = `${memberCount} component${memberCount === 1 ? '' : 's'}`;
+      header.appendChild(count);
+      withTooltip(text, headerText);
+    } else {
+      text.textContent = fitText(headerText, `600 12px ${cssToken('--sans')}`, b.width - 46);
+      if (text.textContent !== headerText) withTooltip(text, headerText);
+    }
 
     header.appendChild(hitRect);
     header.appendChild(chevron);

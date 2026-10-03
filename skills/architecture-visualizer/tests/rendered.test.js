@@ -1238,6 +1238,25 @@ function riskRender(spec, script) {
 }
 
 const cases = [
+  ['lanes render equal bands, wrapped gutter titles and counts without page overflow', () => {
+    const spec = fixtures.clone(fixtures.VALID_SPEC);
+    spec.boundaries[0].label = 'A boundary title long enough to wrap into two lines';
+    const probe = riskRender(spec, `JSON.stringify((function () {
+      const bands = [...document.querySelectorAll('.boundary-rect')];
+      return { widths: bands.map(b => Number(b.getAttribute('width'))),
+        titles: document.querySelectorAll('.boundary-header').length,
+        lines: [...document.querySelectorAll('.boundary-header')].map(t => t.querySelectorAll('tspan').length),
+        counts: [...document.querySelectorAll('.boundary-count')].map(t => t.textContent),
+        expected: LAYOUT_DATA.boundaries.map(b => { const n = LAYOUT_DATA.nodes.filter(n => n.boundary === b.id).length; return n + ' component' + (n === 1 ? '' : 's'); }),
+        overflow: document.documentElement.scrollWidth > innerWidth };
+    })())`);
+    assert(probe.widths.length > 0 && probe.widths.every(w => w === probe.widths[0]));
+    assert.equal(probe.titles, probe.widths.length);
+    assert(probe.lines.every(n => n >= 1 && n <= 2));
+    assert(probe.lines.includes(2));
+    assert.deepStrictEqual(probe.counts, probe.expected);
+    assert.equal(probe.overflow, false);
+  }],
   ['p2: fit every example at 1440×900 with the rail docked at zoom ≥ 0.75', () => {
     for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
       const [phase] = runPhases(`examples/${name}/architecture.json`, [{ width: 1440, height: 900, steps: [ev(`(function () {
@@ -2194,7 +2213,7 @@ const cases = [
           const leader = document.querySelector('#label-e_dlq_triage .edge-label-leader');
           return { leader: Boolean(leader), x1: leader && Number(leader.getAttribute('x1')), tetherX: edge.labelTether.x };
         })()`)],
-      }], undefined, { compileOptions: { layoutOverrides: { router: 'curved' } } });
+      }], undefined, { compileOptions: { layoutOverrides: { router: 'curved', layout: 'columns' } } });
       const value = lastEvalValue(results[0]);
       assert.ok(value.leader, 'the pushed-out "Consume Poison Message" label must have a leader back to its edge');
       assert.strictEqual(value.x1, value.tetherX);
