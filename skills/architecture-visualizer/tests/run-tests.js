@@ -3,6 +3,7 @@
 const suites = [
   require('./validator.test.js'),
   require('./layout.test.js'),
+  require('./orthogonal.test.js'),
   require('./compiler.test.js'),
   require('./narrative.test.js'),
   require('./url.test.js'),
