@@ -72,12 +72,38 @@ svg#arch-svg {
   transition: stroke 0.15s, stroke-width 0.15s;
 }
 
-.node-group:hover .node-rect {
+/* Lens tokens stay below selection, hover and playback highlights in precedence. */
+.node-group[data-lens-stroke="line"] .node-rect,
+.edge-path[data-lens-stroke="line"],
+.policy-ghost-line[data-lens-stroke="line"] { stroke: var(--line); }
+.node-group[data-lens-stroke="ink"] .node-rect,
+.edge-path[data-lens-stroke="ink"],
+.policy-ghost-line[data-lens-stroke="ink"] { stroke: var(--ink); }
+.node-group[data-lens-stroke="ok"] .node-rect,
+.edge-path[data-lens-stroke="ok"],
+.policy-ghost-line[data-lens-stroke="ok"] { stroke: var(--ok); }
+.node-group[data-lens-stroke="warn"] .node-rect,
+.edge-path[data-lens-stroke="warn"],
+.policy-ghost-line[data-lens-stroke="warn"] { stroke: var(--warn); }
+.node-group[data-lens-stroke="risk"] .node-rect,
+.edge-path[data-lens-stroke="risk"],
+.policy-ghost-line[data-lens-stroke="risk"] { stroke: var(--risk); }
+.node-group[data-lens-stroke="edge"] .node-rect,
+.edge-path[data-lens-stroke="edge"],
+.policy-ghost-line[data-lens-stroke="edge"] { stroke: var(--edge); }
+.node-group[data-lens-fill="ok-tint"] .node-rect { fill: var(--ok-soft); }
+.node-group[data-lens-fill="surface-2"] .node-rect { fill: var(--surface-2); }
+.node-group[data-lens-muted] .node-name { fill: var(--muted); }
+.node-group[data-lens-strike] .node-name { text-decoration: line-through; }
+.policy-ghost-line { stroke-width: 1.4; stroke-dasharray: 2 4; }
+.policy-ghost { pointer-events: none; }
+
+.node-group[data-lens-stroke]:hover .node-rect {
   stroke: var(--faint);
 }
 
 /* Selected reads as ink, distinct from active (accent) and from change states (ok / warn / risk). */
-.node-group.selected .node-rect {
+.node-group[data-lens-stroke].selected .node-rect {
   stroke: var(--ink);
   stroke-width: 2;
 }
@@ -149,12 +175,20 @@ svg#arch-svg {
   stroke-width: 1.25;
 }
 
+.node-group[data-lens-style="solid"] .node-rect,
+.edge-path[data-lens-stroke][data-lens-style="solid"] { stroke-dasharray: none; }
+.node-group[data-lens-style="dashed"] .node-rect,
+.edge-path[data-lens-stroke][data-lens-style="dashed"] { stroke-dasharray: 6 4; }
+.node-group[data-lens-style="dotted"] .node-rect,
+.edge-path[data-lens-stroke][data-lens-style="dotted"] { stroke-dasharray: 2 3; }
+
 .edge-path.dimmed {
   stroke: var(--edge-dim) !important;
   opacity: 0.15 !important;
 }
 
-.edge-path.highlighted {
+.edge-path[data-lens-stroke].highlighted,
+.edge-path.ghost.highlighted {
   stroke: var(--accent);
   stroke-width: 2.2 !important;
 }
@@ -184,21 +218,6 @@ svg#arch-svg {
 
 .arrowhead { fill: var(--edge); }
 .arrowhead-active { fill: var(--accent); }
-
-/* Delta Badges */
-.delta-added .node-rect {
-  stroke: var(--ok) !important;
-  stroke-width: 2px !important;
-}
-.delta-changed .node-rect {
-  stroke: var(--warn) !important;
-  stroke-width: 2px !important;
-}
-.delta-removed .node-rect {
-  stroke: var(--risk) !important;
-  stroke-dasharray: 4 3;
-}
-.delta-removed .node-name { text-decoration: line-through; }
 
 /* Flow Particles */
 .flow-particle {

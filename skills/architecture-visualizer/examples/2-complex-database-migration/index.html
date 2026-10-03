@@ -436,6 +436,46 @@ background: var(--surface-2);
 color: var(--ink);
 }
 
+/* Lens key sits below the filter row and follows the docked rail's canvas inset. */
+.lens-key {
+position: absolute;
+top: calc(var(--chrome-top) + 108px);
+right: calc(var(--canvas-right) + 16px);
+z-index: 40;
+max-width: 220px;
+padding: 10px 12px;
+border: 1px solid var(--line);
+border-radius: 8px;
+background: var(--surface);
+color: var(--ink);
+box-shadow: var(--shadow);
+font-size: 11px;
+}
+.lens-key strong { display: block; margin-bottom: 6px; }
+.lens-key-row { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.lens-key-swatch { width: 24px; flex-shrink: 0; border-top: 2px solid var(--line); }
+.lens-key-swatch[data-lens-style="dashed"] { border-top-style: dashed; }
+.lens-key-swatch[data-lens-style="dotted"] { border-top-style: dotted; }
+.lens-key button {
+margin-top: 8px;
+padding: 4px 8px;
+border: 1px solid var(--line);
+border-radius: 6px;
+background: var(--surface-2);
+color: var(--ink);
+cursor: pointer;
+}
+.lens-key button[aria-pressed="true"] { border-color: var(--ink); }
+@media (max-width: 767px) {
+.lens-key { top: calc(var(--chrome-top) + 116px); max-width: 160px; }
+}
+.lens-key-swatch[data-lens-stroke="line"] { border-top-color: var(--line); }
+.lens-key-swatch[data-lens-stroke="ink"] { border-top-color: var(--ink); }
+.lens-key-swatch[data-lens-stroke="ok"] { border-top-color: var(--ok); }
+.lens-key-swatch[data-lens-stroke="warn"] { border-top-color: var(--warn); }
+.lens-key-swatch[data-lens-stroke="risk"] { border-top-color: var(--risk); }
+.lens-key-swatch[data-lens-stroke="edge"] { border-top-color: var(--edge); }
+
 /* Canvas Viewport */
 #canvas-container {
 width: 100%;
@@ -510,12 +550,38 @@ rx: 12px;
 transition: stroke 0.15s, stroke-width 0.15s;
 }
 
-.node-group:hover .node-rect {
+/* Lens tokens stay below selection, hover and playback highlights in precedence. */
+.node-group[data-lens-stroke="line"] .node-rect,
+.edge-path[data-lens-stroke="line"],
+.policy-ghost-line[data-lens-stroke="line"] { stroke: var(--line); }
+.node-group[data-lens-stroke="ink"] .node-rect,
+.edge-path[data-lens-stroke="ink"],
+.policy-ghost-line[data-lens-stroke="ink"] { stroke: var(--ink); }
+.node-group[data-lens-stroke="ok"] .node-rect,
+.edge-path[data-lens-stroke="ok"],
+.policy-ghost-line[data-lens-stroke="ok"] { stroke: var(--ok); }
+.node-group[data-lens-stroke="warn"] .node-rect,
+.edge-path[data-lens-stroke="warn"],
+.policy-ghost-line[data-lens-stroke="warn"] { stroke: var(--warn); }
+.node-group[data-lens-stroke="risk"] .node-rect,
+.edge-path[data-lens-stroke="risk"],
+.policy-ghost-line[data-lens-stroke="risk"] { stroke: var(--risk); }
+.node-group[data-lens-stroke="edge"] .node-rect,
+.edge-path[data-lens-stroke="edge"],
+.policy-ghost-line[data-lens-stroke="edge"] { stroke: var(--edge); }
+.node-group[data-lens-fill="ok-tint"] .node-rect { fill: var(--ok-soft); }
+.node-group[data-lens-fill="surface-2"] .node-rect { fill: var(--surface-2); }
+.node-group[data-lens-muted] .node-name { fill: var(--muted); }
+.node-group[data-lens-strike] .node-name { text-decoration: line-through; }
+.policy-ghost-line { stroke-width: 1.4; stroke-dasharray: 2 4; }
+.policy-ghost { pointer-events: none; }
+
+.node-group[data-lens-stroke]:hover .node-rect {
 stroke: var(--faint);
 }
 
 /* Selected reads as ink, distinct from active (accent) and from change states (ok / warn / risk). */
-.node-group.selected .node-rect {
+.node-group[data-lens-stroke].selected .node-rect {
 stroke: var(--ink);
 stroke-width: 2;
 }
@@ -587,12 +653,20 @@ stroke-dasharray: 5 4;
 stroke-width: 1.25;
 }
 
+.node-group[data-lens-style="solid"] .node-rect,
+.edge-path[data-lens-stroke][data-lens-style="solid"] { stroke-dasharray: none; }
+.node-group[data-lens-style="dashed"] .node-rect,
+.edge-path[data-lens-stroke][data-lens-style="dashed"] { stroke-dasharray: 6 4; }
+.node-group[data-lens-style="dotted"] .node-rect,
+.edge-path[data-lens-stroke][data-lens-style="dotted"] { stroke-dasharray: 2 3; }
+
 .edge-path.dimmed {
 stroke: var(--edge-dim) !important;
 opacity: 0.15 !important;
 }
 
-.edge-path.highlighted {
+.edge-path[data-lens-stroke].highlighted,
+.edge-path.ghost.highlighted {
 stroke: var(--accent);
 stroke-width: 2.2 !important;
 }
@@ -622,21 +696,6 @@ dominant-baseline: central;
 
 .arrowhead { fill: var(--edge); }
 .arrowhead-active { fill: var(--accent); }
-
-/* Delta Badges */
-.delta-added .node-rect {
-stroke: var(--ok) !important;
-stroke-width: 2px !important;
-}
-.delta-changed .node-rect {
-stroke: var(--warn) !important;
-stroke-width: 2px !important;
-}
-.delta-removed .node-rect {
-stroke: var(--risk) !important;
-stroke-dasharray: 4 3;
-}
-.delta-removed .node-name { text-decoration: line-through; }
 
 /* Flow Particles */
 .flow-particle {
@@ -1553,14 +1612,10 @@ margin-left: 2px;
 </div>
 
 <!-- Legend Box -->
+<div class="lens-key" aria-live="polite" aria-label="Lens key"></div>
+
 <details class="legend-box">
 <summary class="legend-summary">Legend</summary>
-<div class="legend-row"><span class="legend-swatch line"></span><span>Synchronous request</span></div>
-<div class="legend-row"><span class="legend-swatch line dashed"></span><span>Asynchronous event</span></div>
-<div class="legend-row"><span class="legend-swatch ok"></span><span>Added in proposal</span></div>
-<div class="legend-row"><span class="legend-swatch warn"></span><span>Changed in proposal</span></div>
-<div class="legend-row"><span class="legend-swatch risk"></span><span>Removed or deprecated</span></div>
-<div class="legend-row"><span class="legend-swatch exception"></span><span>Not verified by evidence</span></div>
 <div class="legend-divider"></div>
 <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-database"></use></svg></span><span>Cylinder: datastore</span></div>
 <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-topic"></use></svg></span><span>Chevron: queue or topic</span></div>
@@ -3906,8 +3961,14 @@ button.tabIndex = selected ? 0 : -1;
 const select = document.querySelector('.lens-select');
 if (select) select.value = lens;
 document.body.dataset.lens = lens;
+const scenarioActive = state.scenarioActive;
 if (lens === 'change') switchView(VIEWS.BEFORE_AFTER);
 else if (state.currentView === VIEWS.BEFORE_AFTER) switchView(VIEWS.ARCHITECTURE);
+if (scenarioActive) {
+actions.setScenarioActive(true);
+renderScenarioStage();
+}
+applyLens();
 announceStatus(`${lens.charAt(0).toUpperCase() + lens.slice(1)} lens`);
 updateUrlState();
 }
@@ -4974,7 +5035,7 @@ if (labelText) syncLabelLeader(e);
 
 (LAYOUT_DATA.nodes || []).forEach(n => {
 const g = el('g', {
-class: `node-group delta-${(n.delta || DELTA.UNCHANGED).toLowerCase()}`,
+class: 'node-group',
 id: `node-${n.id}`,
 transform: `translate(${n.x}, ${n.y})`,
 tabindex: '0',
@@ -5009,6 +5070,7 @@ startNodeDrag(ev, n.id);
 
 nodesLayer.appendChild(g);
 });
+applyLens();
 }
 
 function toggleBoundary(boundaryId) {
@@ -5042,20 +5104,10 @@ default: return 'kind-component';
 }
 }
 
-const DELTA_BADGES = {
-[DELTA.ADDED]: ['Added', 'ok'],
-[DELTA.CHANGED]: ['Changed', 'warn'],
-[DELTA.REMOVED]: ['Removed', 'risk'],
-[DELTA.MOVED]: ['Moved', 'neutral'],
-};
-
-// Card anatomy inside the layout's fixed box: icon tile, a name of up to two lines, technology in mono,
-// at most one change badge, and a dashed ring when the component is not verified by evidence.
+// Card content is neutral; the active lens supplies badges and evidence markers.
 function renderNodeCard(g, n) {
 const w = n.width;
-const h = n.height;
 const sans = cssToken('--sans');
-const mono = cssToken('--mono');
 
 g.appendChild(el('rect', { class: 'node-tile', x: 14, y: 18, width: 32, height: 32, rx: 8 }));
 g.appendChild(el('use', { class: 'node-icon', href: `#${getNodeIcon(n.type)}`, x: 22, y: 26, width: 16, height: 16, 'aria-hidden': 'true' }));
@@ -5070,10 +5122,19 @@ name.appendChild(span);
 });
 g.appendChild(name);
 
-const badge = DELTA_BADGES[n.delta];
+renderNodeLensDetails(g, n, null, null);
+}
+
+function renderNodeLensDetails(g, n, badge, marker) {
+g.querySelectorAll('.node-badge, .node-tech, .node-exception').forEach(item => item.remove());
+const w = n.width;
+const h = n.height;
+const sans = cssToken('--sans');
+const mono = cssToken('--mono');
+
 let badgeWidth = 0;
 if (badge) {
-const [label, tone] = badge;
+const { text: label, tone } = badge;
 badgeWidth = measureText(label, `600 10.5px ${sans}`) + 14;
 const badgeGroup = el('g', { class: `node-badge ${tone}`, transform: `translate(${w - 14 - badgeWidth}, ${h - 32})` });
 badgeGroup.appendChild(el('rect', { class: 'base', width: badgeWidth, height: 20, rx: 6 }));
@@ -5089,7 +5150,7 @@ const tech = el('text', { class: 'node-tech', x: 14, y: h - 18 });
 tech.textContent = fitText(techFull, `400 11px ${mono}`, w - 28 - (badgeWidth ? badgeWidth + 8 : 0));
 g.appendChild(tech);
 
-if ((n.status || 'VERIFIED') !== 'VERIFIED') {
+if (marker === 'exception-ring') {
 const ring = el('circle', { class: 'node-exception', cx: w - 22, cy: 16, r: 4.5 });
 withTooltip(ring, `${String(n.status).toLowerCase()}: not verified by evidence`);
 g.appendChild(ring);
@@ -5149,6 +5210,7 @@ return active;
 }
 
 function applyVisibility() {
+renderLensKey(lensEncoding(state.lens, ARCH_SPEC).keyItems);
 const chain = state.highlightedChain ? dependencyChainSet(state.highlightedChain) : null;
 const hidden = new Set();
 const dimmed = new Set();
@@ -5197,6 +5259,88 @@ syncEdgeMarker(path);
 });
 
 if (state.animatingFlow) startFlowParticles();
+}
+
+// Lens encoding changes marks, never visibility or spotlight state.
+function applyLens() {
+const encoding = lensEncoding(state.lens, ARCH_SPEC);
+(LAYOUT_DATA.nodes || []).forEach(node => {
+const group = document.getElementById(`node-${node.id}`);
+const mark = encoding.nodes[node.id];
+if (!group || !mark) return;
+group.dataset.lensStroke = mark.stroke;
+group.dataset.lensStyle = mark.strokeStyle;
+if (mark.fill) group.dataset.lensFill = mark.fill;
+else group.removeAttribute('data-lens-fill');
+group.toggleAttribute('data-lens-muted', mark.mutedText);
+group.toggleAttribute('data-lens-strike', mark.strike);
+renderNodeLensDetails(group, node, mark.badge, mark.marker);
+});
+(LAYOUT_DATA.edges || []).forEach(edge => {
+const path = document.getElementById(`path-${edge.id}`);
+const mark = encoding.edges[edge.id];
+if (!path || !mark) return;
+path.dataset.lensStroke = mark.stroke;
+path.dataset.lensStyle = mark.strokeStyle;
+});
+ghostLayer.querySelectorAll('.policy-ghost').forEach(item => item.remove());
+encoding.ghosts.forEach(ghost => {
+const from = nodeById.get(ghost.from);
+const to = nodeById.get(ghost.to);
+if (!from || !to) return;
+const x1 = from.x + from.width / 2, y1 = from.y + from.height / 2;
+const x2 = to.x + to.width / 2, y2 = to.y + to.height / 2;
+const group = el('g', { class: 'policy-ghost', 'data-policy-id': ghost.policyId });
+group.appendChild(el('line', {
+class: 'policy-ghost-line', x1, y1, x2, y2,
+'data-lens-stroke': ghost.label === 'Forbidden · absent' ? 'risk' : 'warn'
+}));
+const label = el('g', { class: 'edge-label' });
+const x = (x1 + x2) / 2, y = (y1 + y2) / 2;
+const width = estimateLabelWidth(ghost.label);
+label.appendChild(el('rect', { class: 'edge-label-bg', x: x - width / 2, y: y - 9, width, height: 18 }));
+const text = el('text', { class: 'edge-label-text', x, y });
+text.textContent = ghost.label;
+label.appendChild(text);
+group.appendChild(label);
+ghostLayer.appendChild(group);
+});
+renderLensKey(encoding.keyItems);
+}
+
+function renderLensKey(items) {
+const key = document.querySelector('.lens-key');
+if (!key) return;
+const signature = JSON.stringify([state.lens, state.currentView, items]);
+if (key.dataset.encoding === signature) return;
+key.dataset.encoding = signature;
+key.replaceChildren();
+const title = document.createElement('strong');
+title.textContent = state.lens.charAt(0).toUpperCase() + state.lens.slice(1);
+key.appendChild(title);
+items.forEach(item => {
+const row = document.createElement('div');
+row.className = 'lens-key-row';
+const swatch = document.createElement('span');
+swatch.className = 'lens-key-swatch';
+swatch.dataset.lensStroke = item.stroke;
+swatch.dataset.lensStyle = item.strokeStyle;
+swatch.setAttribute('aria-hidden', 'true');
+const label = document.createElement('span');
+label.textContent = item.label;
+row.append(swatch, label);
+key.appendChild(row);
+});
+if (state.lens === 'structure') {
+const toggle = document.createElement('button');
+toggle.type = 'button';
+toggle.textContent = 'Data flow only';
+toggle.setAttribute('aria-pressed', String(state.currentView === VIEWS.DATA_FLOW));
+toggle.addEventListener('click', () => {
+switchView(state.currentView === VIEWS.DATA_FLOW ? VIEWS.ARCHITECTURE : VIEWS.DATA_FLOW);
+});
+key.appendChild(toggle);
+}
 }
 
 // Node Selection & Inspector Drawer
@@ -5959,7 +6103,7 @@ drawGhostSteps(unmatched);
 }
 
 function clearSpotlight() {
-ghostLayer.innerHTML = '';
+ghostLayer.querySelectorAll('.playback-ghost').forEach(item => item.remove());
 document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
 document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('highlighted', 'dimmed'); syncEdgeMarker(p); });
 if (state.selectedNodeId) {
@@ -5970,14 +6114,14 @@ if (selected) selected.classList.add('selected');
 
 // A playback hop with no modelled edge still has to be visible: draw it as a dashed ghost link.
 function drawGhostSteps(steps) {
-ghostLayer.innerHTML = '';
+ghostLayer.querySelectorAll('.playback-ghost').forEach(item => item.remove());
 steps.forEach(step => {
 const from = nodeById.get(step.from);
 const to = nodeById.get(step.to);
 if (!from || !to) return;
 
 const geometry = buildEdgeGeometry(from, to, isLRLayout);
-const path = el('path', { class: 'edge-path ghost highlighted', d: geometry.path, 'marker-end': 'url(#arrow-highlight)' });
+const path = el('path', { class: 'edge-path ghost playback-ghost highlighted', d: geometry.path, 'marker-end': 'url(#arrow-highlight)' });
 withTooltip(path, `${step.label || 'Playback step'} (no modelled edge)`);
 ghostLayer.appendChild(path);
 });

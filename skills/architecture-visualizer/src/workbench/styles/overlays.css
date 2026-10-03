@@ -166,3 +166,43 @@ body.presentation-mode #floating-bar {
   background: var(--surface-2);
   color: var(--ink);
 }
+
+/* Lens key sits below the filter row and follows the docked rail's canvas inset. */
+.lens-key {
+  position: absolute;
+  top: calc(var(--chrome-top) + 108px);
+  right: calc(var(--canvas-right) + 16px);
+  z-index: 40;
+  max-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: 11px;
+}
+.lens-key strong { display: block; margin-bottom: 6px; }
+.lens-key-row { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.lens-key-swatch { width: 24px; flex-shrink: 0; border-top: 2px solid var(--line); }
+.lens-key-swatch[data-lens-style="dashed"] { border-top-style: dashed; }
+.lens-key-swatch[data-lens-style="dotted"] { border-top-style: dotted; }
+.lens-key button {
+  margin-top: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.lens-key button[aria-pressed="true"] { border-color: var(--ink); }
+@media (max-width: 767px) {
+  .lens-key { top: calc(var(--chrome-top) + 116px); max-width: 160px; }
+}
+.lens-key-swatch[data-lens-stroke="line"] { border-top-color: var(--line); }
+.lens-key-swatch[data-lens-stroke="ink"] { border-top-color: var(--ink); }
+.lens-key-swatch[data-lens-stroke="ok"] { border-top-color: var(--ok); }
+.lens-key-swatch[data-lens-stroke="warn"] { border-top-color: var(--warn); }
+.lens-key-swatch[data-lens-stroke="risk"] { border-top-color: var(--risk); }
+.lens-key-swatch[data-lens-stroke="edge"] { border-top-color: var(--edge); }

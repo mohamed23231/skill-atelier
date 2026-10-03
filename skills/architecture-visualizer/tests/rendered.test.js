@@ -1253,6 +1253,88 @@ const cases = [
   ],
 
   [
+    '1e: lens canvas encodes example 3 cards, connections and present-state key without dimming',
+    () => {
+      const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`JSON.stringify(LENSES.map(lens => {
+        selectLens(lens);
+        const encoding = lensEncoding(lens, ARCH_SPEC);
+        return {
+          lens,
+          nodes: ARCH_SPEC.nodes.map(node => {
+            const group = document.getElementById('node-' + node.id);
+            const mark = encoding.nodes[node.id];
+            return [group.dataset.lensStroke === mark.stroke,
+              group.dataset.lensStyle === mark.strokeStyle,
+              (group.dataset.lensFill || null) === mark.fill,
+              group.hasAttribute('data-lens-muted') === mark.mutedText,
+              group.hasAttribute('data-lens-strike') === mark.strike,
+              (group.querySelector('.node-badge text')?.textContent || null) === (mark.badge?.text || null),
+              Boolean(group.querySelector('.node-exception')) === (mark.marker === 'exception-ring'),
+              getComputedStyle(group).opacity === '1'];
+          }),
+          edges: ARCH_SPEC.edges.map(edge => {
+            const path = document.getElementById('path-' + edge.id);
+            return [path.dataset.lensStroke === encoding.edges[edge.id].stroke,
+              path.dataset.lensStyle === encoding.edges[edge.id].strokeStyle,
+              getComputedStyle(path).opacity === '1'];
+          }),
+          key: [...document.querySelectorAll('.lens-key-row')].map(row => row.textContent),
+          expectedKey: encoding.keyItems.map(item => item.label),
+          structureNeutral: lens !== 'structure' || !document.querySelector('.node-group[data-lens-stroke="ok"], .node-group[data-lens-stroke="warn"], .node-group[data-lens-stroke="risk"], .node-badge'),
+          added: lens !== 'change' || ARCH_SPEC.nodes.filter(node => node.delta === 'ADDED').every(node => {
+            const group = document.getElementById('node-' + node.id);
+            return group.dataset.lensStroke === 'ok' && group.querySelector('.node-badge text').textContent === 'Added';
+          })
+        };
+      }))`)] }])[0]));
+      obs.forEach(result => {
+        assert.ok(result.nodes.flat().every(Boolean), result.lens + ' node encoding');
+        assert.ok(result.edges.flat().every(Boolean), result.lens + ' edge encoding');
+        assert.deepStrictEqual(result.key, result.expectedKey, result.lens + ' key');
+        assert.ok(result.structureNeutral && result.added, result.lens + ' change marks');
+      });
+    },
+  ],
+  [
+    '1e: lens canvas preserves scenario opacity through every lens and Structure toggles Data Flow',
+    () => {
+      const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(async function () {
+        stepScenario(3);
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const snapshot = () => [...document.querySelectorAll('.node-group, .edge-path:not(.ghost)')].map(item => [item.id, getComputedStyle(item).opacity]);
+        const before = snapshot();
+        const visits = [];
+        for (const lens of LENSES) {
+          selectLens(lens);
+          await new Promise(resolve => setTimeout(resolve, 250));
+          visits.push(snapshot());
+        }
+        deactivateScenario();
+        selectLens('structure');
+        const toggle = () => document.querySelector('.lens-key button');
+        toggle().click();
+        const flow = [state.currentView, toggle().getAttribute('aria-pressed')];
+        toggle().click();
+        return JSON.stringify({before, visits, flow, architecture: [state.currentView, toggle().getAttribute('aria-pressed')]});
+      })()`)] }])[0]));
+      obs.visits.forEach(snapshot => assert.deepStrictEqual(snapshot, obs.before));
+      assert.deepStrictEqual(obs.flow, ['data_flow', 'true']);
+      assert.deepStrictEqual(obs.architecture, ['architecture', 'false']);
+    },
+  ],
+  [
+    '1e: lens canvas Risk draws and clears a forbidden policy ghost',
+    () => {
+      const spec = JSON.parse(JSON.stringify(fixtures.VALID_SPEC));
+      spec.policies = [{ id: 'forbidden-test', kind: 'forbidden_dependency', from: spec.nodes[1].id, to: spec.nodes[0].id }];
+      const policy = spec.policies[0];
+      assert.ok(!spec.edges.some(edge => edge.source === policy.from && edge.target === policy.to), 'the forbidden dependency must be absent');
+      const obs = JSON.parse(lastEvalValue(runPhases(spec, [{ width: 1440, height: 900, steps: [ev(`selectLens('risk'); const ghosts = [...document.querySelectorAll('#ghost-layer .policy-ghost')].map(group => [group.querySelector('text').textContent, group.querySelector('line').dataset.lensStroke, getComputedStyle(group.querySelector('line')).strokeDasharray]); selectLens('structure'); JSON.stringify([ghosts, document.querySelectorAll('#ghost-layer .policy-ghost').length])`)] }])[0]));
+      assert.deepStrictEqual(obs, [[['Forbidden · absent', 'risk', '2px, 4px']], 0]);
+    },
+  ],
+
+  [
     'Chrome binary is available for rendered verification',
     () => {
       const chrome = findChrome();

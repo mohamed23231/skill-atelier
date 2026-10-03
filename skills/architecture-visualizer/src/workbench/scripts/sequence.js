@@ -59,7 +59,7 @@ function spotlightInteractions(interactions) {
 }
 
 function clearSpotlight() {
-  ghostLayer.innerHTML = '';
+  ghostLayer.querySelectorAll('.playback-ghost').forEach(item => item.remove());
   document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
   document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('highlighted', 'dimmed'); syncEdgeMarker(p); });
   if (state.selectedNodeId) {
@@ -70,14 +70,14 @@ function clearSpotlight() {
 
 // A playback hop with no modelled edge still has to be visible: draw it as a dashed ghost link.
 function drawGhostSteps(steps) {
-  ghostLayer.innerHTML = '';
+  ghostLayer.querySelectorAll('.playback-ghost').forEach(item => item.remove());
   steps.forEach(step => {
     const from = nodeById.get(step.from);
     const to = nodeById.get(step.to);
     if (!from || !to) return;
 
     const geometry = buildEdgeGeometry(from, to, isLRLayout);
-    const path = el('path', { class: 'edge-path ghost highlighted', d: geometry.path, 'marker-end': 'url(#arrow-highlight)' });
+    const path = el('path', { class: 'edge-path ghost playback-ghost highlighted', d: geometry.path, 'marker-end': 'url(#arrow-highlight)' });
     withTooltip(path, `${step.label || 'Playback step'} (no modelled edge)`);
     ghostLayer.appendChild(path);
   });

@@ -147,14 +147,10 @@
   </div>
 
   <!-- Legend Box -->
+  <div class="lens-key" aria-live="polite" aria-label="Lens key"></div>
+
   <details class="legend-box">
     <summary class="legend-summary">Legend</summary>
-    <div class="legend-row"><span class="legend-swatch line"></span><span>Synchronous request</span></div>
-    <div class="legend-row"><span class="legend-swatch line dashed"></span><span>Asynchronous event</span></div>
-    <div class="legend-row"><span class="legend-swatch ok"></span><span>Added in proposal</span></div>
-    <div class="legend-row"><span class="legend-swatch warn"></span><span>Changed in proposal</span></div>
-    <div class="legend-row"><span class="legend-swatch risk"></span><span>Removed or deprecated</span></div>
-    <div class="legend-row"><span class="legend-swatch exception"></span><span>Not verified by evidence</span></div>
     <div class="legend-divider"></div>
     <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-database"></use></svg></span><span>Cylinder: datastore</span></div>
     <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-topic"></use></svg></span><span>Chevron: queue or topic</span></div>
@@ -410,6 +406,8 @@
     <!-- include: scripts/boot.js -->
 
     <!-- include: scripts/canvas.js -->
+
+    <!-- include: scripts/lens-canvas.js -->
 
     <!-- include: scripts/inspector.js -->
 

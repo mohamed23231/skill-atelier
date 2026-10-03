@@ -10,8 +10,14 @@ function selectLens(lens, { explicit = true } = {}) {
   const select = document.querySelector('.lens-select');
   if (select) select.value = lens;
   document.body.dataset.lens = lens;
+  const scenarioActive = state.scenarioActive;
   if (lens === 'change') switchView(VIEWS.BEFORE_AFTER);
   else if (state.currentView === VIEWS.BEFORE_AFTER) switchView(VIEWS.ARCHITECTURE);
+  if (scenarioActive) {
+    actions.setScenarioActive(true);
+    renderScenarioStage();
+  }
+  applyLens();
   announceStatus(`${lens.charAt(0).toUpperCase() + lens.slice(1)} lens`);
   updateUrlState();
 }

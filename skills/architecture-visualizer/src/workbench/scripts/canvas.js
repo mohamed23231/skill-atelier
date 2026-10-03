@@ -143,7 +143,7 @@ function renderDiagram() {
 
   (LAYOUT_DATA.nodes || []).forEach(n => {
     const g = el('g', {
-      class: `node-group delta-${(n.delta || DELTA.UNCHANGED).toLowerCase()}`,
+      class: 'node-group',
       id: `node-${n.id}`,
       transform: `translate(${n.x}, ${n.y})`,
       tabindex: '0',
@@ -178,6 +178,7 @@ function renderDiagram() {
 
     nodesLayer.appendChild(g);
   });
+  applyLens();
 }
 
 function toggleBoundary(boundaryId) {
@@ -211,20 +212,10 @@ function getNodeIcon(type) {
   }
 }
 
-const DELTA_BADGES = {
-  [DELTA.ADDED]: ['Added', 'ok'],
-  [DELTA.CHANGED]: ['Changed', 'warn'],
-  [DELTA.REMOVED]: ['Removed', 'risk'],
-  [DELTA.MOVED]: ['Moved', 'neutral'],
-};
-
-// Card anatomy inside the layout's fixed box: icon tile, a name of up to two lines, technology in mono,
-// at most one change badge, and a dashed ring when the component is not verified by evidence.
+// Card content is neutral; the active lens supplies badges and evidence markers.
 function renderNodeCard(g, n) {
   const w = n.width;
-  const h = n.height;
   const sans = cssToken('--sans');
-  const mono = cssToken('--mono');
 
   g.appendChild(el('rect', { class: 'node-tile', x: 14, y: 18, width: 32, height: 32, rx: 8 }));
   g.appendChild(el('use', { class: 'node-icon', href: `#${getNodeIcon(n.type)}`, x: 22, y: 26, width: 16, height: 16, 'aria-hidden': 'true' }));
@@ -239,10 +230,19 @@ function renderNodeCard(g, n) {
   });
   g.appendChild(name);
 
-  const badge = DELTA_BADGES[n.delta];
+  renderNodeLensDetails(g, n, null, null);
+}
+
+function renderNodeLensDetails(g, n, badge, marker) {
+  g.querySelectorAll('.node-badge, .node-tech, .node-exception').forEach(item => item.remove());
+  const w = n.width;
+  const h = n.height;
+  const sans = cssToken('--sans');
+  const mono = cssToken('--mono');
+
   let badgeWidth = 0;
   if (badge) {
-    const [label, tone] = badge;
+    const { text: label, tone } = badge;
     badgeWidth = measureText(label, `600 10.5px ${sans}`) + 14;
     const badgeGroup = el('g', { class: `node-badge ${tone}`, transform: `translate(${w - 14 - badgeWidth}, ${h - 32})` });
     badgeGroup.appendChild(el('rect', { class: 'base', width: badgeWidth, height: 20, rx: 6 }));
@@ -258,7 +258,7 @@ function renderNodeCard(g, n) {
   tech.textContent = fitText(techFull, `400 11px ${mono}`, w - 28 - (badgeWidth ? badgeWidth + 8 : 0));
   g.appendChild(tech);
 
-  if ((n.status || 'VERIFIED') !== 'VERIFIED') {
+  if (marker === 'exception-ring') {
     const ring = el('circle', { class: 'node-exception', cx: w - 22, cy: 16, r: 4.5 });
     withTooltip(ring, `${String(n.status).toLowerCase()}: not verified by evidence`);
     g.appendChild(ring);
@@ -318,6 +318,7 @@ function dependencyChainSet(nodeId) {
 }
 
 function applyVisibility() {
+  renderLensKey(lensEncoding(state.lens, ARCH_SPEC).keyItems);
   const chain = state.highlightedChain ? dependencyChainSet(state.highlightedChain) : null;
   const hidden = new Set();
   const dimmed = new Set();
