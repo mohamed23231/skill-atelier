@@ -122,6 +122,50 @@
   box-sizing: border-box;
 }
 
+.shortcuts-dialog {
+  padding: 18px 20px;
+  max-height: 76vh;
+  overflow: auto;
+  outline: none;
+}
+
+.shortcuts-dialog h2 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.shortcuts-table th {
+  padding: 10px 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: left;
+}
+
+.shortcuts-table td {
+  padding: 5px 8px 5px 0;
+  vertical-align: top;
+}
+
+.shortcuts-table td:first-child { white-space: nowrap; }
+.shortcuts-table td:last-child { overflow-wrap: anywhere; }
+.shortcuts-table kbd {
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
 #btn-palette kbd {
   font-family: var(--mono);
   font-size: 10px;

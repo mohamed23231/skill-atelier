@@ -97,7 +97,7 @@ function compileArchitecture(inputSpec, options = {}) {
   html = substitutePlaceholders(html, [
     ['__DOCUMENT_TITLE__', escapeHtml(spec.meta?.title || 'System Architecture')],
     ['/* __ARCHITECTURE_SPEC_DATA__ */ {}', embedJson(payload)],
-    ['/* __COMPUTED_LAYOUT_DATA__ */ {}', embedJson(layout)],
+    ['/* __COMPUTED_LAYOUT_DATA__ */ {}', embedJson(publishableLayout(layout))],
     ['/* __MERMAID_DATA__ */ {}', embedJson(mermaid)],
     ['/* __MARKDOWN_DATA__ */ ""', embedJson(markdown)],
     ['/* __QUALITY_GATE_DATA__ */ []', embedJson(validation.gate)],
@@ -159,6 +159,17 @@ function substitutePlaceholders(template, pairs) {
 /**
  * JSON safe to inline inside a <script> block.
  */
+// The page never reads these: boundaries list their members by each node's `boundary`, and a drawn
+// route's polyline and label slot are restated in `points`, `segments` and the label fields. Dropping
+// the copies keeps pages within the size budget; a drag recomputes routes in the browser anyway.
+function publishableLayout(layout) {
+  return {
+    ...layout,
+    boundaries: (layout.boundaries || []).map(({ nodes, ...boundary }) => boundary),
+    edges: (layout.edges || []).map(({ polyline, labelSlot, ...edge }) => edge),
+  };
+}
+
 function embedJson(value) {
   return JSON.stringify(value)
     .replace(/</g, '\\u003c')

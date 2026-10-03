@@ -245,6 +245,23 @@ function handleKeyDown(e) {
     return;
   }
 
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const typingTarget = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement ||
+      e.target instanceof HTMLSelectElement || e.target.isContentEditable;
+    if (!typingTarget) {
+      e.preventDefault();
+      toggleShortcuts(document.activeElement);
+      return;
+    }
+  }
+
+  if (shortcutsOpenState && e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeShortcuts(true);
+    return;
+  }
+
   const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement ||
     e.target instanceof HTMLSelectElement || e.target.isContentEditable;
   if (typing) {

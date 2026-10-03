@@ -24,6 +24,14 @@ function paletteBuildAllItems() {
   // 1. Commands
   const commands = [
     {
+      id: 'cmd-shortcuts',
+      group: 'Commands',
+      label: 'Keyboard shortcuts',
+      hint: '?',
+      icon: 'ui-info',
+      run: () => openShortcuts(paletteOpener)
+    },
+    {
       id: 'cmd-fit',
       group: 'Commands',
       label: 'Fit diagram',

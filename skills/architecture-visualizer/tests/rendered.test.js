@@ -2903,6 +2903,107 @@ const cases = [
       });
     },
   ],
+
+  [
+    'p4: perf large fixture boots with a ready time and the full model rendered',
+    () => {
+      const [phase] = runPhases(fixtures.LARGE_SPEC, [{ width: 1440, height: 900, steps: [ev(`JSON.stringify({
+        ready: document.body.getAttribute('data-ready-ms'),
+        nodes: document.querySelectorAll('.node-group').length,
+        edges: document.querySelectorAll('.edge-path').length,
+        errors: window.__errors || [],
+      })`)] }]);
+      const obs = JSON.parse(lastEvalValue(phase));
+      assert.deepStrictEqual(obs.errors, [], `console errors detected: ${JSON.stringify(obs.errors)}`);
+      assert.ok(obs.ready != null, 'body[data-ready-ms] must be set once the workbench has booted');
+      assert.ok(Number(obs.ready) >= 0, `body[data-ready-ms] must be a number, got ${obs.ready}`);
+      assert.strictEqual(obs.nodes, fixtures.LARGE_SPEC.nodes.length, 'every component of the large fixture must render');
+      assert.strictEqual(obs.edges, fixtures.LARGE_SPEC.edges.length, 'every edge of the large fixture must render');
+      console.log(`  p4: large fixture ready in ${obs.ready}ms (${obs.nodes} nodes, ${obs.edges} edges)`);
+    },
+  ],
+
+  [
+    'p4: perf walkthrough and lens changes stay under 100ms on the large fixture',
+    () => {
+      const MEASURE = ev(`(async function () {
+        ${PAGE_HELPERS}
+        function frame() {
+          return new Promise(function (resolve) {
+            requestAnimationFrame(function () { requestAnimationFrame(function () { resolve(); }); });
+          });
+        }
+        function median(values) {
+          var sorted = values.slice().sort(function (a, b) { return a - b; });
+          var mid = Math.floor(sorted.length / 2);
+          return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        }
+
+        // Lens switches while the walkthrough is idle, cycling Structure -> Evidence -> Change -> Risk.
+        var order = ['structure', 'evidence', 'change', 'risk'];
+        selectLens('structure', { explicit: true });
+        await frame();
+        var lensTimes = [];
+        for (var i = 0; i < 8; i += 1) {
+          var lens = order[(i + 1) % order.length];
+          var lensStart = performance.now();
+          selectLens(lens, { explicit: true });
+          await frame();
+          lensTimes.push(performance.now() - lensStart);
+        }
+
+        // Ten walkthrough step changes on the 20-stage scenario.
+        startWalkthrough('scenario_large');
+        await frame();
+        var stepTimes = [];
+        for (var j = 0; j < 10; j += 1) {
+          var stepStart = performance.now();
+          walkNext();
+          await frame();
+          stepTimes.push(performance.now() - stepStart);
+        }
+        deactivateScenario();
+
+        return JSON.stringify({
+          stepMedian: median(stepTimes),
+          lensMedian: median(lensTimes),
+          stepTimes: stepTimes,
+          lensTimes: lensTimes,
+        });
+      })()`);
+      const [phase] = runPhases(fixtures.LARGE_SPEC, [{ width: 1440, height: 900, steps: [MEASURE] }]);
+      const obs = JSON.parse(lastEvalValue(phase));
+      console.log(`  p4: large fixture medians — step change ${obs.stepMedian.toFixed(1)}ms, lens change ${obs.lensMedian.toFixed(1)}ms`);
+      assert.ok(obs.stepMedian < 100, `median walkthrough step change ${obs.stepMedian.toFixed(1)}ms must be under 100ms: ${JSON.stringify(obs.stepTimes)}`);
+      assert.ok(obs.lensMedian < 100, `median lens change ${obs.lensMedian.toFixed(1)}ms must be under 100ms: ${JSON.stringify(obs.lensTimes)}`);
+    },
+  ],
+
+  [
+    'p4: shortcuts sheet opens, closes with focus restore, works from palette, and fits 320px',
+    () => {
+      const phase = runPhases(fixtures.VALID_SPEC, [{ width: 320, height: 800, steps: [
+        ev(`window.__shortcutOrigin = document.querySelector('#btn-palette'); window.__shortcutOrigin.focus(); 0`),
+        key('?', { code: 'Slash', modifiers: 8 }),
+        ev(`({ open: !document.querySelector('#shortcuts-scrim').hidden, focused: document.activeElement.id,
+          role: document.querySelector('#shortcuts-dialog').getAttribute('role'), title: document.querySelector('#shortcuts-title').textContent,
+          keys: [...document.querySelectorAll('.shortcuts-table kbd')].map(el => el.textContent),
+          overflow: document.documentElement.scrollWidth > innerWidth })`),
+        ESCAPE(),
+        ev(`({ closed: document.querySelector('#shortcuts-scrim').hidden, restored: document.activeElement === window.__shortcutOrigin })`),
+        ev(`openPalette(document.querySelector('#btn-palette')); paletteFilter('Keyboard shortcuts'); paletteSetActive(0); paletteRunActive();
+          ({ paletteOpened: !document.querySelector('#shortcuts-scrim').hidden, focused: document.activeElement.id })`),
+      ] }])[0];
+      const results = phase.filter(step => step.kind === 'eval').map(step => step.value);
+      assert.ok(results[1].open && results[1].focused === 'shortcuts-dialog', 'question mark did not focus the dialog');
+      assert.strictEqual(results[1].role, 'dialog');
+      assert.strictEqual(results[1].title, 'Keyboard shortcuts');
+      ['⌘K', '1', 'j', 'F', 'Esc'].forEach(value => assert.ok(results[1].keys.includes(value), `missing ${value}`));
+      assert.strictEqual(results[1].overflow, false, 'page scrolls horizontally at 320px');
+      assert.ok(results[2].closed && results[2].restored, 'Escape did not close and restore focus');
+      assert.ok(results[3].paletteOpened, 'palette command did not open the sheet');
+    },
+  ],
 ];
 
 module.exports = { name: 'Rendered DOM Verification', cases };

@@ -436,12 +436,39 @@
 
     <!-- include: scripts/palette.js -->
 
+    <!-- include: scripts/shortcuts.js -->
+
     window.addEventListener('DOMContentLoaded', init);
   </script>
   <div id="palette-scrim" class="palette-scrim" data-open="false" hidden>
     <div id="palette-dialog" class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
       <input type="text" id="palette-input" class="palette-input" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" placeholder="Search commands, views, components..." spellcheck="false" autocomplete="off" />
       <div id="palette-list" class="palette-list" role="listbox"></div>
+    </div>
+  </div>
+  <div id="shortcuts-scrim" class="palette-scrim" data-open="false" hidden>
+    <div id="shortcuts-dialog" class="palette shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" tabindex="-1">
+      <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+      <table class="shortcuts-table">
+        <tbody>
+          <tr><th colspan="2">Navigate</th></tr>
+          <tr><td><kbd>⌘K</kbd> / <kbd>Ctrl K</kbd></td><td>Open command palette</td></tr>
+          <tr><td><kbd>→</kbd> / <kbd>j</kbd></td><td>Next walkthrough step</td></tr>
+          <tr><td><kbd>←</kbd> / <kbd>k</kbd></td><td>Previous walkthrough step</td></tr>
+          <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Pan diagram</td></tr>
+          <tr><th colspan="2">Walkthrough</th></tr>
+          <tr><td><kbd>Space</kbd></td><td>Play or pause</td></tr>
+          <tr><th colspan="2">Lenses</th></tr>
+          <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Select a lens</td></tr>
+          <tr><th colspan="2">View</th></tr>
+          <tr><td><kbd>F</kbd></td><td>Fit diagram</td></tr>
+          <tr><td><kbd>0</kbd></td><td>Reset view</td></tr>
+          <tr><td><kbd>+</kbd> / <kbd>−</kbd></td><td>Zoom</td></tr>
+          <tr><td><kbd>A</kbd></td><td>Animate data flow</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close dialog</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Show this sheet</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
   <div id="workbench-status" class="workbench-sr-only" role="status" aria-live="polite"></div>
