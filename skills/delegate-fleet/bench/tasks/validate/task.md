@@ -1,0 +1,1 @@
+Harden `addItem(inventory, sku, qty)` in `src/inventory.js`: throw a `TypeError` when `sku` is not a non-empty string, and a `RangeError` when `qty` is not a positive integer. Valid calls behave exactly as before. Add tests for the new errors next to the existing inventory tests, and run `npm test`.

@@ -3,6 +3,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.nyc_output']);
@@ -22,6 +23,26 @@ const SCAN_EXTENSIONS = new Set([
   '.txt'
 ]);
 const SELF = path.relative(ROOT, __filename);
+
+// Paths git already ignores are not part of the repository, so they are not
+// this checker's business. Without this, a tool's local state directory --
+// delegate-fleet's .delegate-fleet/, for example -- fails the personal-path
+// rule on the machine that created it even though it can never be committed.
+const IGNORED = (() => {
+  const set = new Set();
+  const res = spawnSync('git', ['-C', ROOT, 'status', '--porcelain', '--ignored=matching', '-z', '-uall'], {
+    encoding: 'utf8'
+  });
+  if (res.status !== 0 || !res.stdout) return set;
+  for (const record of res.stdout.split('\0')) {
+    if (record.startsWith('!! ')) set.add(record.slice(3).replace(/\/$/, ''));
+  }
+  return set;
+})();
+
+function isIgnored(full) {
+  return IGNORED.has(path.relative(ROOT, full));
+}
 
 const errors = [];
 const warnings = [];
@@ -48,6 +69,7 @@ function walk(dir, onFile, onDir) {
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (isIgnored(full)) continue;
       if (SKIP_DIRS.has(entry.name)) {
         if (entry.name === 'node_modules') {
           warn(`node_modules present at ${path.relative(ROOT, full)} (not committed; ignored)`);
@@ -57,6 +79,7 @@ function walk(dir, onFile, onDir) {
       if (onDir) onDir(full);
       walk(full, onFile, onDir);
     } else if (entry.isFile()) {
+      if (isIgnored(full)) continue;
       onFile(full);
     }
   }
@@ -94,15 +117,61 @@ for (const relative of REQUIRED_FILES) {
   if (!exists(relative)) fail(`missing required file: ${relative}`);
 }
 
+// Generic leaks, checked for everyone. Nothing here names a person, an
+// employer or a private project: this file is public, and a denylist of
+// private names would itself publish them.
 const FORBIDDEN = [
-  { re: /\/Users\/[A-Za-z0-9._-]+\//, label: 'absolute macOS user path' },
-  { re: /\/home\/[A-Za-z0-9._-]+\//, label: 'absolute Linux user path' },
-  { re: /\bmelshiaty\b/i, label: 'personal identifier' },
-  { re: /\bbappzaar\b/i, label: 'private project name' },
-  { re: /\bfastfishio\b/i, label: 'unverified remote' },
-  { re: /features\/o2d|marketplaces\/noon|@o2d\/|@noon\//, label: 'private project path' },
-  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, label: 'private key material' }
+  { re: /\/Users\/[A-Za-z0-9._-]+(?=\/|\b)/, label: 'absolute macOS user path' },
+  { re: /\/home\/[A-Za-z0-9._-]+(?=\/|\b)/, label: 'absolute Linux user path' },
+  { re: /(?:\/c\/Users\/|[a-z]:[\\/]Users[\\/])[A-Za-z0-9._-]+(?=[\\/]|\b)/i, label: 'absolute Windows user path' },
+  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/, label: 'private key material' },
+  { re: /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,})\b/, label: 'GitHub token' },
+  { re: /\bsk-[A-Za-z0-9]{20,}\b/, label: 'API key' },
+  { re: /\bAKIA[0-9A-Z]{16}\b/, label: 'AWS access key id' },
 ];
+
+/**
+ * Names you must not publish but also must not list in a public file:
+ * your own username, an employer, a private repository, an internal hostname.
+ *
+ * Put them in `.validate-repo-private.json` (gitignored) as
+ * `{ "forbidden": [{ "pattern": "internal-name", "label": "private project" }] }`
+ * and they are checked exactly like the rules above. Contributors without the
+ * file simply get the generic checks.
+ */
+function loadPrivateRules() {
+  const file = path.join(ROOT, '.validate-repo-private.json');
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return [];
+    fail(`.validate-repo-private.json: ${err.message}`);
+    return [];
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
+      (raw.forbidden !== undefined && !Array.isArray(raw.forbidden))) {
+    fail('.validate-repo-private.json: expected an object with a "forbidden" array');
+    return [];
+  }
+  const rules = [];
+  for (const entry of raw.forbidden || []) {
+    if (!entry || typeof entry.pattern !== 'string' || !entry.pattern ||
+        (entry.flags !== undefined && typeof entry.flags !== 'string')) {
+      fail('.validate-repo-private.json: every forbidden entry needs a non-empty "pattern" and optional string "flags"');
+      continue;
+    }
+    try {
+      const flags = (entry.flags === undefined ? 'i' : entry.flags).replace(/[gy]/g, '');
+      rules.push({ re: new RegExp(entry.pattern, flags), label: entry.label || 'private identifier' });
+    } catch (err) {
+      fail(`.validate-repo-private.json: ${entry.pattern} is not a valid regular expression (${err.message})`);
+    }
+  }
+  return rules;
+}
+
+FORBIDDEN.push(...loadPrivateRules());
 
 const skillDirs = [];
 walk(ROOT, (file) => {

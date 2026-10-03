@@ -1,0 +1,1 @@
+Add `applyDiscount(totalCents, code)` to `src/pricing.js` and export it. Codes: `SAVE10` takes 10% off; `SAVE20` takes 20% off but never more than 5000 cents; `FREESHIP` takes a flat 499 cents off but never below zero. Round results to whole cents with Math.round. An unknown code throws an `Error` whose message contains the code. Add tests and run `npm test`.
