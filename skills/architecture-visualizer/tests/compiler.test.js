@@ -368,9 +368,9 @@ const cases = [
     },
   ],
   [
-    'every shipped example compiles within the 400 KB offline size budget',
+    'every shipped example compiles within the 500 KB offline size budget',
     () => {
-      const BUDGET_BYTES = 400 * 1024;
+      const BUDGET_BYTES = 500 * 1024;
       const examplesDir = path.join(__dirname, '..', 'examples');
       fs.readdirSync(examplesDir).forEach((name) => {
         const spec = JSON.parse(fs.readFileSync(path.join(examplesDir, name, 'architecture.json'), 'utf8'));

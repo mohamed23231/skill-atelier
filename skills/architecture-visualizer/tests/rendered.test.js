@@ -60,7 +60,13 @@ async function waitForFile(file, timeoutMs) {
   var start = Date.now();
   for (;;) {
     try {
-      if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8');
+      if (fs.existsSync(file)) {
+        var contents = fs.readFileSync(file, 'utf8');
+        // Chrome creates the file before fully writing it. An empty or partial
+        // file (no complete first line yet) means "not ready", not "invalid".
+        var firstLine = contents.split('\n')[0].trim();
+        if (firstLine && contents.indexOf('\n') !== -1) return contents;
+      }
     } catch (e) {}
     if (Date.now() - start > timeoutMs) throw new Error('timed out waiting for ' + file);
     await delay(50);
@@ -351,40 +357,88 @@ main();
 const ERROR_PRELOAD =
   'window.__errors = []; window.onerror = function (msg, url, line, col, err) { window.__errors.push({ msg: String(msg), url: url, line: line, col: col, stack: err && err.stack }); };';
 
+const LAUNCH_RETRY_LIMIT = 2;
+
+const LAUNCH_FAILURE_PATTERNS = [
+  /DevToolsActivePort/,
+  /ECONNREFUSED/,
+  /ETIMEDOUT/,
+  /no debuggable page target appeared/,
+  /failed to open DevTools websocket/,
+];
+
+function launchFailureReason(error) {
+  const message = String((error && error.message) || error || '');
+  const line = message.split('\n').map((part) => part.trim()).find(Boolean);
+  return line || message.trim();
+}
+
+// Classify only transient Chrome launch/connection failures. Assertions and
+// page script errors must always propagate unchanged so real regressions fail.
+function isLaunchFailure(error) {
+  if (error && (error.name === 'AssertionError' || error.code === 'ERR_ASSERTION')) return false;
+  const message = String((error && error.message) || error || '');
+  if (!message) return false;
+  if (/AssertionError/.test(message)) return false;
+  if (/page script failed/.test(message)) return false;
+  if (LAUNCH_FAILURE_PATTERNS.some((pattern) => pattern.test(message))) return true;
+  if (/timed out waiting for/i.test(message) && /(DevTools|CDP|page target|websocket)/i.test(message)) return true;
+  return false;
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 function runBrowser(config) {
-  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-browser-'));
-  const workerPath = path.join(workDir, 'cdp-worker.js');
-  const configPath = path.join(workDir, 'config.json');
-  fs.writeFileSync(workerPath, CDP_WORKER_SOURCE, 'utf8');
-  fs.writeFileSync(configPath, JSON.stringify(config), 'utf8');
+  const maxAttempts = LAUNCH_RETRY_LIMIT + 1;
 
-  let output;
-  try {
-    output = execFileSync(process.execPath, [workerPath, configPath], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: config.timeoutMs || 90000,
-      maxBuffer: 64 * 1024 * 1024,
-    });
-  } catch (err) {
-    const stdout = err.stdout ? String(err.stdout) : '';
-    const stderr = err.stderr ? String(err.stderr) : '';
-    const errorMatch = stdout.match(/__ARCH_VIZ_ERROR__([\s\S]*)/);
-    if (errorMatch) {
-      let message = errorMatch[1].trim();
-      try {
-        message = JSON.parse(message);
-      } catch {}
-      throw new Error(message);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-browser-'));
+    const workerPath = path.join(workDir, 'cdp-worker.js');
+    const configPath = path.join(workDir, 'config.json');
+    fs.writeFileSync(workerPath, CDP_WORKER_SOURCE, 'utf8');
+    fs.writeFileSync(configPath, JSON.stringify(config), 'utf8');
+
+    let output;
+    try {
+      output = execFileSync(process.execPath, [workerPath, configPath], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: config.timeoutMs || 90000,
+        maxBuffer: 64 * 1024 * 1024,
+      });
+    } catch (err) {
+      const stdout = err.stdout ? String(err.stdout) : '';
+      const stderr = err.stderr ? String(err.stderr) : '';
+      const errorMatch = stdout.match(/__ARCH_VIZ_ERROR__([\s\S]*)/);
+      let failure;
+      if (errorMatch) {
+        let message = errorMatch[1].trim();
+        try {
+          message = JSON.parse(message);
+        } catch {}
+        failure = new Error(message);
+      } else {
+        failure = new Error('browser worker failed: ' + (stderr || stdout || err.message));
+      }
+
+      if (attempt < maxAttempts && isLaunchFailure(failure)) {
+        // The worker already killed its Chrome process tree and deleted the
+        // temporary profile before exiting; let the OS settle, then relaunch.
+        process.stderr.write(`[rendered] relaunching Chrome after: ${launchFailureReason(failure)}\n`);
+        sleepSync(250);
+        continue;
+      }
+      throw failure;
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
     }
-    throw new Error('browser worker failed: ' + (stderr || stdout || err.message));
-  } finally {
-    fs.rmSync(workDir, { recursive: true, force: true });
-  }
 
-  const match = output.match(/__ARCH_VIZ_RESULT__([\s\S]*)/);
-  assert.ok(match, 'browser worker produced no result payload');
-  return JSON.parse(match[1].trim());
+    const match = output.match(/__ARCH_VIZ_RESULT__([\s\S]*)/);
+    assert.ok(match, 'browser worker produced no result payload');
+    return JSON.parse(match[1].trim());
+  }
 }
 
 function runPhases(specRelOrSpec, phases, timeoutMs, options = {}) {
@@ -1543,6 +1597,56 @@ const cases = [
       const chrome = findChrome();
       assert.ok(chrome, 'no Chrome/Chromium binary found; rendered verification requires a real browser');
       assert.ok(fs.existsSync(chrome), 'detected Chrome binary does not exist on disk');
+    },
+  ],
+
+  [
+    'Rendered launch failures are retried while assertions and page errors are not',
+    () => {
+      const launches = [
+        new Error('invalid DevToolsActivePort contents: ""'),
+        new Error('Error: timed out waiting for /var/folders/xyz/arch-viz-chrome-1/DevToolsActivePort\n    at main'),
+        new Error('connect ECONNREFUSED 127.0.0.1:9222'),
+        new Error('connect ECONNREFUSED ::1:9222'),
+        new Error('no debuggable page target appeared'),
+        new Error('failed to open DevTools websocket'),
+      ];
+      launches.forEach((error) => {
+        assert.strictEqual(isLaunchFailure(error), true, `should retry launch failure: ${error.message}`);
+      });
+
+      const assertion = new assert.AssertionError({
+        message: 'expected true',
+        actual: false,
+        expected: true,
+        operator: '==',
+      });
+      assert.strictEqual(assertion.name, 'AssertionError');
+      assert.strictEqual(isLaunchFailure(assertion), false, 'assertions must never be retried');
+      assert.strictEqual(
+        isLaunchFailure(new Error('AssertionError [ERR_ASSERTION]: rendered gap out of range')),
+        false,
+        'wrapped assertion messages must never be retried'
+      );
+
+      assert.strictEqual(
+        isLaunchFailure(new Error('page script failed: ReferenceError: missingFn is not defined')),
+        false,
+        'page script errors must never be retried'
+      );
+      assert.strictEqual(isLaunchFailure(new Error('unknown step kind: nope')), false, 'other errors must propagate');
+      assert.strictEqual(isLaunchFailure('timed out waiting for browser websocket'), true, 'pre-connect timeouts are launch failures');
+      assert.strictEqual(isLaunchFailure(new Error('timed out waiting for the DevTools port')), true);
+      assert.strictEqual(
+        isLaunchFailure(new Error('timed out waiting for Page.loadEventFired')),
+        false,
+        'timeouts after the first CDP response must propagate unchanged'
+      );
+
+      assert.strictEqual(
+        launchFailureReason(new Error('Error: invalid DevToolsActivePort contents: ""\n    at main')),
+        'Error: invalid DevToolsActivePort contents: ""'
+      );
     },
   ],
 
