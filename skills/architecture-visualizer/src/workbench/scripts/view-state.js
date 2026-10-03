@@ -1,3 +1,21 @@
+// Lens selection is independent of the Data Flow and Sequence canvas views.
+function selectLens(lens, { explicit = true } = {}) {
+  if (!LENSES.includes(lens)) return;
+  actions.setLens(lens, explicit);
+  document.querySelectorAll('.lens-switcher [data-lens]').forEach(button => {
+    const selected = button.dataset.lens === lens;
+    button.setAttribute('aria-checked', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+  const select = document.querySelector('.lens-select');
+  if (select) select.value = lens;
+  document.body.dataset.lens = lens;
+  if (lens === 'change') switchView(VIEWS.BEFORE_AFTER);
+  else if (state.currentView === VIEWS.BEFORE_AFTER) switchView(VIEWS.ARCHITECTURE);
+  announceStatus(`${lens.charAt(0).toUpperCase() + lens.slice(1)} lens`);
+  updateUrlState();
+}
+
 const FOCUS_MODES = { NEIGHBORS: 'neighbors', AFFECTED: 'affected' };
 let restoringViewState = false;
 // Until init has read the incoming hash, nothing may write one: an early write would replace a shared
@@ -154,6 +172,7 @@ function holdsLinkedCamera() {
 function viewSnapshot() {
   const snapshot = {
     chapter: state.chapter,
+    lens: state.lens,
     view: state.currentView,
     node: state.selectedNodeId,
     edge: state.selectedEdgeId,
@@ -214,11 +233,17 @@ function restoreUrlState() {
       } else if (link.view === 'implementation_plan') {
         openChapter('plan');
         switchView('architecture');
+      } else if (link.view === VIEWS.BEFORE_AFTER || link.view === VIEWS.ARCHITECTURE) {
+        selectLens(link.view === VIEWS.BEFORE_AFTER ? 'change' : 'structure', { explicit: true });
       } else if (Object.values(VIEWS).includes(link.view)) {
         switchView(link.view);
       } else {
         notices.push(`View ${link.view} does not exist; showing the architecture.`);
       }
+    }
+    if (link.lens !== undefined) {
+      if (LENSES.includes(link.lens)) selectLens(link.lens, { explicit: true });
+      else notices.push(`Lens ${link.lens} does not exist; keeping the suggested lens.`);
     }
     if (link.filter !== undefined) {
       if (document.querySelector(`[data-filter="${CSS.escape(link.filter)}"]`)) {

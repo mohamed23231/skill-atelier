@@ -76,14 +76,19 @@
       </div>
     </div>
 
-    <!-- View Mode Tabs -->
-    <nav class="tabs-section" role="tablist" data-minimized="false">
-      <button class="tab-btn active" role="tab" aria-selected="true" data-view="architecture" aria-label="Architecture" title="Architecture"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-architecture"></use></svg><span>Architecture</span></button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-delta"></use></svg><span>Delta</span></button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-flow"></use></svg><span>Data Flow</span></button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-sequence"></use></svg><span>Sequence</span></button>
-      <button class="btn-icon icon-only tabs-min-toggle" data-action="tabs-minimize" aria-pressed="false" aria-label="Minimize view tabs" title="Minimize view tabs"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-collapse"></use></svg></button>
-    </nav>
+    <!-- Lens controls share one selection across desktop and phone layouts. -->
+    <div class="lens-switcher" role="radiogroup" aria-label="Lens">
+      <button type="button" role="radio" aria-checked="true" tabindex="0" data-lens="structure">Structure</button>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="evidence">Evidence</button>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="change">Change</button>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="risk">Risk</button>
+    </div>
+    <select class="lens-select" aria-label="Lens">
+      <option value="structure">Structure</option>
+      <option value="evidence">Evidence</option>
+      <option value="change">Change</option>
+      <option value="risk">Risk</option>
+    </select>
 
     <!-- Header Actions -->
     <div class="header-actions">

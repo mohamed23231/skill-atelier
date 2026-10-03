@@ -110,7 +110,12 @@ function openChapter(id) {
   const targetId = found ? id : (chapters[0]?.id || 'overview');
   const targetChapter = found || chapters[0] || { id: targetId, label: targetId };
 
+  const chapterChanged = state.chapter !== targetId;
   actions.setChapter(targetId);
+  if (chapterChanged) {
+    if (state.lensExplicit) actions.setLens(state.lens, false);
+    else selectLens(suggestedLens(targetId), { explicit: false });
+  }
 
   // Update chapter tabs
   chapters.forEach(ch => {

@@ -19,6 +19,7 @@ function camp(hash) {
 function fullSnapshot() {
   return {
     chapter: 'review',
+    lens: 'risk',
     view: 'sequence',
     node: 'api',
     edge: 'e1',
@@ -36,6 +37,23 @@ const V1_HASH = '#view=sequence&node=api&edge=e1&filter=async&step=2&scenario=s1
 
 const cases = [
   [
+    'lens defaults to structure and is omitted',
+    () => {
+      assert.strictEqual(encodeViewHash({ lens: 'structure' }), 'v=2');
+      assert.deepStrictEqual(camp('v=2'), { version: 2 });
+    },
+  ],
+  [
+    'lens is parsed only in version 2 and all nondefault lenses round trip',
+    () => {
+      ['evidence', 'change', 'risk'].forEach(lens => {
+        assert.deepStrictEqual(camp(encodeViewHash({ lens })), { version: 2, lens });
+      });
+      assert.deepStrictEqual(camp('l=risk&view=before_after'), { version: 1, view: 'before_after' });
+      assert.deepStrictEqual(camp('v=2&l=structure'), { version: 2, lens: 'structure' });
+    },
+  ],
+  [
     'a full version 2 snapshot round trips through encode and parse',
     () => {
       const snapshot = fullSnapshot();
@@ -44,6 +62,7 @@ const cases = [
       assert.deepStrictEqual(camp(hash), {
         version: 2,
         chapter: 'review',
+        lens: 'risk',
         view: 'sequence',
         node: 'api',
         edge: 'e1',
@@ -63,6 +82,7 @@ const cases = [
     () => {
       const expected = {
         chapter: 'review',
+        lens: 'risk',
         view: 'sequence',
         node: 'api',
         edge: 'e1',
@@ -94,7 +114,7 @@ const cases = [
     'keys are emitted in the fixed order, and only when set',
     () => {
       const hash = encodeViewHash(fullSnapshot());
-      assert.strictEqual(hash, 'v=2&c=review&view=sequence&n=api&e=e1&s=s1&at=stage-one&step=3&filter=async&focus=neighbors&present=1&cam=10,-20.1,1');
+      assert.strictEqual(hash, 'v=2&c=review&l=risk&view=sequence&n=api&e=e1&s=s1&at=stage-one&step=3&filter=async&focus=neighbors&present=1&cam=10,-20.1,1');
     },
   ],
 

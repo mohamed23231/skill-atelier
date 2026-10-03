@@ -11,7 +11,7 @@ function copyCurrentLink() {
 }
 
 // Command Palette
-const PALETTE_GROUPS = ['Commands', 'Views', 'Chapters', 'Components', 'Connections', 'Scenario stages', 'Export'];
+const PALETTE_GROUPS = ['Commands', 'Lenses', 'Views', 'Chapters', 'Components', 'Connections', 'Scenario stages', 'Export'];
 
 let paletteOpener = null;
 let paletteCurrentItems = [];
@@ -111,24 +111,17 @@ function paletteBuildAllItems() {
   }
   items.push(...commands);
 
-  // 2. Views
+  // Lenses follow Commands; the remaining Views are canvas playback modes.
+  items.push(...LENSES.map(lens => ({
+    id: `lens-${lens}`,
+    group: 'Lenses',
+    label: lens.charAt(0).toUpperCase() + lens.slice(1),
+    hint: 'Lens',
+    icon: lens === 'change' ? 'ui-delta' : (lens === 'risk' ? 'ui-alert' : 'ui-architecture'),
+    run: () => selectLens(lens, { explicit: true })
+  })));
+
   const views = [
-    {
-      id: 'view-architecture',
-      group: 'Views',
-      label: 'Architecture',
-      hint: 'View',
-      icon: 'ui-architecture',
-      run: () => switchView(VIEWS.ARCHITECTURE)
-    },
-    {
-      id: 'view-before_after',
-      group: 'Views',
-      label: 'Before vs After',
-      hint: 'Delta · View',
-      icon: 'ui-delta',
-      run: () => switchView(VIEWS.BEFORE_AFTER)
-    },
     {
       id: 'view-data_flow',
       group: 'Views',
@@ -268,7 +261,7 @@ function paletteFilter(rawQuery) {
   const q = (rawQuery || '').trim().toLowerCase();
 
   if (!q) {
-    const allowed = new Set(['Commands', 'Views', 'Chapters', 'Components']);
+    const allowed = new Set(['Commands', 'Lenses', 'Views', 'Chapters', 'Components']);
     paletteCurrentItems = allItems.filter(item => allowed.has(item.group)).slice(0, 50);
   } else {
     const tokens = q.split(/\s+/).filter(Boolean);

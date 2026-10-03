@@ -407,6 +407,24 @@ const cases = [
     },
   ],
   [
+    'lens state defaults and explicit selections are owned by store actions',
+    () => {
+      const source = fs.readFileSync(path.join(WORKBENCH_DIR, 'scripts/state.js'), 'utf8');
+      const store = fs.readFileSync(path.join(WORKBENCH_DIR, 'scripts/store.js'), 'utf8');
+      const sandbox = { ArchVizGeometry: {} };
+      vm.runInNewContext(source + store + '; this.result = { state, actions, STORE_FIELDS };', sandbox);
+      const { state, actions, STORE_FIELDS } = sandbox.result;
+      assert.strictEqual(state.lens, 'structure');
+      assert.strictEqual(state.lensExplicit, false);
+      assert.ok(STORE_FIELDS.includes('lens') && STORE_FIELDS.includes('lensExplicit'));
+      actions.setLens('risk', true);
+      assert.strictEqual(state.lens, 'risk');
+      assert.strictEqual(state.lensExplicit, true);
+      actions.setLens('risk', false);
+      assert.strictEqual(state.lensExplicit, false);
+    },
+  ],
+  [
     'view state changes only through named actions in store.js',
     () => {
       const scriptsDir = path.join(WORKBENCH_DIR, 'scripts');

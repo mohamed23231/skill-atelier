@@ -1,11 +1,12 @@
 // The only writer of view state. Reads stay as `state.x`; every write goes through an action here.
-const STORE_FIELDS = Object.freeze(['theme', 'chapter', 'currentView', 'deltaMode', 'selectedNodeId', 'selectedEdgeId',
+const STORE_FIELDS = Object.freeze(['theme', 'chapter', 'lens', 'lensExplicit', 'currentView', 'deltaMode', 'selectedNodeId', 'selectedEdgeId',
   'activeFilter', 'searchQuery', 'focusMode', 'presentation', 'scenarioId', 'scenarioStage', 'scenarioActive',
   'sequenceIndex', 'zoom', 'panX', 'panY', 'userMovedView']);
 
 const actions = Object.freeze({
   setTheme(theme) { state.theme = theme; },
   setChapter(chapter) { state.chapter = chapter; },
+  setLens(lens, explicit) { state.lens = lens; state.lensExplicit = explicit; },
   setView(view) { state.currentView = view; },
   setDeltaMode(mode) { state.deltaMode = mode; },
   selectNode(id) { state.selectedNodeId = id; },        // id or null

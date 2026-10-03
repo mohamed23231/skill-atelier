@@ -70,6 +70,8 @@ function urlParseV2(params) {
   const result = { version: 2 };
   const chapter = params.get('c');
   if (urlSet(chapter)) result.chapter = chapter;
+  const lens = params.get('l');
+  if (urlSet(lens)) result.lens = lens;
   const view = params.get('view');
   if (urlSet(view)) result.view = view;
   const node = params.get('n');
@@ -98,6 +100,7 @@ function encodeViewHash(snapshot) {
   let camSuffix = '';
   params.set('v', '2');
   if (urlSet(source.chapter) && source.chapter !== 'overview') params.set('c', String(source.chapter));
+  if (urlSet(source.lens) && source.lens !== 'structure') params.set('l', String(source.lens));
   if (urlSet(source.view) && source.view !== URL_CODEC_DEFAULT_VIEW) params.set('view', String(source.view));
   if (urlSet(source.node)) params.set('n', String(source.node));
   if (urlSet(source.edge)) params.set('e', String(source.edge));

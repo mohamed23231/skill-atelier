@@ -56,51 +56,44 @@ header {
 
 .brand-mark { width: 26px; height: 26px; color: var(--ink); stroke-width: 1.2; }
 
-.tabs-section {
+.lens-switcher {
   display: flex;
+  flex: none;
   align-items: center;
-  background: var(--bg);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 9px;
   padding: 3px;
   gap: 2px;
-  min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-
-.tabs-section::-webkit-scrollbar { display: none; }
-
-.tabs-section[data-minimized="true"] .tab-btn:not(.active) { display: none; }
-
-.tabs-min-toggle { flex: 0 0 auto; }
-
-.tab-btn {
+.lens-switcher button {
   background: transparent;
   border: none;
   color: var(--muted);
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 12.5px;
   white-space: nowrap;
-  flex: 0 0 auto;
   font-weight: 600;
   border-radius: 6px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.15s ease;
 }
-
-.tab-btn:hover {
-  color: var(--ink);
-  background: var(--surface-2);
-}
-
-.tab-btn.active {
-  color: var(--ink);
+.lens-switcher button[aria-checked="true"] {
   background: var(--surface);
-  box-shadow: 0 0 0 1px var(--line);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+}
+.lens-switcher button:focus-visible,
+.lens-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lens-select {
+  display: none;
+  flex: none;
+  max-width: 100px;
+  padding: 6px;
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
 .header-actions {

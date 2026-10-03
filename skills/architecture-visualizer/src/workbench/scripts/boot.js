@@ -115,41 +115,26 @@ function setupEventListeners() {
   document.getElementById('btn-theme').addEventListener('click', toggleTheme);
   document.getElementById('btn-copy-link').addEventListener('click', copyCurrentLink);
 
-  // Tabs bar: vertical mouse wheel scrolls the horizontal tab strip
-  const tabsSection = document.querySelector('.tabs-section');
-  if (tabsSection) {
-    tabsSection.addEventListener('wheel', event => {
-      if (tabsSection.scrollWidth <= tabsSection.clientWidth) return;
-      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+  const lensButtons = [...document.querySelectorAll('.lens-switcher [data-lens]')];
+  lensButtons.forEach((button, index) => {
+    button.addEventListener('click', () => selectLens(button.dataset.lens, { explicit: true }));
+    button.addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'ArrowLeft') next = (index + lensButtons.length - 1) % lensButtons.length;
+      else if (event.key === 'ArrowRight') next = (index + 1) % lensButtons.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = lensButtons.length - 1;
+      else return;
       event.preventDefault();
-      tabsSection.scrollLeft += event.deltaY;
-    }, { passive: false });
-
-    // Tabs bar: minimize toggle collapses the strip to the active view only
-    const tabsMinToggle = tabsSection.querySelector('[data-action="tabs-minimize"]');
-    if (tabsMinToggle) {
-      tabsMinToggle.addEventListener('click', () => {
-        const minimized = tabsSection.getAttribute('data-minimized') === 'true';
-        tabsSection.setAttribute('data-minimized', minimized ? 'false' : 'true');
-        tabsMinToggle.setAttribute('aria-pressed', minimized ? 'false' : 'true');
-        tabsMinToggle.setAttribute('aria-label', minimized ? 'Minimize view tabs' : 'Expand view tabs');
-        tabsMinToggle.setAttribute('title', minimized ? 'Minimize view tabs' : 'Expand view tabs');
-        tabsMinToggle.textContent = minimized ? '«' : '»';
-      });
-    }
-  }
-
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => {
-        b.classList.remove('active');
-        b.setAttribute('aria-selected', 'false');
-      });
-      btn.classList.add('active');
-      btn.setAttribute('aria-selected', 'true');
-      switchView(btn.dataset.view);
+      event.stopPropagation();
+      selectLens(lensButtons[next].dataset.lens, { explicit: true });
+      lensButtons[next].focus();
     });
   });
+  document.querySelector('.lens-select').addEventListener('change', event => {
+    selectLens(event.target.value, { explicit: true });
+  });
+  selectLens(state.lens, { explicit: false });
 
   document.querySelectorAll('.delta-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -260,13 +245,20 @@ function handleKeyDown(e) {
     return;
   }
 
-  const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+  const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement ||
+    e.target instanceof HTMLSelectElement || e.target.isContentEditable;
   if (typing) {
     if (e.key === 'Escape' && activeDrawer) {
       closeActiveDrawer();
       return;
     }
     if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[1-4]$/.test(e.key)) {
+    selectLens(LENSES[Number(e.key) - 1], { explicit: true });
+    e.preventDefault();
     return;
   }
 

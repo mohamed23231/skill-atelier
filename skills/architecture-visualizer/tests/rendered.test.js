@@ -1136,76 +1136,122 @@ function assertMinimapBehavior(raw) {
   );
 }
 
-function tabsBarSteps() {
-  return [
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      window.__obs = {};
-      var tabs = __q('.tabs-section');
-      __record('tabsPresent', !!tabs);
-      __record('tabCount', __qa('.tabs-section .tab-btn').length);
-      __record('togglePresent', !!__q('[data-action="tabs-minimize"]'));
-      __record('initialMinimized', tabs ? tabs.getAttribute('data-minimized') : null);
-      __record('overflowing', tabs ? tabs.scrollWidth > tabs.clientWidth + 1 : null);
-      __record('scrollLeftBefore', tabs ? tabs.scrollLeft : null);
-      if (tabs) {
-        tabs.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 240, deltaX: 0 }));
-      }
-      await __sleep(60);
-      __record('scrollLeftAfterWheel', tabs ? tabs.scrollLeft : null);
-      return __observed();
-    })()`),
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      var tabs = __q('.tabs-section');
-      __click(__q('[data-action="tabs-minimize"]'));
-      await __sleep(80);
-      __record('minimizedAfterClick', tabs ? tabs.getAttribute('data-minimized') : null);
-      var visibleTabs = __qa('.tabs-section .tab-btn').filter(function (el) {
-        var r = el.getBoundingClientRect();
-        return r.width > 0.5 && r.height > 0.5;
-      });
-      __record('visibleTabsWhenMinimized', visibleTabs.length);
-      __record('visibleTabIsActive', visibleTabs.length === 1 && visibleTabs[0].classList.contains('active'));
-      __record('togglePressed', __q('[data-action="tabs-minimize"]').getAttribute('aria-pressed'));
-      return __observed();
-    })()`),
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      var tabs = __q('.tabs-section');
-      __click(__q('[data-action="tabs-minimize"]'));
-      await __sleep(80);
-      __record('minimizedAfterSecondClick', tabs ? tabs.getAttribute('data-minimized') : null);
-      var visibleTabs = __qa('.tabs-section .tab-btn').filter(function (el) {
-        var r = el.getBoundingClientRect();
-        return r.width > 0.5 && r.height > 0.5;
-      });
-      __record('visibleTabsWhenExpanded', visibleTabs.length);
-      return __observed();
-    })()`),
-  ];
+function lensBarSteps() {
+  const steps = [ev(`window.__lensVisits = []; document.querySelector('.lens-switcher [data-lens="structure"]').focus(); 0`)];
+  ['structure', 'evidence', 'change', 'risk'].forEach((lens, index) => {
+    if (index) steps.push(key('ArrowRight', { code: 'ArrowRight', windowsVirtualKeyCode: 39 }));
+    steps.push(ev(`window.__lensVisits.push({
+      lens: state.lens,
+      checked: document.activeElement.getAttribute('aria-checked'),
+      focus: document.activeElement.dataset.lens,
+      tabStops: [...document.querySelectorAll('.lens-switcher button')].filter(b => b.tabIndex === 0).length,
+    }); 0`));
+  });
+  steps.push(ev(`JSON.stringify({
+    visits: window.__lensVisits,
+    fits: [...document.querySelectorAll('.lens-switcher button')].every(b => {
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.left >= 0 && r.right <= innerWidth;
+    }),
+    noOverlap: document.querySelector('.lens-switcher').getBoundingClientRect().right <= document.querySelector('.header-actions').getBoundingClientRect().left,
+  })`));
+  return steps;
 }
 
-function assertTabsBarBehavior(raw) {
-  assert.ok(raw, 'no tabs bar observations returned');
-  assert.strictEqual(raw.tabsPresent, true, 'tabs section is missing');
-  assert.strictEqual(raw.togglePresent, true, 'tabs minimize toggle is missing');
-  assert.ok(raw.tabCount >= 4, `expected at least 4 view tabs, found ${raw.tabCount}`);
-  assert.strictEqual(raw.initialMinimized, 'false', 'tabs should start expanded');
-  assert.strictEqual(raw.overflowing, true, 'test setup invalid: tabs bar is not overflowing at 768px');
-  assert.ok(
-    raw.scrollLeftAfterWheel > raw.scrollLeftBefore,
-    `vertical mouse wheel did not scroll the tabs bar (before=${raw.scrollLeftBefore}, after=${raw.scrollLeftAfterWheel})`
-  );
-  assert.strictEqual(raw.minimizedAfterClick, 'true', 'minimize toggle did not collapse the tabs bar');
-  assert.strictEqual(raw.visibleTabsWhenMinimized, 1, `minimized tabs bar should show only the active tab, found ${raw.visibleTabsWhenMinimized}`);
-  assert.strictEqual(raw.visibleTabIsActive, true, 'the only visible tab after minimize is not the active view');
-  assert.strictEqual(raw.togglePressed, 'true', 'minimize toggle aria-pressed was not updated');
-  assert.strictEqual(raw.minimizedAfterSecondClick, 'false', 'minimize toggle did not expand the tabs bar again');
-  assert.strictEqual(raw.visibleTabsWhenExpanded, raw.tabCount, `expanded tabs bar should show all ${raw.tabCount} tabs, found ${raw.visibleTabsWhenExpanded}`);
+function assertLensBarBehavior(raw) {
+  const probe = JSON.parse(raw);
+  assert.ok(probe.fits, 'all four lens buttons must fit in the header');
+  assert.ok(probe.noOverlap, 'lens buttons must not overlap header actions');
+  assert.deepStrictEqual(probe.visits, ['structure', 'evidence', 'change', 'risk'].map(lens => ({
+    lens, checked: 'true', focus: lens, tabStops: 1,
+  })));
 }
 
 const cases = [
+  [
+    '1e: lens arrows wrap, Home and End select and announce without panning',
+    () => {
+      const steps = [ev(`document.querySelector('.lens-switcher [data-lens="structure"]').focus(); window.__camera = [state.panX, state.panY]; window.__visits = []; 0`)];
+      [['ArrowLeft', 37, 'risk'], ['ArrowRight', 39, 'structure'], ['End', 35, 'risk'], ['Home', 36, 'structure']].forEach(([name, code]) => {
+        steps.push(key(name, { code: name, windowsVirtualKeyCode: code }));
+        steps.push(ev(`window.__visits.push([state.lens, document.activeElement.dataset.lens, document.activeElement.getAttribute('aria-checked')]); 0`));
+      });
+      // Live-region announcements are deferred to the next animation frame.
+      steps.push(ev('new Promise(resolve => requestAnimationFrame(() => resolve(0)))'));
+      steps.push(ev(`JSON.stringify({ visits: window.__visits, cameraHeld: window.__camera.every((n, i) => n === [state.panX, state.panY][i]), status: document.getElementById('workbench-status').textContent })`));
+      const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1024, height: 900, steps }])[0]));
+      assert.deepStrictEqual(obs.visits, ['risk', 'structure', 'risk', 'structure'].map(lens => [lens, lens, 'true']));
+      assert.ok(obs.cameraHeld);
+      assert.strictEqual(obs.status, 'Structure lens');
+    },
+  ],
+  [
+    '1e: lens keys 1–4 select explicitly and Change alone shows the delta bar',
+    () => {
+      const steps = [ev('window.__visits = []; document.activeElement.blur(); 0')];
+      [3, 1, 3, 2, 3, 4].forEach(number => {
+        steps.push(key(String(number), { code: `Digit${number}`, windowsVirtualKeyCode: 48 + number }));
+        steps.push(ev(`window.__visits.push([state.lens, state.lensExplicit, state.currentView, document.getElementById('delta-bar').classList.contains('visible'), document.body.dataset.lens, document.querySelector('.lens-select').value]); 0`));
+      });
+      steps.push(ev('JSON.stringify(window.__visits)'));
+      const visits = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1024, height: 900, steps }])[0]));
+      assert.deepStrictEqual(visits, ['change', 'structure', 'change', 'evidence', 'change', 'risk'].map(lens => [
+        lens, true, lens === 'change' ? 'before_after' : 'architecture', lens === 'change', lens, lens,
+      ]));
+    },
+  ],
+  [
+    '1e: lens chapter suggestions resume after an explicit pick survives one change',
+    () => {
+      const steps = [
+        ev(`openChapter('review'); window.__suggested = state.lens; openChapter('walkthrough'); document.activeElement.blur(); 0`),
+        key('2', { code: 'Digit2', windowsVirtualKeyCode: 50 }),
+        ev(`openChapter('review'); window.__held = [state.lens, state.lensExplicit]; openChapter('walkthrough'); window.__resumed = state.lens; openChapter('review'); JSON.stringify([window.__suggested, window.__held, window.__resumed, state.lens])`),
+      ];
+      const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1024, height: 900, steps }])[0]));
+      assert.deepStrictEqual(obs, ['risk', ['evidence', false], 'structure', 'risk']);
+    },
+  ],
+  [
+    '1e: lens links restore Risk and legacy Delta links restore Change explicitly',
+    () => {
+      [['v=2&l=risk', 'risk'], ['view=before_after', 'change'], ['v=2&view=before_after', 'change'], ['v=2&c=review&view=architecture', 'structure'], ['v=2&c=review&l=evidence&view=before_after', 'evidence']].forEach(([hash, lens]) => {
+        const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1024, height: 900, steps: [ev(`JSON.stringify([state.lens, state.lensExplicit, document.body.dataset.lens, document.querySelector('.lens-switcher [data-lens="${lens}"]').getAttribute('aria-checked')])`)] }], undefined, { hash })[0]));
+        assert.deepStrictEqual(obs, [lens, true, lens, 'true'], hash);
+      });
+    },
+  ],
+  [
+    '1e: lens palette group selects a lens and Views retain Data Flow and Sequence',
+    () => {
+      const steps = [
+        key('k', { code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2 }),
+        ev(`window.__groups = PALETTE_GROUPS.slice(0, 3); window.__lenses = paletteCurrentItems.filter(i => i.group === 'Lenses').map(i => i.label); window.__views = paletteCurrentItems.filter(i => i.group === 'Views').map(i => i.label); const index = paletteCurrentItems.findIndex(i => i.id === 'lens-risk'); document.querySelector('#palette-opt-' + index).click(); JSON.stringify({ groups: window.__groups, lenses: window.__lenses, views: window.__views, lens: state.lens, explicit: state.lensExplicit })`),
+      ];
+      const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1024, height: 900, steps }])[0]));
+      assert.deepStrictEqual(obs, { groups: ['Commands', 'Lenses', 'Views'], lenses: ['Structure', 'Evidence', 'Change', 'Risk'], views: ['Data Flow', 'Sequence Flow'], lens: 'risk', explicit: true });
+    },
+  ],
+  [
+    '1e: lens mobile select at 390 changes and synchronizes the lens',
+    () => {
+      const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 390, height: 844, steps: [ev(`const select = document.querySelector('.lens-select'); const visible = select.getBoundingClientRect().width > 0; const radiosHidden = document.querySelector('.lens-switcher').getBoundingClientRect().width === 0; select.value = 'change'; select.dispatchEvent(new Event('change', { bubbles: true })); JSON.stringify([visible, radiosHidden, state.lens, state.lensExplicit, document.querySelector('.lens-switcher [data-lens="change"]').getAttribute('aria-checked'), document.getElementById('delta-bar').classList.contains('visible')])`)] }])[0]));
+      assert.deepStrictEqual(obs, [true, true, 'change', true, 'true', true]);
+    },
+  ],
+  [
+    '1e: lens remains selected in playback views and text fields ignore numeric shortcuts',
+    () => {
+      const steps = [
+        ev(`selectLens('risk'); switchView(VIEWS.DATA_FLOW); window.__flowLens = state.lens; switchView(VIEWS.SEQUENCE); window.__sequenceLens = state.lens; document.getElementById('search-box').focus(); 0`),
+        key('1', { code: 'Digit1', windowsVirtualKeyCode: 49 }),
+        ev('JSON.stringify([window.__flowLens, window.__sequenceLens, state.lens])'),
+      ];
+      const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1024, height: 900, steps }])[0]));
+      assert.deepStrictEqual(obs, ['risk', 'risk', 'risk']);
+    },
+  ],
+
   [
     'Chrome binary is available for rendered verification',
     () => {
@@ -1310,10 +1356,12 @@ const cases = [
   ],
 
   [
-    'B2a: at 768 the overflowing tabs bar scrolls with the mouse wheel and minimizes to the active tab',
+    'B2a: lens switcher fits at 768 and 1024 with every option reachable by keyboard',
     () => {
-      const results = runPhases(fixtures.VALID_SPEC, [{ width: 768, height: 900, mobile: false, steps: tabsBarSteps() }]);
-      assertTabsBarBehavior(lastEvalValue(results[0]));
+      [768, 1024].forEach(width => {
+        const results = runPhases(fixtures.VALID_SPEC, [{ width, height: 900, mobile: false, steps: lensBarSteps() }]);
+        assertLensBarBehavior(lastEvalValue(results[0]));
+      });
     },
   ],
 
@@ -1472,7 +1520,7 @@ const cases = [
       const steps = [
         ev("switchView('sequence'); goToSequenceStep(2); 0"), settle, OVERLAPS,
         ev("openInspectorForNode('saga_orchestrator'); 0"), settle, OVERLAPS,
-        ev("closeInspector(); switchView('before_after'); 0"), settle, OVERLAPS,
+        ev("closeInspector(); selectLens('change', { explicit: true }); 0"), settle, OVERLAPS,
         ev("switchView('architecture'); toggleGatePanel(); 0"), settle, OVERLAPS,
       ];
       const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [
@@ -1788,8 +1836,7 @@ const cases = [
     '1c: from phone to desktop the header keeps every visible control on screen, the palette reachable and the title ellipsized',
     () => {
       const PROBE = ev(`JSON.stringify((function () {
-        // The view tabs scroll inside their own bar (covered by the tabs-bar test), so they are clipped there, not by the page.
-        const controls = [...document.querySelectorAll('header button')].filter((b) => !b.closest('.tabs-section') && getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0);
+        const controls = [...document.querySelectorAll('header button')].filter((b) => getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0);
         const mark = document.querySelector('.brand-mark').getBoundingClientRect();
         const palette = document.getElementById('btn-palette').getBoundingClientRect();
         return {
@@ -2305,7 +2352,7 @@ const cases = [
       const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`JSON.stringify({
         bottom: document.querySelector('.trust-strip').getBoundingClientRect().bottom,
         canvasTop: document.getElementById('canvas-container').getBoundingClientRect().top,
-        controls: [...document.querySelector('.header-actions').children, document.querySelector('.tabs-section')]
+        controls: [...document.querySelector('.header-actions').children, document.querySelector('.lens-switcher')]
           .filter((el) => getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0).map((el) => el.id || el.className),
       })`)] }]);
       const probe = JSON.parse(lastEvalValue(phase));

@@ -148,51 +148,44 @@ border: 1px solid transparent;
 
 .brand-mark { width: 26px; height: 26px; color: var(--ink); stroke-width: 1.2; }
 
-.tabs-section {
+.lens-switcher {
 display: flex;
+flex: none;
 align-items: center;
-background: var(--bg);
+background: var(--surface-2);
 border: 1px solid var(--line);
-border-radius: 8px;
+border-radius: 9px;
 padding: 3px;
 gap: 2px;
-min-width: 0;
-overflow-x: auto;
-scrollbar-width: none;
 }
-
-.tabs-section::-webkit-scrollbar { display: none; }
-
-.tabs-section[data-minimized="true"] .tab-btn:not(.active) { display: none; }
-
-.tabs-min-toggle { flex: 0 0 auto; }
-
-.tab-btn {
+.lens-switcher button {
 background: transparent;
 border: none;
 color: var(--muted);
 padding: 6px 10px;
-font-size: 12px;
+font-size: 12.5px;
 white-space: nowrap;
-flex: 0 0 auto;
 font-weight: 600;
 border-radius: 6px;
 cursor: pointer;
-display: flex;
-align-items: center;
-gap: 6px;
-transition: all 0.15s ease;
 }
-
-.tab-btn:hover {
-color: var(--ink);
-background: var(--surface-2);
-}
-
-.tab-btn.active {
-color: var(--ink);
+.lens-switcher button[aria-checked="true"] {
 background: var(--surface);
-box-shadow: 0 0 0 1px var(--line);
+color: var(--ink);
+box-shadow: var(--shadow-card);
+}
+.lens-switcher button:focus-visible,
+.lens-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lens-select {
+display: none;
+flex: none;
+max-width: 100px;
+padding: 6px;
+font-size: 12.5px;
+border: 1px solid var(--line);
+border-radius: 9px;
+background: var(--surface-2);
+color: var(--ink);
 }
 
 .header-actions {
@@ -1264,6 +1257,7 @@ body:has(.rail[data-open="true"]) .viewport-controls { right: 420px; }
 }
 
 @media (min-width: 768px) and (max-width: 1099px) {
+#btn-palette span, #btn-palette kbd { display: none; }
 .workbench-minimap { left: 8px; width: 112px; height: 76px; }
 }
 
@@ -1276,7 +1270,9 @@ body:has(.rail[data-open="true"]) .workbench-backdrop { display: block; }
 
 @media (max-width: 767px) {
 header { overflow: hidden; }
-.tabs-section { display: none; }
+.lens-switcher { display: none; }
+.lens-select { display: block; }
+#btn-palette span, #btn-palette kbd { display: none; }
 .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme):not(#btn-palette) { display: none; }
 .filter-bar { top: calc(var(--chrome-top) + 8px); left: 8px; right: 8px; overflow-x: auto; }
 .search-input { min-width: 140px; width: 140px; }
@@ -1486,14 +1482,19 @@ margin-left: 2px;
 </div>
 </div>
 
-<!-- View Mode Tabs -->
-<nav class="tabs-section" role="tablist" data-minimized="false">
-<button class="tab-btn active" role="tab" aria-selected="true" data-view="architecture" aria-label="Architecture" title="Architecture"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-architecture"></use></svg><span>Architecture</span></button>
-<button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-delta"></use></svg><span>Delta</span></button>
-<button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-flow"></use></svg><span>Data Flow</span></button>
-<button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-sequence"></use></svg><span>Sequence</span></button>
-<button class="btn-icon icon-only tabs-min-toggle" data-action="tabs-minimize" aria-pressed="false" aria-label="Minimize view tabs" title="Minimize view tabs"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-collapse"></use></svg></button>
-</nav>
+<!-- Lens controls share one selection across desktop and phone layouts. -->
+<div class="lens-switcher" role="radiogroup" aria-label="Lens">
+<button type="button" role="radio" aria-checked="true" tabindex="0" data-lens="structure">Structure</button>
+<button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="evidence">Evidence</button>
+<button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="change">Change</button>
+<button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="risk">Risk</button>
+</div>
+<select class="lens-select" aria-label="Lens">
+<option value="structure">Structure</option>
+<option value="evidence">Evidence</option>
+<option value="change">Change</option>
+<option value="risk">Risk</option>
+</select>
 
 <!-- Header Actions -->
 <div class="header-actions">
@@ -2700,6 +2701,8 @@ const DESIGN_TOKENS = ['--bg', '--surface', '--surface-2', '--lane', '--ink', '-
 const state = {
 theme: THEMES.DARK,
 chapter: 'overview',
+lens: 'structure',
+lensExplicit: false,
 currentView: VIEWS.ARCHITECTURE,
 deltaMode: DELTA_MODES.DIFF,
 animatingFlow: false,
@@ -2735,13 +2738,14 @@ prefersReducedMotion: false
 };
 
 // The only writer of view state. Reads stay as `state.x`; every write goes through an action here.
-const STORE_FIELDS = Object.freeze(['theme', 'chapter', 'currentView', 'deltaMode', 'selectedNodeId', 'selectedEdgeId',
+const STORE_FIELDS = Object.freeze(['theme', 'chapter', 'lens', 'lensExplicit', 'currentView', 'deltaMode', 'selectedNodeId', 'selectedEdgeId',
 'activeFilter', 'searchQuery', 'focusMode', 'presentation', 'scenarioId', 'scenarioStage', 'scenarioActive',
 'sequenceIndex', 'zoom', 'panX', 'panY', 'userMovedView']);
 
 const actions = Object.freeze({
 setTheme(theme) { state.theme = theme; },
 setChapter(chapter) { state.chapter = chapter; },
+setLens(lens, explicit) { state.lens = lens; state.lensExplicit = explicit; },
 setView(view) { state.currentView = view; },
 setDeltaMode(mode) { state.deltaMode = mode; },
 selectNode(id) { state.selectedNodeId = id; },        // id or null
@@ -3793,6 +3797,8 @@ function urlParseV2(params) {
 const result = { version: 2 };
 const chapter = params.get('c');
 if (urlSet(chapter)) result.chapter = chapter;
+const lens = params.get('l');
+if (urlSet(lens)) result.lens = lens;
 const view = params.get('view');
 if (urlSet(view)) result.view = view;
 const node = params.get('n');
@@ -3821,6 +3827,7 @@ const params = new URLSearchParams();
 let camSuffix = '';
 params.set('v', '2');
 if (urlSet(source.chapter) && source.chapter !== 'overview') params.set('c', String(source.chapter));
+if (urlSet(source.lens) && source.lens !== 'structure') params.set('l', String(source.lens));
 if (urlSet(source.view) && source.view !== URL_CODEC_DEFAULT_VIEW) params.set('view', String(source.view));
 if (urlSet(source.node)) params.set('n', String(source.node));
 if (urlSet(source.edge)) params.set('e', String(source.edge));
@@ -3885,6 +3892,24 @@ zoom,
 panX: width / 2 - x * zoom,
 panY: height / 2 - y * zoom,
 };
+}
+
+// Lens selection is independent of the Data Flow and Sequence canvas views.
+function selectLens(lens, { explicit = true } = {}) {
+if (!LENSES.includes(lens)) return;
+actions.setLens(lens, explicit);
+document.querySelectorAll('.lens-switcher [data-lens]').forEach(button => {
+const selected = button.dataset.lens === lens;
+button.setAttribute('aria-checked', String(selected));
+button.tabIndex = selected ? 0 : -1;
+});
+const select = document.querySelector('.lens-select');
+if (select) select.value = lens;
+document.body.dataset.lens = lens;
+if (lens === 'change') switchView(VIEWS.BEFORE_AFTER);
+else if (state.currentView === VIEWS.BEFORE_AFTER) switchView(VIEWS.ARCHITECTURE);
+announceStatus(`${lens.charAt(0).toUpperCase() + lens.slice(1)} lens`);
+updateUrlState();
 }
 
 const FOCUS_MODES = { NEIGHBORS: 'neighbors', AFFECTED: 'affected' };
@@ -4043,6 +4068,7 @@ return Boolean(linkedCamera?.applied) && ['zoom', 'panX', 'panY'].every(key => s
 function viewSnapshot() {
 const snapshot = {
 chapter: state.chapter,
+lens: state.lens,
 view: state.currentView,
 node: state.selectedNodeId,
 edge: state.selectedEdgeId,
@@ -4103,11 +4129,17 @@ switchView('architecture');
 } else if (link.view === 'implementation_plan') {
 openChapter('plan');
 switchView('architecture');
+} else if (link.view === VIEWS.BEFORE_AFTER || link.view === VIEWS.ARCHITECTURE) {
+selectLens(link.view === VIEWS.BEFORE_AFTER ? 'change' : 'structure', { explicit: true });
 } else if (Object.values(VIEWS).includes(link.view)) {
 switchView(link.view);
 } else {
 notices.push(`View ${link.view} does not exist; showing the architecture.`);
 }
+}
+if (link.lens !== undefined) {
+if (LENSES.includes(link.lens)) selectLens(link.lens, { explicit: true });
+else notices.push(`Lens ${link.lens} does not exist; keeping the suggested lens.`);
 }
 if (link.filter !== undefined) {
 if (document.querySelector(`[data-filter="${CSS.escape(link.filter)}"]`)) {
@@ -4575,41 +4607,26 @@ if (btnPalette) btnPalette.addEventListener('click', () => togglePalette(btnPale
 document.getElementById('btn-theme').addEventListener('click', toggleTheme);
 document.getElementById('btn-copy-link').addEventListener('click', copyCurrentLink);
 
-// Tabs bar: vertical mouse wheel scrolls the horizontal tab strip
-const tabsSection = document.querySelector('.tabs-section');
-if (tabsSection) {
-tabsSection.addEventListener('wheel', event => {
-if (tabsSection.scrollWidth <= tabsSection.clientWidth) return;
-if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+const lensButtons = [...document.querySelectorAll('.lens-switcher [data-lens]')];
+lensButtons.forEach((button, index) => {
+button.addEventListener('click', () => selectLens(button.dataset.lens, { explicit: true }));
+button.addEventListener('keydown', event => {
+let next;
+if (event.key === 'ArrowLeft') next = (index + lensButtons.length - 1) % lensButtons.length;
+else if (event.key === 'ArrowRight') next = (index + 1) % lensButtons.length;
+else if (event.key === 'Home') next = 0;
+else if (event.key === 'End') next = lensButtons.length - 1;
+else return;
 event.preventDefault();
-tabsSection.scrollLeft += event.deltaY;
-}, { passive: false });
-
-// Tabs bar: minimize toggle collapses the strip to the active view only
-const tabsMinToggle = tabsSection.querySelector('[data-action="tabs-minimize"]');
-if (tabsMinToggle) {
-tabsMinToggle.addEventListener('click', () => {
-const minimized = tabsSection.getAttribute('data-minimized') === 'true';
-tabsSection.setAttribute('data-minimized', minimized ? 'false' : 'true');
-tabsMinToggle.setAttribute('aria-pressed', minimized ? 'false' : 'true');
-tabsMinToggle.setAttribute('aria-label', minimized ? 'Minimize view tabs' : 'Expand view tabs');
-tabsMinToggle.setAttribute('title', minimized ? 'Minimize view tabs' : 'Expand view tabs');
-tabsMinToggle.textContent = minimized ? '«' : '»';
-});
-}
-}
-
-document.querySelectorAll('.tab-btn').forEach(btn => {
-btn.addEventListener('click', () => {
-document.querySelectorAll('.tab-btn').forEach(b => {
-b.classList.remove('active');
-b.setAttribute('aria-selected', 'false');
-});
-btn.classList.add('active');
-btn.setAttribute('aria-selected', 'true');
-switchView(btn.dataset.view);
+event.stopPropagation();
+selectLens(lensButtons[next].dataset.lens, { explicit: true });
+lensButtons[next].focus();
 });
 });
+document.querySelector('.lens-select').addEventListener('change', event => {
+selectLens(event.target.value, { explicit: true });
+});
+selectLens(state.lens, { explicit: false });
 
 document.querySelectorAll('.delta-btn').forEach(btn => {
 btn.addEventListener('click', () => {
@@ -4720,13 +4737,20 @@ togglePalette(document.activeElement);
 return;
 }
 
-const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement ||
+e.target instanceof HTMLSelectElement || e.target.isContentEditable;
 if (typing) {
 if (e.key === 'Escape' && activeDrawer) {
 closeActiveDrawer();
 return;
 }
 if (e.key === 'Escape') e.target.blur();
+return;
+}
+
+if (!e.ctrlKey && !e.metaKey && !e.altKey && /^[1-4]$/.test(e.key)) {
+selectLens(LENSES[Number(e.key) - 1], { explicit: true });
+e.preventDefault();
 return;
 }
 
@@ -5370,7 +5394,12 @@ const found = chapters.find(c => c.id === id);
 const targetId = found ? id : (chapters[0]?.id || 'overview');
 const targetChapter = found || chapters[0] || { id: targetId, label: targetId };
 
+const chapterChanged = state.chapter !== targetId;
 actions.setChapter(targetId);
+if (chapterChanged) {
+if (state.lensExplicit) actions.setLens(state.lens, false);
+else selectLens(suggestedLens(targetId), { explicit: false });
+}
 
 // Update chapter tabs
 chapters.forEach(ch => {
@@ -6621,7 +6650,7 @@ announceStatus('Copy failed; the link is in the address bar.');
 }
 
 // Command Palette
-const PALETTE_GROUPS = ['Commands', 'Views', 'Chapters', 'Components', 'Connections', 'Scenario stages', 'Export'];
+const PALETTE_GROUPS = ['Commands', 'Lenses', 'Views', 'Chapters', 'Components', 'Connections', 'Scenario stages', 'Export'];
 
 let paletteOpener = null;
 let paletteCurrentItems = [];
@@ -6721,24 +6750,17 @@ run: () => setFocusMode(FOCUS_MODES.AFFECTED)
 }
 items.push(...commands);
 
-// 2. Views
+// Lenses follow Commands; the remaining Views are canvas playback modes.
+items.push(...LENSES.map(lens => ({
+id: `lens-${lens}`,
+group: 'Lenses',
+label: lens.charAt(0).toUpperCase() + lens.slice(1),
+hint: 'Lens',
+icon: lens === 'change' ? 'ui-delta' : (lens === 'risk' ? 'ui-alert' : 'ui-architecture'),
+run: () => selectLens(lens, { explicit: true })
+})));
+
 const views = [
-{
-id: 'view-architecture',
-group: 'Views',
-label: 'Architecture',
-hint: 'View',
-icon: 'ui-architecture',
-run: () => switchView(VIEWS.ARCHITECTURE)
-},
-{
-id: 'view-before_after',
-group: 'Views',
-label: 'Before vs After',
-hint: 'Delta · View',
-icon: 'ui-delta',
-run: () => switchView(VIEWS.BEFORE_AFTER)
-},
 {
 id: 'view-data_flow',
 group: 'Views',
@@ -6878,7 +6900,7 @@ const allItems = paletteBuildAllItems();
 const q = (rawQuery || '').trim().toLowerCase();
 
 if (!q) {
-const allowed = new Set(['Commands', 'Views', 'Chapters', 'Components']);
+const allowed = new Set(['Commands', 'Lenses', 'Views', 'Chapters', 'Components']);
 paletteCurrentItems = allItems.filter(item => allowed.has(item.group)).slice(0, 50);
 } else {
 const tokens = q.split(/\s+/).filter(Boolean);
