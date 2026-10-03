@@ -1,0 +1,41 @@
+/* Wide desktop: docked panels reflow the canvas, legend and viewport controls */
+@media (min-width: 1100px) {
+  .workbench-navigator { width: 240px; }
+  .inspector-drawer { width: 320px; }
+  body:has(.workbench-navigator[data-open="true"]) { --canvas-left: 240px; }
+  body:has(.inspector-drawer[data-open="true"]) { --canvas-right: 320px; }
+  body:has(.workbench-navigator[data-open="true"]) #canvas-container { margin-left: 240px; width: calc(100% - 240px); }
+  body:has(.inspector-drawer[data-open="true"]) #canvas-container { width: calc(100% - 320px); }
+  body:has(.workbench-navigator[data-open="true"]):has(.inspector-drawer[data-open="true"]) #canvas-container { width: calc(100% - 560px); }
+  body:has(.workbench-navigator[data-open="true"]) .filter-bar { left: 256px; }
+  /* The legend stacks above the minimap, inside the column the playback bar's clearance already keeps free. */
+  .legend-box { left: calc(var(--canvas-left) + 16px); bottom: 140px; }
+  body:has(.inspector-drawer[data-open="true"]) .viewport-controls { right: 340px; }
+}
+
+@media (min-width: 768px) and (max-width: 1099px) {
+  .workbench-minimap { left: 8px; width: 112px; height: 76px; }
+}
+
+/* Below the workbench breakpoint both panels are overlay drawers */
+@media (max-width: 1099px) {
+  body:has(.workbench-navigator[data-open="true"]) .workbench-backdrop,
+  body:has(.inspector-drawer[data-open="true"]) .workbench-backdrop { display: block; }
+  .viewport-controls { right: 8px; }
+  .legend-box { display: none; }
+}
+
+@media (max-width: 767px) {
+  header { overflow: hidden; }
+  .tabs-section { display: none; }
+  .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme) { display: none; }
+  .filter-bar { top: 64px; left: 8px; right: 8px; overflow-x: auto; }
+  .search-input { min-width: 140px; width: 140px; }
+  .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
+  .viewport-controls { right: 8px; bottom: 8px; }
+  .legend-box { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}

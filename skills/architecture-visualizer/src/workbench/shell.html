@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>__DOCUMENT_TITLE__</title>
+  <style>
+    <!-- include: styles/tokens.css -->
+
+    <!-- include: styles/base.css -->
+
+    <!-- include: styles/header.css -->
+
+    <!-- include: styles/overlays.css -->
+
+    <!-- include: styles/canvas.css -->
+
+    <!-- include: styles/panels.css -->
+
+    <!-- include: styles/workbench.css -->
+
+    <!-- include: styles/responsive.css -->
+  </style>
+</head>
+<body data-theme="dark">
+
+  <!-- Top Navigation -->
+  <header data-region="topbar">
+    <div class="brand-section">
+      <span style="font-size: 18px;">📐</span>
+      <div>
+        <h1 id="doc-title" style="font-size: 14px; font-weight: 700;">Architecture Visualizer</h1>
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px;">
+          <span id="doc-status" class="badge-status PROPOSED">PROPOSED</span>
+          <span id="doc-subtitle" style="font-size: 11px; color: var(--text-muted); max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Interactive System Model</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- View Mode Tabs -->
+    <nav class="tabs-section" role="tablist" data-minimized="false">
+      <button class="tab-btn active" role="tab" aria-selected="true" data-view="architecture" aria-label="Architecture" title="Architecture">🏛️ Architecture</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After">🔄 Delta</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow">🌊 Data Flow</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow">🎬 Sequence</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="database_er" aria-label="Database ER" title="Database ER">🗄️ Data Model</button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="implementation_plan" aria-label="Implementation Plan" title="Implementation Plan">📋 Plan</button>
+      <button class="btn-icon tabs-min-toggle" data-action="tabs-minimize" aria-pressed="false" aria-label="Minimize view tabs" title="Minimize view tabs">«</button>
+    </nav>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <button class="btn-icon workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator">☰</button>
+      <button class="btn-icon workbench-mobile-toggle" data-action="inspector-toggle" aria-label="Open inspector">ⓘ</button>
+      <button id="btn-focus-neighbors" class="btn-icon" aria-pressed="false" title="Focus selected component and direct neighbors">Focus</button>
+      <button id="btn-focus-affected" class="btn-icon" aria-pressed="false" title="Focus downstream affected path">Impact</button>
+      <button id="btn-presentation" class="btn-icon" aria-pressed="false" title="Toggle presentation mode">Present</button>
+      <button id="btn-fullscreen" class="btn-icon" aria-pressed="false" title="Toggle fullscreen">Fullscreen</button>
+      <button id="btn-animate" class="btn-icon" title="Toggle flow animation">
+        <span id="anim-icon">▶</span>
+        <span>Animate</span>
+      </button>
+      <button id="btn-theme" class="btn-icon" title="Toggle Light/Dark Theme">
+        <span id="theme-icon">🌙</span>
+      </button>
+      <button id="btn-gate" class="btn-icon" title="Show the 14-point quality gate result">✅ Gate</button>
+      <div class="export-wrap">
+        <button id="btn-export" class="btn-icon" title="Export this visualization">📥 Export</button>
+        <div id="export-menu" class="export-menu">
+          <button data-export="html">Standalone HTML</button>
+          <button data-export="svg">SVG vector</button>
+          <button data-export="png">PNG image (2x)</button>
+          <button data-export="markdown">Markdown report</button>
+          <button data-export="mermaid">Mermaid source</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Filter & Search Bar -->
+  <div class="filter-bar">
+    <input type="text" id="search-box" data-action="search-input" class="search-input" placeholder="Search components, files..." />
+    <button class="filter-chip active" data-filter="all">All Layers</button>
+    <button class="filter-chip" data-filter="frontend">Frontend</button>
+    <button class="filter-chip" data-filter="backend">Backend</button>
+    <button class="filter-chip" data-filter="data">Data/Storage</button>
+    <button class="filter-chip" data-filter="external">External</button>
+    <span id="doc-grounding" class="badge-status ASSUMED" hidden title="Illustrative example: file paths were not checked against a repository.">Illustrative</span>
+  </div>
+
+  <!-- Delta View Controls -->
+  <div id="delta-bar" class="delta-controls">
+    <button class="delta-btn" data-delta-mode="current">Current State</button>
+    <button class="delta-btn" data-delta-mode="proposed">Proposed State</button>
+    <button class="delta-btn active" data-delta-mode="diff">Delta Diff (+ / ~ / -)</button>
+  </div>
+
+  <!-- Sequence Playback Bar -->
+  <div id="sequence-bar" class="sequence-controls">
+    <button id="seq-prev" class="btn-icon" style="height: 28px;">⏮ Prev</button>
+    <button id="seq-play" class="btn-icon" style="height: 28px;">▶ Play</button>
+    <button id="seq-next" class="btn-icon" style="height: 28px;">⏭ Next</button>
+    <span id="seq-step-info" style="font-size: 12px; font-weight: 600; min-width: 120px; flex: 1 1 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Step 1 of 5</span>
+    <input type="range" id="seq-slider" min="1" max="5" value="1" style="cursor: pointer; width: 140px;" />
+  </div>
+
+  <!-- Viewport Zoom Controls -->
+  <div class="viewport-controls">
+    <button id="btn-zoom-in" class="viewport-btn" title="Zoom In">+</button>
+    <button id="btn-zoom-out" class="viewport-btn" title="Zoom Out">−</button>
+    <button id="btn-fit" class="viewport-btn" title="Fit to Screen">⊡</button>
+    <button id="btn-reset" class="viewport-btn" title="Reset View">↺</button>
+  </div>
+
+  <!-- Legend Box -->
+  <details class="legend-box">
+    <summary class="legend-summary">Legend</summary>
+    <div class="legend-row">
+      <span class="legend-icon" style="color: var(--accent-blue);">―</span>
+      <span>Synchronous Request / API</span>
+    </div>
+    <div class="legend-row">
+      <span class="legend-icon" style="color: var(--accent-purple);">- -</span>
+      <span>Asynchronous Event / Queue</span>
+    </div>
+    <div class="legend-row">
+      <span class="legend-icon" style="color: var(--accent-green);">[+]</span>
+      <span>Added in Proposal</span>
+    </div>
+    <div class="legend-row">
+      <span class="legend-icon" style="color: var(--accent-amber);">[~]</span>
+      <span>Modified in Proposal</span>
+    </div>
+    <div class="legend-row">
+      <span class="legend-icon" style="color: var(--accent-rose);">[-]</span>
+      <span>Removed / Deprecated</span>
+    </div>
+    <div class="legend-divider"></div>
+    <div class="legend-row"><span class="legend-icon">🗄️ ⌷</span><span>Cylinder = datastore</span></div>
+    <div class="legend-row"><span class="legend-icon">📨 ⊳</span><span>Chevron = queue / topic</span></div>
+    <div class="legend-row"><span class="legend-icon">🌐 ⌸</span><span>Dashed border = external system</span></div>
+    <div class="legend-row"><span class="legend-icon">👤 ⬭</span><span>Pill = actor</span></div>
+    <div class="legend-divider"></div>
+    <div class="legend-row"><span class="legend-icon">⌨</span><span>F fit · 0 reset · +/− zoom · A animate · Esc close</span></div>
+    <div class="legend-row"><span class="legend-icon">▾</span><span>Click a boundary title to collapse it</span></div>
+  </details>
+
+  <!-- Data-flow hint -->
+  <div id="flow-hint" class="flow-hint">Data Flow view: read / write / event / replication paths only. Request-response control edges are dimmed.</div>
+
+  <!-- Quality Gate panel -->
+  <aside id="gate-panel" class="gate-panel">
+    <div class="gate-header">
+      <strong>14-Point Quality Gate</strong>
+      <button id="gate-close" class="btn-icon" style="width:26px;height:26px;padding:0;">✕</button>
+    </div>
+    <div id="gate-body" class="gate-body"></div>
+  </aside>
+
+  <!-- Text modal (Mermaid source, export errors) -->
+  <div id="modal" class="modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <strong id="modal-title">Source</strong>
+        <div style="display:flex; gap:8px;">
+          <button id="modal-copy" class="btn-icon">📋 Copy</button>
+          <button id="modal-close" class="btn-icon" style="width:28px;padding:0;">✕</button>
+        </div>
+      </div>
+      <pre id="modal-content" class="modal-content"></pre>
+    </div>
+  </div>
+
+<button class="workbench-backdrop" data-action="drawer-backdrop" aria-label="Close open panel"></button>
+<aside class="workbench-navigator" data-region="navigator" data-open="false" aria-label="Architecture navigator" aria-modal="false">
+  <div class="workbench-panel-header"><strong>Navigator</strong><button class="btn-icon workbench-close" data-action="navigator-close" aria-label="Close navigator">✕</button></div>
+  <div class="workbench-panel-body">
+    <section><h2>Model outline</h2><div data-navigator-section="outline">Select a component to inspect it.</div></section>
+    <section><h2>Search results</h2><div data-navigator-section="search">Type in search to find nodes and relationships.</div></section>
+    <section><h2>Evidence</h2><div data-navigator-section="evidence">No evidence selected.</div></section>
+    <section><h2>Findings</h2><div data-navigator-section="findings">No findings selected.</div></section>
+    <section><h2>Scenarios</h2><div data-navigator-section="scenarios">No scenario selected.</div></section>
+  </div>
+</aside>
+
+  <!-- Interactive SVG Canvas Container -->
+  <div id="canvas-container" data-region="canvas">
+    <svg id="arch-svg">
+      <defs>
+        <!-- Marker definitions -->
+        <marker id="arrow-sync" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="var(--edge-sync)" />
+        </marker>
+        <marker id="arrow-async" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="var(--edge-async)" />
+        </marker>
+        <marker id="arrow-highlight" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#38bdf8" />
+        </marker>
+      </defs>
+      <!-- Background Grid -->
+      <g id="viewport-group" transform="matrix(1 0 0 1 0 0)">
+        <g id="boundaries-layer"></g>
+        <g id="edges-layer"></g>
+        <g id="ghost-layer"></g>
+        <g id="particles-layer"></g>
+        <g id="nodes-layer"></g>
+      </g>
+    </svg>
+    <div class="workbench-minimap" data-region="minimap" aria-label="Architecture minimap">
+      <svg id="minimap-svg" aria-hidden="true"><g id="minimap-content"></g><rect data-minimap-viewport></rect></svg>
+    </div>
+  </div>
+
+  <!-- Side Inspector Drawer -->
+  <aside id="inspector" class="inspector-drawer" data-region="inspector" data-open="false" data-inspector-kind="node" aria-label="Inspector" aria-modal="false">
+    <div class="inspector-header">
+      <div>
+        <h2 id="ins-title" style="font-size: 15px; font-weight: 700;">Component Details</h2>
+        <span id="ins-tech" style="font-size: 11px; color: var(--text-dim);">Technology</span>
+      </div>
+      <button id="ins-close" class="btn-icon" data-action="inspector-close" aria-label="Close inspector" style="width: 28px; height: 28px; padding: 0;">✕</button>
+    </div>
+    <div id="node-inspector-body" class="inspector-body">
+      <!-- Status Badges -->
+      <div style="display: flex; gap: 8px;">
+        <span id="ins-status-badge" class="badge-status">VERIFIED</span>
+        <span id="ins-delta-badge" class="badge-status">UNCHANGED</span>
+      </div>
+
+      <!-- Responsibility -->
+      <div>
+        <div class="inspector-section-title">Responsibility</div>
+        <p id="ins-description" class="detail-card" style="line-height: 1.5;"></p>
+      </div>
+
+      <!-- Traceability: Files in Repository -->
+      <div>
+        <div class="inspector-section-title">Repository Source Files</div>
+        <div id="ins-files" class="detail-card">
+          <span style="color: var(--text-dim);">No files linked.</span>
+        </div>
+      </div>
+
+      <!-- API Endpoints -->
+      <div>
+        <div class="inspector-section-title">APIs & Interfaces</div>
+        <div id="ins-apis" class="detail-card">
+          <span style="color: var(--text-dim);">None</span>
+        </div>
+      </div>
+
+      <!-- Database Tables -->
+      <div>
+        <div class="inspector-section-title">Data Entities / Tables</div>
+        <div id="ins-tables" class="detail-card">
+          <span style="color: var(--text-dim);">None</span>
+        </div>
+      </div>
+
+      <!-- Implementation Checklist -->
+      <div>
+        <div class="inspector-section-title">Implementation Tasks</div>
+        <div id="ins-tasks" class="detail-card">
+          <span style="color: var(--text-dim);">None</span>
+        </div>
+      </div>
+
+      <!-- Failure Modes & Bottlenecks -->
+      <div>
+        <div class="inspector-section-title">Failure Modes & Risks</div>
+        <div id="ins-risks" class="detail-card">
+          <span style="color: var(--text-dim);">None recorded</span>
+        </div>
+      </div>
+
+      <!-- Dependency Graph Highlights -->
+      <div>
+        <button id="ins-btn-highlight" class="btn-icon" style="width: 100%; justify-content: center;">
+          ⚡ Highlight Dependency Chain
+        </button>
+      </div>
+    </div>
+    <div id="review-inspector-body" class="inspector-body workbench-hidden" tabindex="-1"></div>
+  </aside>
+
+  <!-- Database ER Sub-view Overlay -->
+  <div id="view-database-er" class="subview-overlay">
+    <div style="max-width: 1400px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center;">
+      <h2 style="font-size: 18px; font-weight: 700;">Database Schema & Entity Relations</h2>
+      <span style="font-size: 12px; color: var(--text-dim);">Physical Data Model</span>
+    </div>
+    <div id="er-tables-container" class="er-grid"></div>
+  </div>
+
+  <!-- Implementation Plan Sub-view Overlay -->
+  <div id="view-implementation-plan" class="subview-overlay">
+    <div style="max-width: 1000px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center;">
+      <h2 style="font-size: 18px; font-weight: 700;">Feature Implementation & Execution Plan</h2>
+      <span style="font-size: 12px; color: var(--text-dim);">Traceable phased execution</span>
+    </div>
+    <div id="plan-container" class="plan-container"></div>
+  </div>
+
+  <!-- Embedded Specification & Computed Layout Data -->
+  <script>
+/* __GEOMETRY_RUNTIME__ */
+  </script>
+  <script>
+    <!-- include: scripts/state.js -->
+
+    <!-- include: scripts/dom.js -->
+
+    <!-- include: scripts/drawers.js -->
+
+    <!-- include: scripts/navigator.js -->
+
+    <!-- include: scripts/minimap.js -->
+
+    <!-- include: scripts/view-state.js -->
+
+    <!-- include: scripts/review.js -->
+
+    <!-- include: scripts/scenarios.js -->
+
+    <!-- include: scripts/boot.js -->
+
+    <!-- include: scripts/canvas.js -->
+
+    <!-- include: scripts/inspector.js -->
+
+    <!-- include: scripts/flow.js -->
+
+    <!-- include: scripts/sequence.js -->
+
+    <!-- include: scripts/subviews.js -->
+
+    <!-- include: scripts/camera.js -->
+
+    <!-- include: scripts/drag.js -->
+
+    <!-- include: scripts/fit.js -->
+
+    <!-- include: scripts/exports.js -->
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+  <div id="workbench-status" class="workbench-sr-only" role="status" aria-live="polite"></div>
+</body>
+</html>

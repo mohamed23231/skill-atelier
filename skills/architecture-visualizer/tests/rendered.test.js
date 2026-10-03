@@ -5,11 +5,12 @@ const os = require('node:os');
 const path = require('node:path');
 const { compileArchitecture } = require('../src/engine/compiler.js');
 const geometry = require('../src/engine/geometry.js');
+const { loadTemplate } = require('../src/workbench/assemble.js');
 const fixtures = require('./fixtures.js');
 
 const REGION_NAMES = ['topbar', 'navigator', 'canvas', 'inspector'];
 const CAMERA_CONTROL_SELECTORS = ['#btn-zoom-in', '#btn-zoom-out', '#btn-fit', '#btn-reset'];
-const templateHtml = fs.readFileSync(path.join(__dirname, '../src/engine/template.html'), 'utf8');
+const templateHtml = loadTemplate();
 const bpMatch = templateHtml.match(/const\s+PANEL_BREAKPOINT\s*=\s*(\d+)/);
 const PANEL_BREAKPOINT = bpMatch ? Number(bpMatch[1]) : 1100;
 const VIEWPORTS = [

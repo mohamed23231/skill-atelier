@@ -13,7 +13,7 @@
   const EDGE_END_GAP = 10;
   const LABEL_MAX_CHARS = 20;
   const ROUTE_SAMPLES = 48;
-  // Must match nodeShape() in template.html: queue/topic chevron notch depth
+  // Must match nodeShape() in src/workbench/scripts/canvas.js: queue/topic chevron notch depth
   const CHEVRON_NOTCH = 16;
   const CYLINDER_R = 12;
   const PILL_RX = 0.5; // actor: rx = height * 0.5 (stadium shape)

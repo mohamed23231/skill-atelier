@@ -7,6 +7,7 @@ const { compileArchitecture, generateMarkdownReport } = require('../src/engine/c
 const { validateArchitecture } = require('../src/engine/validator.js');
 const { exportToMermaid } = require('../src/utils/mermaid-exporter.js');
 const { VALID_SPEC, clone } = require('./fixtures.js');
+const { assembleWorkbench, WORKBENCH_DIR } = require('../src/workbench/assemble.js');
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'arch-viz-test-'));
@@ -292,6 +293,63 @@ const cases = [
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
+    },
+  ],
+  [
+    'the workbench assembles every style and script module exactly once, leaving no include behind',
+    () => {
+      const { html, modules } = assembleWorkbench();
+      const onDisk = ['styles', 'scripts'].flatMap((sub) =>
+        fs.readdirSync(path.join(WORKBENCH_DIR, sub)).map((name) => `${sub}/${name}`));
+      assert.deepStrictEqual([...modules].sort(), onDisk.sort(), 'every module on disk is included, and only those');
+      assert.ok(!html.includes('<!-- include:'), 'no include line may survive assembly');
+      assert.strictEqual((html.match(/<style>/g) || []).length, 1, 'all styles land in one <style> block');
+    },
+  ],
+  [
+    'the workbench assembler refuses includes that escape, are missing, nest or repeat',
+    () => {
+      const dir = tmpDir();
+      try {
+        fs.mkdirSync(path.join(dir, 'styles'));
+        fs.writeFileSync(path.join(dir, 'styles', 'a.css'), 'a {}\n');
+        fs.writeFileSync(path.join(dir, 'styles', 'nested.css'), '<!-- include: styles/a.css -->\n');
+        const shellWith = (line) => fs.writeFileSync(path.join(dir, 'shell.html'), `<style>\n${line}\n</style>\n`);
+        shellWith('    <!-- include: styles/a.css -->');
+        assert.strictEqual(assembleWorkbench(dir).html, '<style>\n    a {}\n</style>\n', 'a module is indented to its include line');
+        shellWith('    <!-- include: ../outside.css -->');
+        assert.throws(() => assembleWorkbench(dir), /escapes the workbench directory/);
+        shellWith('    <!-- include: styles/missing.css -->');
+        assert.throws(() => assembleWorkbench(dir), /not found/);
+        shellWith('    <!-- include: styles/nested.css -->');
+        assert.throws(() => assembleWorkbench(dir), /may not include other modules/);
+        shellWith('    <!-- include: styles/a.css -->\n    <!-- include: styles/a.css -->');
+        assert.throws(() => assembleWorkbench(dir), /included twice/);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  ],
+  [
+    'the compiled workbench is one self-contained offline file',
+    () => {
+      const { html } = compileArchitecture(clone(VALID_SPEC));
+      assert.strictEqual((html.match(/<html[\s>]/g) || []).length, 1, 'exactly one document');
+      [/<link\b/i, /<script[^>]+\bsrc=/i, /@import\b/i, /url\(\s*['"]?https?:/i, /\bsrc=['"]https?:/i, /<iframe\b/i].forEach((pattern) => {
+        assert.ok(!pattern.test(html), `the workbench must not load anything from outside the file (${pattern})`);
+      });
+    },
+  ],
+  [
+    'every shipped example compiles within the 400 KB offline size budget',
+    () => {
+      const BUDGET_BYTES = 400 * 1024;
+      const examplesDir = path.join(__dirname, '..', 'examples');
+      fs.readdirSync(examplesDir).forEach((name) => {
+        const spec = JSON.parse(fs.readFileSync(path.join(examplesDir, name, 'architecture.json'), 'utf8'));
+        const bytes = Buffer.byteLength(compileArchitecture(spec).html, 'utf8');
+        assert.ok(bytes <= BUDGET_BYTES, `${name} is ${bytes} bytes, over the ${BUDGET_BYTES} byte budget`);
+      });
     },
   ],
 ];

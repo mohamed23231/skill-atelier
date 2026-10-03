@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The workbench template is split into modules**: the 3,600-line `src/engine/template.html` is now `src/workbench/shell.html` plus 8 style and 18 script modules, joined by `src/workbench/assemble.js` into the same single offline HTML file. Behavior is unchanged: the assembled template is byte-identical to the old file, and the built examples render pixel-identical at 1440×900 in both themes. New tests check that every module is included exactly once, that the compiled page loads nothing from outside the file, and that every example stays within a 400 KB budget.
+
 ### Fixed
 
 - **The diagram opens fitted, and shared links restore**: during boot the scenario navigator wrote the default camera (`z=1&x=0&y=0`) into the URL before `restoreUrlState()` read it, so every page undid its own fit-to-screen and every shared deep link was overwritten before it could be applied. URL state is now written only after the incoming hash has been read, a missing `x`/`y`/`z` parameter no longer reads as `0`, and fit-to-screen uses the same zoom floor as the zoom controls so wide diagrams also fit on a phone.

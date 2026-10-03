@@ -4,6 +4,7 @@ const { validateArchitecture } = require('./validator.js');
 const { computeLayout } = require('./layout.js');
 const { exportToMermaid } = require('../utils/mermaid-exporter.js');
 const { displayRepoPath } = require('../utils/repo-inspector.js');
+const { loadTemplate } = require('../workbench/assemble.js');
 
 const FILE_LOCATOR_KEYS = ['path', 'file', 'document'];
 
@@ -72,9 +73,8 @@ function compileArchitecture(spec, options = {}) {
     review: publishedValidation.review || null,
   };
 
-  const templatePath = path.join(__dirname, 'template.html');
   const geometryPath = path.join(__dirname, 'geometry.js');
-  let html = fs.readFileSync(templatePath, 'utf8');
+  let html = loadTemplate();
   const geometryRuntime = fs.readFileSync(geometryPath, 'utf8');
 
   html = substitutePlaceholders(html, [

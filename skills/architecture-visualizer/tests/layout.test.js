@@ -4,6 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { computeLayout, buildEdgeGeometry, cubicPointAt, curveSanityScore, resolveLabelCollisions } = require('../src/engine/layout.js');
 const geometry = require('../src/engine/geometry.js');
+const { loadTemplate } = require('../src/workbench/assemble.js');
 const {
   VALID_SPEC,
   ADVERSARIAL_RECIPROCAL_SPEC,
@@ -414,10 +415,9 @@ const cases = [
   ],
 
   [
-    'template.html defines WCAG AA contrast tokens and excludes dead accent-indigo',
+    'workbench template defines WCAG AA contrast tokens and excludes dead accent-indigo',
     () => {
-      const templatePath = path.join(__dirname, '../src/engine/template.html');
-      const html = fs.readFileSync(templatePath, 'utf8');
+      const html = loadTemplate();
 
       assert.strictEqual(html.includes('--accent-indigo'), false, 'dead --accent-indigo should be removed');
       assert.ok(html.includes('--text-dim: #8b9bb0;'), 'dark text-dim token should be #8b9bb0');
@@ -435,10 +435,9 @@ const cases = [
   ],
 
   [
-    'template.html normalises boundary tier heights without mutating layout data',
+    'workbench template normalises boundary tier heights without mutating layout data',
     () => {
-      const templatePath = path.join(__dirname, '../src/engine/template.html');
-      const html = fs.readFileSync(templatePath, 'utf8');
+      const html = loadTemplate();
 
       assert.ok(html.includes('tierBottom.set(b.y, Math.max(tierBottom.get(b.y) ?? -Infinity, b.y + b.height));'), 'tierBottom map should record max bottom coordinate per y');
       assert.ok(html.includes('height: collapsed ? COLLAPSED_PILL_HEIGHT : (tierBottom.get(b.y) - b.y)'), 'boundary height should normalize display height across tier');
@@ -462,10 +461,9 @@ const cases = [
   ],
 
   [
-    'template.html contains dvh fallbacks, responsive viewport rules, and debounced resize listener with userMovedView latch',
+    'workbench template contains dvh fallbacks, responsive viewport rules, and debounced resize listener with userMovedView latch',
     () => {
-      const templatePath = path.join(__dirname, '../src/engine/template.html');
-      const html = fs.readFileSync(templatePath, 'utf8');
+      const html = loadTemplate();
 
       assert.ok(html.includes('height: 100vh;\n      height: 100dvh;\n      width: 100%;'), 'body should use 100vh with 100dvh and 100% width');
       assert.ok(html.includes('height: calc(100vh - 56px);\n      height: calc(100dvh - 56px);'), 'canvas-container should use dvh fallback');

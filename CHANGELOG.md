@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- `scripts/validate-repo.js` also scans `.css` files for leaked personal paths and secrets, now that
+  skills ship stylesheets as separate source files.
+
 ### Added
 
 - `delegate-fleet` is listed in the Claude Code plugin marketplace (`.claude-plugin/marketplace.json`).

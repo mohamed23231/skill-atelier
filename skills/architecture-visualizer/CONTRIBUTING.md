@@ -40,10 +40,14 @@ architecture-visualizer/
 ├── src/
 │   ├── index.js               # Library entry point
 │   ├── engine/
-│   │   ├── template.html      # Standalone interactive visualization HTML template
 │   │   ├── layout.js          # Deterministic hierarchical & rank layout engine
 │   │   ├── validator.js       # Architecture schema & quality gate validator
 │   │   └── compiler.js        # Compiles architecture JSON into standalone HTML & Markdown
+│   ├── workbench/             # The interactive page, assembled into one offline HTML file
+│   │   ├── shell.html         # Page skeleton and markup; include lines place each module
+│   │   ├── assemble.js        # Joins shell.html and its modules into the template
+│   │   ├── styles/            # CSS modules, in the order shell.html includes them
+│   │   └── scripts/           # Script modules sharing one <script> scope, in execution order
 │   └── utils/
 │       ├── repo-inspector.js  # Inspects git repository, discovers components & files
 │       └── mermaid-exporter.js # Generates Mermaid fallback code
@@ -122,10 +126,36 @@ Inject a small probe script before `</body>` to drive `switchView`, `toggleBound
 
 ## Layout engine invariants
 
+The workbench page lives in `src/workbench/`: `shell.html` holds the skeleton and markup, and each
+`<!-- include: … -->` line is replaced by a style or script module, indented to match. All scripts share one
+`<script>` scope, so their order in `shell.html` is their execution order. A module may not include another,
+and every file under `styles/` and `scripts/` must be included exactly once; the compiler suite checks both.
+
+## Visual regression gates
+
+A single screenshot comparison is not a valid visual gate for the workbench: flow particles and CSS transitions
+keep moving between captures, and Chrome itself alternates between two rasterizations of the same page (about
+190 to 270 differing pixels at 1440×900). Compare frames this way instead:
+
+1. **Freeze motion.** Emulate `prefers-reduced-motion: reduce` (DevTools Protocol
+   `Emulation.setEmulatedMedia`). The workbench honours it: particles and autoplay stop and transitions collapse.
+2. **Capture the same states on both builds**, each in a fresh browser profile, at the reference viewport of
+   1440×900, in both themes: initial load, light theme, sequence playback, a scenario stage with the inspector
+   open, and the delta view with the gate open.
+3. **Capture each build at least twice** and record the noise floor: the pixel difference between two captures
+   of the same build.
+4. **Frame equivalence passes** when every candidate frame equals at least one baseline frame of the same state
+   with 0 differing pixels. A difference the size of the noise floor is not a pass; it means a capture landed on
+   the other rasterization and needs a matching baseline frame.
+5. **For an intentional visual change**, frames are expected to differ. Prove instead that only presentation
+   changed: identical embedded spec and layout data, identical DOM structure (ids, roles, accessible names, data
+   attributes), identical node and edge geometry, every rendered test passing, and a side-by-side review of each
+   state in both themes.
+
 Any change to `src/engine/layout.js` must keep these true (the layout suite enforces them):
 
 - the same spec produces byte-identical coordinates on repeated runs;
 - every node stays inside its boundary box;
 - an explicit numeric `order` always wins over barycenter ordering;
 - every edge is classified `forward`, `sibling`, `backward` or `self`, and the label anchor sits on the curve;
-- the browser's drag-time geometry in `template.html` stays in sync with `buildEdgeGeometry`.
+- the browser's drag-time geometry in `src/workbench/scripts/drag.js` stays in sync with `buildEdgeGeometry`.
