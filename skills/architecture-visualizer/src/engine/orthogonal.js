@@ -48,6 +48,7 @@
   }
 
   function less(a, b) {
+    if (a.shortest) return a.length < b.length || (a.length === b.length && (a.bends < b.bends || (a.bends === b.bends && a.key < b.key)));
     return a.bends < b.bends || (a.bends === b.bends && (a.length < b.length || (a.length === b.length && a.key < b.key)));
   }
 
@@ -78,7 +79,7 @@
     const records = new Map();
     const heap = [];
     const keyFor = (x, y, d, visited) => (((y * nx + x) * 4 + d) * 2 + Number(visited));
-    const first = { x: sx, y: sy, d: 0, visited: rule.right == null, bends: 0, length: 0, prev: null };
+    const first = { x: sx, y: sy, d: 0, visited: rule.right == null, bends: 0, length: 0, prev: null, shortest: rule.backward };
     first.key = keyFor(first.x, first.y, first.d, first.visited);
     records.set(first.key, first);
     heapPush(heap, first);
@@ -86,7 +87,7 @@
     while (heap.length) {
       const state = heapPop(heap);
       if (records.get(state.key) !== state) continue;
-      if (best && state.bends > best.bends) break;
+      if (best && (rule.backward ? state.length > best.length : state.bends > best.bends)) break;
       if (state.x === ex && state.y === ey && state.visited && (state.d % 2 !== 0 || state.d === rule.endDirection)) {
         const candidate = { ...state, bends: state.bends + Number(state.d % 2 !== 0) };
         if (!best || less(candidate, best)) best = candidate;
@@ -99,14 +100,13 @@
         if (x < 0 || x >= nx || y < 0 || y >= ny) continue;
         if (dy && !channels.has(a.x)) continue;
         if (dx < 0 && rule.forward) continue;
-        if (dx < 0 && rule.backward && a.y > rule.top && a.y < rule.bottom) continue;
         const b = { x: xs[x], y: ys[y] };
         if (obstacles.some(box => intersects(a, b, box))) continue;
         const d = dx > 0 ? 0 : dy > 0 ? 1 : dx < 0 ? 2 : 3;
         if (d === (state.d + 2) % 4) continue;
         const visited = state.visited || (rule.right != null && dy !== 0 && b.x >= rule.right);
         const key = keyFor(x, y, d, visited);
-        const next = { x, y, d, visited, key, bends: state.bends + Number(d % 2 !== state.d % 2), length: state.length + distance(a, b), prev: state };
+        const next = { x, y, d, visited, key, shortest: rule.backward, bends: state.bends + Number(d % 2 !== state.d % 2), length: state.length + distance(a, b), prev: state };
         const old = records.get(key);
         if (old && !less(next, old)) continue;
         records.set(key, next);
@@ -188,8 +188,8 @@
   }
 
   function routeOrthogonal(input, options = {}) {
-    const { cornerRadius = 6, jumpRadius = 5, portSpacing = 12, trackSpacing = 10, margin = 14, labelWidths = {} } = options;
-    if (![cornerRadius, jumpRadius, portSpacing, margin].every(n => Number.isFinite(n) && n >= 0) || !Number.isFinite(trackSpacing) || trackSpacing <= 0) {
+    const { cornerRadius = 6, jumpRadius = 5, portSpacing = null, trackSpacing = 10, margin = 14, labelWidths = {} } = options;
+    if (![cornerRadius, jumpRadius, ...(portSpacing == null ? [] : [portSpacing]), margin].every(n => Number.isFinite(n) && n >= 0) || !Number.isFinite(trackSpacing) || trackSpacing <= 0) {
       throw new RangeError('Router spacing and radii must be finite and nonnegative; trackSpacing must be positive.');
     }
     const nodes = [...input.nodes].sort(byId);
@@ -225,7 +225,9 @@
     });
     [...faceGroups.keys()].sort().forEach(key => {
       const group = faceGroups.get(key).sort((a, b) => a.other.y + a.other.height / 2 - b.other.y - b.other.height / 2 || byId(a.edge, b.edge) || (a.end < b.end ? -1 : 1));
-      const step = group.length > 1 ? Math.min(portSpacing, group[0].node.height / (group.length + 1)) : 0;
+      const height = group[0].node.height;
+      const step = Math.max(8, portSpacing == null ? 0.7 * height / (group.length + 1) : portSpacing);
+      if ((group.length - 1) * step >= height) throw new RangeError(`Too many ports on face ${key} for 8px spacing.`);
       group.forEach((entry, i) => {
         ports.get(entry.edge.id)[entry.end] = { x: entry.node.x + (entry.face === 'right' ? entry.node.width : 0), y: entry.node.y + entry.node.height / 2 + (i - (group.length - 1) / 2) * step, face: entry.face };
       });
@@ -262,7 +264,7 @@
         const center = (gap.left + gap.right) / 2;
         const tracks = Array.from({ length: capacity }, (_, i) => center + (i - (capacity - 1) / 2) * trackSpacing)
           .sort((a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b);
-        if (count < tracks.length) available.set(tracks[count], gap);
+        available.set(tracks[count % tracks.length], gap);
       });
       const xs = [...new Set([start.x, end.x, ...available.keys()])].sort((a, b) => a - b);
       const ys = [...new Set([...baseYs, start.y, end.y])].sort((a, b) => a - b);
@@ -275,7 +277,7 @@
         backward: port.kind === 'backward',
         endDirection: port.target.face === 'left' ? 0 : 2,
         top: Math.min(...involved.map(n => n.y - margin), ...involvedHeaders.map(b => b.y - margin)),
-        bottom: Math.max(...involved.map(n => n.y + n.height + margin), ...involvedHeaders.map(b => b.y + b.height + margin))
+        bottom: Math.max(...involved.map(n => n.y + n.height + margin), ...involvedHeaders.map(b => b.y + Math.min(HEADER_HEIGHT, b.height) + margin))
       };
       if (port.kind === 'self' || port.kind === 'same-column') {
         rule.right = Math.max(...nodes.filter(n => n.rank === source.rank).map(n => n.x + n.width + margin)) + trackSpacing / 2;
@@ -297,42 +299,98 @@
 
     gaps.forEach(gap => {
       const segments = gap.segments.sort((a, b) => a.entry - b.entry || a.exit - b.exit || byId(a, b) || a.index - b.index);
-      if ((segments.length - 1) * trackSpacing > gap.right - gap.left) throw new Error('Insufficient channel width for distinct tracks.');
+      const capacity = Math.floor((gap.right - gap.left) / trackSpacing) + 1;
+      if (segments.length > capacity) {
+        if (!stats.gapDemand) stats.gapDemand = {};
+        stats.gapDemand[gaps.indexOf(gap) - 1] = (segments.length - 1) * trackSpacing + 2 * margin;
+      }
       segments.forEach((segment, i) => {
-        const x = (gap.left + gap.right) / 2 + (i - (segments.length - 1) / 2) * trackSpacing;
+        const count = Math.min(segments.length, capacity);
+        const x = (gap.left + gap.right) / 2 + (i % count - (count - 1) / 2) * trackSpacing;
         segment.route.points[segment.index].x = x;
         segment.route.points[segment.index + 1].x = x;
       });
     });
-    const slots = [];
-    edges.forEach(edge => {
+    const labelObstacles = [...nodes.map(n => rect(n, 0)), ...headers.map(h => ({ left: h.left + margin, right: h.right - margin, top: h.top + margin, bottom: h.bottom - margin }))];
+    const labelCandidates = (edge, slots) => {
+      const placements = [];
       const route = routes[edge.id];
-      route.points = simplify(route.points);
-      const width = labelWidths[edge.id] == null ? 80 : labelWidths[edge.id];
+      const width = labelWidths[edge.id] == null ? (edge.labelWidth == null ? 80 : edge.labelWidth) : labelWidths[edge.id];
       if (!Number.isFinite(width) || width < 0) throw new RangeError(`Invalid label width for edge ${edge.id}.`);
       const segments = [];
       for (let i = 0; i + 1 < route.points.length; i++) {
         const a = route.points[i];
         const b = route.points[i + 1];
-        if (a.y === b.y && distance(a, b) >= width + 16) segments.push({ a, b, index: i, length: distance(a, b) });
+        segments.push({ a, b, index: i, length: distance(a, b), orientation: a.y === b.y ? 'horizontal' : 'vertical' });
+      }
+      segments.sort((a, b) => b.length - a.length || a.index - b.index);
+      const preferred = segments.filter(segment => segment.orientation === 'horizontal' && segment.length >= width + 16);
+      const candidates = [...preferred, ...segments.filter(segment => !preferred.includes(segment))];
+      for (const segment of candidates) {
+        const horizontal = segment.orientation === 'horizontal';
+        const fixed = horizontal ? segment.a.y : segment.a.x;
+        const low = Math.min(horizontal ? segment.a.x : segment.a.y, horizontal ? segment.b.x : segment.b.y);
+        const high = low + segment.length;
+        const half = horizontal ? width / 2 + 8 : 9;
+        // Prefer the midpoint, then the nearest exact collision boundary. The pill
+        // may overhang a short segment, but its centre always remains on the line.
+        const blockers = [...labelObstacles, ...slots].filter(box => horizontal
+          ? fixed - 9 < box.bottom && fixed + 9 > box.top
+          : fixed - width / 2 - 8 < box.right && fixed + width / 2 + 8 > box.left);
+        const center = (low + high) / 2;
+        const positions = [...new Set([center, low, high, ...blockers.flatMap(box => horizontal
+          ? [box.left - half, box.right + half]
+          : [box.top - half, box.bottom + half])])]
+          .filter(value => value >= low && value <= high)
+          .sort((a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b);
+        for (const position of positions) {
+          const x = horizontal ? position : fixed;
+          const y = horizontal ? fixed : position;
+          const box = { left: x - width / 2 - 8, right: x + width / 2 + 8, top: y - 9, bottom: y + 9 };
+          if (labelObstacles.some(card => overlap(box, card)) || slots.some(slot => overlap(box, slot))) continue;
+          placements.push({ slot: { x, y, width, height: 18, segment: segment.index, orientation: segment.orientation }, box });
+        }
+      }
+      return placements;
+    };
+    // Backtrack when a centred pill consumes another label's only free space.
+    // A bounded search keeps impossible or very dense inputs predictable.
+    const candidateCounts = new Map(edges.map(edge => [edge.id, labelCandidates(edge, []).length]));
+    const labelOrder = [...edges].sort((a, b) => candidateCounts.get(a.id) - candidateCounts.get(b.id) || byId(a, b));
+    let attempts = 0;
+    let best = [];
+    const place = (index, chosen) => {
+      if (chosen.filter(Boolean).length > best.filter(Boolean).length) best = [...chosen];
+      if (index === labelOrder.length) return chosen.every(Boolean);
+      if (++attempts > 10000) return false;
+      const candidates = labelCandidates(labelOrder[index], chosen.filter(Boolean).map(item => item.box));
+      for (const candidate of candidates) {
+        chosen.push(candidate);
+        if (place(index + 1, chosen)) return true;
+        chosen.pop();
+      }
+      chosen.push(null);
+      const complete = place(index + 1, chosen);
+      chosen.pop();
+      return complete;
+    };
+    // Count crossings once; candidate generation can be revisited during packing.
+    edges.forEach(edge => {
+      routes[edge.id].points = simplify(routes[edge.id].points);
+      const route = routes[edge.id];
+      for (let i = 0; i + 1 < route.points.length; i++) {
+        const a = route.points[i];
+        const b = route.points[i + 1];
         boxes.forEach(box => {
           // Only the terminal escape through its own clearance is permitted.
           if ((i === 0 && box.id === edge.source) || (i === route.points.length - 2 && box.id === edge.target)) return;
           if (intersects(a, b, box)) stats.cardCrossings++;
         });
       }
-      segments.sort((a, b) => b.length - a.length || a.index - b.index);
-      for (const segment of segments) {
-        const x = (segment.a.x + segment.b.x) / 2;
-        const y = segment.a.y;
-        const box = { left: x - width / 2 - 8, right: x + width / 2 + 8, top: y - 9, bottom: y + 9 };
-        if (obstacles.some(card => overlap(box, card)) || slots.some(slot => overlap(box, slot))) continue;
-        route.labelSlot = { x, y, width, segment: segment.index };
-        slots.push(box);
-        break;
-      }
-      stats.bends += Math.max(0, route.points.length - 2);
+      stats.bends += Math.max(0, routes[edge.id].points.length - 2);
     });
+    place(0, []);
+    labelOrder.forEach((edge, i) => { routes[edge.id].labelSlot = best[i] ? best[i].slot : null; });
     stats.jumps = computeJumps(routes);
     stats.crossings = stats.jumps;
     edges.forEach(edge => { routes[edge.id].path = makePath(routes[edge.id], cornerRadius, jumpRadius); });

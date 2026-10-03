@@ -65,12 +65,21 @@ function verify(layout, result, margin = 14, rounded = true) {
     if (route.labelSlot) {
       const slot = route.labelSlot;
       const [a, b] = parts[slot.segment];
-      assert.equal(a.y, b.y);
-      assert.equal(slot.y, a.y);
-      assert.equal(slot.x, (a.x + b.x) / 2);
-      assert(Math.abs(a.x - b.x) >= slot.width + 16);
+      assert.equal(slot.height, 18);
+      assert.equal(slot.orientation, a.y === b.y ? 'horizontal' : 'vertical');
+      if (slot.orientation === 'horizontal') {
+        assert.equal(slot.y, a.y);
+        assert(slot.x >= Math.min(a.x, b.x) && slot.x <= Math.max(a.x, b.x));
+      } else {
+        assert.equal(slot.x, a.x);
+        assert(slot.y >= Math.min(a.y, b.y) && slot.y <= Math.max(a.y, b.y));
+      }
       const box = slotBox(slot);
-      layout.nodes.forEach(n => assert(!overlaps(box, cardBox(n, margin))));
+      layout.nodes.forEach(n => assert(!overlaps(box, cardBox(n))));
+      layout.boundaries.forEach(boundary => assert(!overlaps(box, {
+        left: boundary.x, right: boundary.x + boundary.width,
+        top: boundary.y, bottom: boundary.y + Math.min(36, boundary.height)
+      })));
       slots.forEach(other => assert(!overlaps(box, other)));
       slots.push(box);
     }
@@ -92,6 +101,36 @@ function verify(layout, result, margin = 14, rounded = true) {
   assert.equal(result.stats.crossings, jumps);
 }
 
+function verifyPorts(layout, result) {
+  const faces = new Map();
+  layout.edges.forEach(e => {
+    const route = result.routes[e.id];
+    [[e.source, route.points[0]], [e.target, route.points.at(-1)]].forEach(([id, port]) => {
+      const key = `${id}:${port.x}`;
+      if (!faces.has(key)) faces.set(key, []);
+      faces.get(key).push(port.y);
+    });
+  });
+  faces.forEach(ports => {
+    ports.sort((a, b) => a - b);
+    ports.slice(1).forEach((y, i) => assert(y - ports[i] >= 8 - 1e-9, 'Ports must be distinct and at least 8px apart'));
+  });
+}
+
+function verifyBackward(layout, result, margin = 14) {
+  layout.edges.forEach(e => {
+    const route = result.routes[e.id];
+    if (route.kind !== 'backward') return;
+    const source = layout.nodes.find(n => n.id === e.source);
+    const target = layout.nodes.find(n => n.id === e.target);
+    const involved = layout.nodes.filter(n => n.rank >= target.rank && n.rank <= source.rank);
+    const height = Math.max(...involved.map(n => n.y + n.height)) - Math.min(...involved.map(n => n.y));
+    const vertical = segments(route).reduce((sum, [a, b]) => sum + Math.abs(a.y - b.y), 0);
+    const extra = vertical - Math.abs(route.points[0].y - route.points.at(-1).y);
+    assert(extra <= height + 2 * margin + 1e-9, `${e.id} takes an excessive vertical detour`);
+  });
+}
+
 const cases = [
   ['straight adjacent edge has no bends', () => {
     const layout = input([node('a', 0, 100), node('b', 300, 100, 1)], [edge('ab', 'a', 'b')]);
@@ -110,13 +149,13 @@ const cases = [
   ['shared source and target faces spread ordered ports', () => {
     const layout = input([node('a', 0, 100), node('b', 300, 0, 1), node('c', 300, 200, 1)], [edge('ac', 'a', 'c'), edge('ab', 'a', 'b')]);
     const result = routeOrthogonal(layout);
-    assert.equal(result.routes.ab.points[0].y, 124);
-    assert.equal(result.routes.ac.points[0].y, 136);
+    assert.equal(result.routes.ab.points[0].y, 123);
+    assert.equal(result.routes.ac.points[0].y, 137);
     verify(layout, result);
     const incoming = input([node('a', 0, 0), node('b', 0, 200), node('c', 300, 100, 1)], [edge('bc', 'b', 'c'), edge('ac', 'a', 'c')]);
     const routes = routeOrthogonal(incoming);
-    assert.equal(routes.routes.ac.points.at(-1).y, 124);
-    assert.equal(routes.routes.bc.points.at(-1).y, 136);
+    assert.equal(routes.routes.ac.points.at(-1).y, 123);
+    assert.equal(routes.routes.bc.points.at(-1).y, 137);
     verify(incoming, routes);
   }],
   ['spanning edge avoids a blocking card and boundary header', () => {
@@ -202,9 +241,55 @@ const cases = [
     const layout = input([node('a', 0, 100), node('b', 500, 100, 1)], [edge('ab1', 'a', 'b'), edge('ab2', 'a', 'b')]);
     const result = routeOrthogonal(layout, { labelWidths: { ab1: 120, ab2: 120 } });
     assert.equal(result.routes.ab1.labelSlot.width, 120);
-    assert.equal(result.routes.ab2.labelSlot, null);
+    assert.equal(result.routes.ab2.labelSlot.width, 120);
+    assert.notEqual(result.routes.ab1.labelSlot.x, result.routes.ab2.labelSlot.x);
     verify(layout, result);
     assert.equal(routeOrthogonal(layout, { labelWidths: { ab1: 1000, ab2: 1000 } }).routes.ab1.labelSlot, null);
+  }],
+  ['short horizontal runs fall back to a vertical pill and slide clear of headers', () => {
+    const nodes = [node('a', 0, 100), node('b', 180, 230, 1)];
+    const layout = input(nodes, [{ ...edge('ab', 'a', 'b'), label: 'Transfer' }], [
+      { id: 'header', x: 175, y: 170, width: 105, height: 150 }
+    ]);
+    const result = routeOrthogonal(layout, { labelWidths: { ab: 70 } });
+    const slot = result.routes.ab.labelSlot;
+    assert(slot);
+    assert.equal(slot.orientation, 'vertical');
+    verify(layout, result);
+  }],
+  ['ports occupy the middle seventy percent with an eight pixel minimum', () => {
+    const nodes = [node('a', 0, 200), ...Array.from({ length: 6 }, (_, i) => node(`b${i}`, 300, i * 100, 1))];
+    const layout = input(nodes, nodes.slice(1).map(n => edge(`a${n.id}`, 'a', n.id)));
+    const result = routeOrthogonal(layout);
+    verifyPorts(layout, result);
+    verify(layout, result);
+    const pair = input([node('a', 0, 100), node('b', 300, 0, 1), node('c', 300, 200, 1)], [edge('ab', 'a', 'b'), edge('ac', 'a', 'c')]);
+    const routes = routeOrthogonal(pair).routes;
+    assert.equal(routes.ac.points[0].y - routes.ab.points[0].y, 0.7 * 60 / 3);
+  }],
+  ['backward routing ignores distant columns and uses a free gap between cards', () => {
+    const layout = input([
+      node('far', 0, -1000), node('a', 300, 100, 1), node('lowerA', 300, 260, 1),
+      node('b', 600, 200, 2), node('lowerB', 600, 360, 2)
+    ], [edge('ba', 'b', 'a')]);
+    const result = routeOrthogonal(layout);
+    verify(layout, result);
+    verifyBackward(layout, result);
+    const corridor = segments(result.routes.ba).find(([a, b]) => a.x > b.x && a.y === b.y);
+    assert(corridor[0].y >= 174 && corridor[0].y <= 186);
+  }],
+  ['six tracks in a narrow gap report width demand without losing clearance', () => {
+    const nodes = Array.from({ length: 6 }, (_, i) => node(`a${i}`, 0, i * 100));
+    nodes.push(...Array.from({ length: 6 }, (_, i) => node(`b${i}`, 220, i * 100 + 30, 1)));
+    const layout = input(nodes, Array.from({ length: 6 }, (_, i) => edge(`e${i}`, `a${i}`, `b${i}`)));
+    const result = routeOrthogonal(layout, { trackSpacing: 20 });
+    assert.deepEqual(result.stats.gapDemand, { 0: 128 });
+    verify(layout, result);
+    verifyPorts(layout, result);
+    assert.deepEqual(routeOrthogonal(layout, { trackSpacing: 20 }), result);
+    const fitting = routeOrthogonal(layout);
+    assert.equal(fitting.stats.gapDemand, undefined);
+    verify(layout, fitting);
   }],
   ['routing is deterministic even when input arrays are reordered', () => {
     const layout = computeLayout(fixtures.clone(fixtures.ADVERSARIAL_DENSE_PORTS_SPEC));
@@ -239,7 +324,16 @@ cases.push(['all architecture examples preserve routing invariants', () => {
     const layout = computeLayout(JSON.parse(fs.readFileSync(file, 'utf8')));
     const result = routeOrthogonal(layout);
     verify(layout, result);
-    report.push(`${name}: ${JSON.stringify(result.stats)}`);
+    verifyPorts(layout, result);
+    verifyBackward(layout, result);
+    const minY = Math.min(...layout.nodes.map(n => n.y));
+    Object.values(result.routes).filter(route => route.kind === 'backward').forEach(route => {
+      assert(Math.min(...route.points.map(p => p.y)) >= minY - 28);
+    });
+    const labelled = layout.edges.filter(e => e.label || e.packetLabel);
+    const placed = labelled.filter(e => result.routes[e.id].labelSlot);
+    assert.equal(placed.length, labelled.length, `${name} has missing labels`);
+    report.push(`${name}: bends=${result.stats.bends}, crossings=${result.stats.crossings}, jumps=${result.stats.jumps}, labels=${placed.length}/${labelled.length}, gapDemand=${JSON.stringify(result.stats.gapDemand || {})}`);
   });
   assert.equal(report.length, 3);
   console.log(report.join('\n'));
