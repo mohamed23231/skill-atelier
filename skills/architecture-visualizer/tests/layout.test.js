@@ -34,6 +34,27 @@ const crossingSpec = {
 
 const cases = [
   [
+    'labelLeader tethers a displaced label to its curve and stays silent for a label on its edge',
+    () => {
+      const onCurve = { labelX: 100, labelY: 50, labelWidth: 60, labelTether: { x: 100, y: 50 } };
+      assert.strictEqual(geometry.labelLeader(onCurve), null);
+      const pushedRight = { labelX: 300, labelY: 50, labelWidth: 60, labelTether: { x: 100, y: 50 } };
+      assert.deepStrictEqual(geometry.labelLeader(pushedRight), { x1: 100, y1: 50, x2: 270, y2: 50 });
+      assert.strictEqual(geometry.labelLeader({ labelX: 1, labelY: 1, labelWidth: 0, labelTether: { x: 99, y: 99 } }), null);
+    },
+  ],
+  [
+    'every edge label in the examples records the curve point it was placed from',
+    () => {
+      ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow'].forEach((name) => {
+        const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', name, 'architecture.json'), 'utf8'));
+        computeLayout(spec).edges.filter((e) => e.labelWidth > 0).forEach((e) => {
+          assert.ok(e.labelTether && Number.isFinite(e.labelTether.x), `${name}: edge ${e.id} has no label tether`);
+        });
+      });
+    },
+  ],
+  [
     'throws a helpful error when nodes are missing',
     () => {
       assert.throws(() => computeLayout({ meta: { title: 'x' } }), /non-empty array/);

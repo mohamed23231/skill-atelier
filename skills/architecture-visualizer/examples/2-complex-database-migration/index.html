@@ -286,11 +286,20 @@
       color: var(--text-main);
     }
 
+    /* Overlays centre on the canvas, not the window, so docked panels never push them under each other. */
+    body { --canvas-left: 0px; --canvas-right: 0px; --overlay-clearance: 8px; }
+    @media (min-width: 768px) { body { --overlay-clearance: 136px; } }
+    @media (min-width: 1100px) { body { --overlay-clearance: 208px; } }
+
     /* Sequence Playback Controls Bar */
     .sequence-controls {
       position: absolute;
       bottom: 20px;
-      left: 50%;
+      left: calc(var(--canvas-left) + (100vw - var(--canvas-left) - var(--canvas-right)) / 2);
+      /* Clear the minimap (bottom-left) and the zoom controls (bottom-right); --overlay-clearance grows with the minimap. */
+      max-width: calc(100vw - var(--canvas-left) - var(--canvas-right) - 2 * var(--overlay-clearance));
+      flex-wrap: wrap;
+      justify-content: center;
       transform: translateX(-50%);
       z-index: 40;
       display: none;
@@ -310,9 +319,8 @@
     /* Before vs After Mode Switcher Bar */
     .delta-controls {
       position: absolute;
-      top: 68px;
-      left: 50%;
-      transform: translateX(-50%);
+      top: 116px;
+      left: calc(var(--canvas-left) + 16px);
       z-index: 40;
       display: none;
       align-items: center;
@@ -482,6 +490,13 @@
       stroke-width: 0.5;
     }
 
+    .edge-label-leader {
+      stroke: var(--text-dim);
+      stroke-width: 1;
+      stroke-dasharray: 2 3;
+      pointer-events: none;
+    }
+
     .edge-label-text {
       font-size: 10px;
       fill: var(--text-muted);
@@ -600,6 +615,9 @@
       max-height: min(46vh, 320px);
       overflow-y: auto;
     }
+    .legend-box:not([open]) { padding: 6px 12px; }
+    .legend-summary { cursor: pointer; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+    .legend-box[open] .legend-summary { margin-bottom: 6px; }
 
     .legend-row {
       display: flex;
@@ -810,15 +828,16 @@
 
     .gate-panel {
       position: absolute;
-      top: 150px;
-      left: 16px;
-      width: 360px;
-      max-height: 60vh;
+      top: 64px;
+      right: 16px;
+      width: min(360px, calc(100vw - 32px));
+      /* Stop above the zoom controls docked at the canvas' bottom-right. */
+      max-height: calc(100vh - 240px);
       overflow-y: auto;
       background: var(--bg-panel);
       border: 1px solid var(--border-color);
       border-radius: 12px;
-      z-index: 55;
+      z-index: 70;
       display: none;
       box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
     }
@@ -930,12 +949,14 @@
     @media (min-width: 1100px) {
       .workbench-navigator { width: 240px; }
       .inspector-drawer { width: 320px; }
+      body:has(.workbench-navigator[data-open="true"]) { --canvas-left: 240px; }
+      body:has(.inspector-drawer[data-open="true"]) { --canvas-right: 320px; }
       body:has(.workbench-navigator[data-open="true"]) #canvas-container { margin-left: 240px; width: calc(100% - 240px); }
       body:has(.inspector-drawer[data-open="true"]) #canvas-container { width: calc(100% - 320px); }
       body:has(.workbench-navigator[data-open="true"]):has(.inspector-drawer[data-open="true"]) #canvas-container { width: calc(100% - 560px); }
       body:has(.workbench-navigator[data-open="true"]) .filter-bar { left: 256px; }
-      .legend-box { left: 204px; }
-      body:has(.workbench-navigator[data-open="true"]) .legend-box { left: 444px; }
+      /* The legend stacks above the minimap, inside the column the playback bar's clearance already keeps free. */
+      .legend-box { left: calc(var(--canvas-left) + 16px); bottom: 140px; }
       body:has(.inspector-drawer[data-open="true"]) .viewport-controls { right: 340px; }
     }
 
@@ -1045,7 +1066,7 @@
     <button id="seq-prev" class="btn-icon" style="height: 28px;">⏮ Prev</button>
     <button id="seq-play" class="btn-icon" style="height: 28px;">▶ Play</button>
     <button id="seq-next" class="btn-icon" style="height: 28px;">⏭ Next</button>
-    <span id="seq-step-info" style="font-size: 12px; font-weight: 600; min-width: 160px; text-align: center;">Step 1 of 5</span>
+    <span id="seq-step-info" style="font-size: 12px; font-weight: 600; min-width: 120px; flex: 1 1 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Step 1 of 5</span>
     <input type="range" id="seq-slider" min="1" max="5" value="1" style="cursor: pointer; width: 140px;" />
   </div>
 
@@ -1058,8 +1079,8 @@
   </div>
 
   <!-- Legend Box -->
-  <div class="legend-box">
-    <div style="font-weight: 700; font-size: 10px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px;">Visual Legend</div>
+  <details class="legend-box">
+    <summary class="legend-summary">Legend</summary>
     <div class="legend-row">
       <span class="legend-icon" style="color: var(--accent-blue);">―</span>
       <span>Synchronous Request / API</span>
@@ -1088,7 +1109,7 @@
     <div class="legend-divider"></div>
     <div class="legend-row"><span class="legend-icon">⌨</span><span>F fit · 0 reset · +/− zoom · A animate · Esc close</span></div>
     <div class="legend-row"><span class="legend-icon">▾</span><span>Click a boundary title to collapse it</span></div>
-  </div>
+  </details>
 
   <!-- Data-flow hint -->
   <div id="flow-hint" class="flow-hint">Data Flow view: read / write / event / replication paths only. Request-response control edges are dimmed.</div>
@@ -1414,10 +1435,10 @@
         }
 
         if (collision === 0) {
-          return { x: point.x, y: centerY, collision: 0, offset: LABEL_OFFSETS[k] };
+          return { x: point.x, y: centerY, collision: 0, offset: LABEL_OFFSETS[k], tether: { x: point.x, y: point.y } };
         }
         if (best === null || collision < best.collision) {
-          best = { x: point.x, y: centerY, collision, offset: LABEL_OFFSETS[k] };
+          best = { x: point.x, y: centerY, collision, offset: LABEL_OFFSETS[k], tether: { x: point.x, y: point.y } };
         }
       }
     }
@@ -1445,15 +1466,28 @@
         }
 
         if (collision === 0) {
-          return { x: centerX, y: point.y, collision: 0, offset: LABEL_OFFSETS_X[k] };
+          return { x: centerX, y: point.y, collision: 0, offset: LABEL_OFFSETS_X[k], tether: { x: point.x, y: point.y } };
         }
         if (best === null || collision < best.collision) {
-          best = { x: centerX, y: point.y, collision, offset: LABEL_OFFSETS_X[k] };
+          best = { x: centerX, y: point.y, collision, offset: LABEL_OFFSETS_X[k], tether: { x: point.x, y: point.y } };
         }
       }
     }
 
     return best;
+  }
+
+  // A label pushed off its curve gets a short leader back to the point it was searched from,
+  // so it never reads as an orphan floating between unrelated edges.
+  function labelLeader(edge, minLength = 24) {
+    const tether = edge && edge.labelTether;
+    if (!tether || typeof edge.labelX !== 'number' || !(edge.labelWidth > 0)) return null;
+    const halfW = edge.labelWidth / 2;
+    const halfH = LABEL_HEIGHT / 2;
+    const x2 = Math.min(Math.max(tether.x, edge.labelX - halfW), edge.labelX + halfW);
+    const y2 = Math.min(Math.max(tether.y, edge.labelY - halfH), edge.labelY + halfH);
+    if (Math.hypot(x2 - tether.x, y2 - tether.y) < minLength) return null;
+    return { x1: round(tether.x), y1: round(tether.y), x2: round(x2), y2: round(y2) };
   }
 
   function resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes) {
@@ -1512,6 +1546,7 @@
             if (newAnchor && (Math.abs(newAnchor.x - e2.labelX) > 0.01 || Math.abs(newAnchor.y - e2.labelY) > 0.01)) {
               e2.labelX = newAnchor.x;
               e2.labelY = newAnchor.y;
+              e2.labelTether = newAnchor.tether;
               movedAny = true;
             } else {
               const shift = LABEL_HEIGHT + 4;
@@ -1899,6 +1934,7 @@
       endpoint,
       labelX: anchor.x,
       labelY: anchor.y,
+      labelTether: anchor.tether,
       labelWidth,
       labelAnchor,
       labelBounds,
@@ -2097,6 +2133,7 @@
     labelDisplayText,
     estimateLabelWidth,
     findLabelAnchor,
+    labelLeader,
     resolveLabelCollisions,
     curveSanityScore,
     buildEdgeGeometry,
@@ -2885,7 +2922,23 @@
             "orderTotal": 149.5,
             "items": 3
           },
-          "status": "success"
+          "status": "success",
+          "kind": "interaction",
+          "interactions": [
+            {
+              "id": "stage_client_order_ingress",
+              "from": "client_traffic",
+              "to": "orders_api_service",
+              "edgeId": "e_client_orders",
+              "label": "HTTPS POST /orders",
+              "payload": {
+                "customerId": "usr_998",
+                "orderTotal": 149.5,
+                "items": 3
+              },
+              "status": "success"
+            }
+          ]
         },
         {
           "id": "stage_dao_proxy_delegation",
@@ -2901,7 +2954,22 @@
             "orderId": 847291,
             "partitionKey": "2026-09"
           },
-          "status": "success"
+          "status": "success",
+          "kind": "interaction",
+          "interactions": [
+            {
+              "id": "stage_dao_proxy_delegation",
+              "from": "orders_api_service",
+              "to": "migration_proxy",
+              "edgeId": "e_service_proxy",
+              "label": "saveOrder(order)",
+              "payload": {
+                "orderId": 847291,
+                "partitionKey": "2026-09"
+              },
+              "status": "success"
+            }
+          ]
         },
         {
           "id": "stage_parallel_migration_activity",
@@ -2927,7 +2995,26 @@
               "metadata": {
                 "sync": true,
                 "latencyMs": 3.2
-              }
+              },
+              "kind": "interaction",
+              "interactions": [
+                {
+                  "id": "stage_write_legacy_primary",
+                  "from": "migration_proxy",
+                  "to": "legacy_orders_db",
+                  "edgeId": "e_proxy_legacy",
+                  "label": "SQL Primary INSERT",
+                  "payload": {
+                    "orderId": 847291,
+                    "table": "orders_legacy"
+                  },
+                  "metadata": {
+                    "sync": true,
+                    "latencyMs": 3.2
+                  },
+                  "status": "success"
+                }
+              ]
             },
             {
               "id": "stage_write_partitioned_secondary",
@@ -2947,7 +3034,26 @@
               "metadata": {
                 "sync": false,
                 "retryPolicy": "exponential"
-              }
+              },
+              "kind": "interaction",
+              "interactions": [
+                {
+                  "id": "stage_write_partitioned_secondary",
+                  "from": "migration_proxy",
+                  "to": "partitioned_orders_db",
+                  "edgeId": "e_proxy_target",
+                  "label": "SQL Shadow INSERT",
+                  "payload": {
+                    "orderId": 847291,
+                    "targetPartition": "orders_2026_09"
+                  },
+                  "metadata": {
+                    "sync": false,
+                    "retryPolicy": "exponential"
+                  },
+                  "status": "success"
+                }
+              ]
             },
             {
               "id": "stage_cdc_backfill_subpipeline",
@@ -2966,7 +3072,25 @@
               "status": "active",
               "metadata": {
                 "throttledRate": "2500 rows/sec"
-              }
+              },
+              "kind": "interaction",
+              "interactions": [
+                {
+                  "id": "stage_cdc_backfill_subpipeline",
+                  "from": "legacy_orders_db",
+                  "to": "cdc_debezium_worker",
+                  "edgeId": "e_legacy_cdc",
+                  "label": "WAL Replication Stream",
+                  "payload": {
+                    "lsn": "0/16B2D40",
+                    "batchSize": 2500
+                  },
+                  "metadata": {
+                    "throttledRate": "2500 rows/sec"
+                  },
+                  "status": "active"
+                }
+              ]
             },
             {
               "id": "stage_cdc_to_kafka",
@@ -2982,7 +3106,22 @@
                 "topic": "orders.backfill",
                 "partition": 4
               },
-              "status": "success"
+              "status": "success",
+              "kind": "interaction",
+              "interactions": [
+                {
+                  "id": "stage_cdc_to_kafka",
+                  "from": "cdc_debezium_worker",
+                  "to": "kafka_buffer",
+                  "edgeId": "e_cdc_kafka",
+                  "label": "Produce CDC Events",
+                  "payload": {
+                    "topic": "orders.backfill",
+                    "partition": 4
+                  },
+                  "status": "success"
+                }
+              ]
             },
             {
               "id": "stage_kafka_to_consumer",
@@ -2998,7 +3137,22 @@
                 "consumerGroup": "orders-backfill-grp",
                 "batchCount": 500
               },
-              "status": "success"
+              "status": "success",
+              "kind": "interaction",
+              "interactions": [
+                {
+                  "id": "stage_kafka_to_consumer",
+                  "from": "kafka_buffer",
+                  "to": "backfill_consumer",
+                  "edgeId": "e_kafka_consumer",
+                  "label": "Batch Consumption",
+                  "payload": {
+                    "consumerGroup": "orders-backfill-grp",
+                    "batchCount": 500
+                  },
+                  "status": "success"
+                }
+              ]
             },
             {
               "id": "stage_consumer_bulk_upsert",
@@ -3006,6 +3160,107 @@
               "type": "interaction",
               "source": "backfill_consumer",
               "target": "partitioned_orders_db",
+              "from": "backfill_consumer",
+              "to": "partitioned_orders_db",
+              "edgeId": "e_consumer_partitioned",
+              "label": "Bulk ON CONFLICT Upsert",
+              "payload": {
+                "targetTable": "orders_partitioned",
+                "rowsUpserted": 500
+              },
+              "status": "success",
+              "kind": "interaction",
+              "interactions": [
+                {
+                  "id": "stage_consumer_bulk_upsert",
+                  "from": "backfill_consumer",
+                  "to": "partitioned_orders_db",
+                  "edgeId": "e_consumer_partitioned",
+                  "label": "Bulk ON CONFLICT Upsert",
+                  "payload": {
+                    "targetTable": "orders_partitioned",
+                    "rowsUpserted": 500
+                  },
+                  "status": "success"
+                }
+              ]
+            }
+          ],
+          "kind": "parallel",
+          "interactions": [
+            {
+              "id": "stage_write_legacy_primary",
+              "from": "migration_proxy",
+              "to": "legacy_orders_db",
+              "edgeId": "e_proxy_legacy",
+              "label": "SQL Primary INSERT",
+              "payload": {
+                "orderId": 847291,
+                "table": "orders_legacy"
+              },
+              "metadata": {
+                "sync": true,
+                "latencyMs": 3.2
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_write_partitioned_secondary",
+              "from": "migration_proxy",
+              "to": "partitioned_orders_db",
+              "edgeId": "e_proxy_target",
+              "label": "SQL Shadow INSERT",
+              "payload": {
+                "orderId": 847291,
+                "targetPartition": "orders_2026_09"
+              },
+              "metadata": {
+                "sync": false,
+                "retryPolicy": "exponential"
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_cdc_backfill_subpipeline",
+              "from": "legacy_orders_db",
+              "to": "cdc_debezium_worker",
+              "edgeId": "e_legacy_cdc",
+              "label": "WAL Replication Stream",
+              "payload": {
+                "lsn": "0/16B2D40",
+                "batchSize": 2500
+              },
+              "metadata": {
+                "throttledRate": "2500 rows/sec"
+              },
+              "status": "active"
+            },
+            {
+              "id": "stage_cdc_to_kafka",
+              "from": "cdc_debezium_worker",
+              "to": "kafka_buffer",
+              "edgeId": "e_cdc_kafka",
+              "label": "Produce CDC Events",
+              "payload": {
+                "topic": "orders.backfill",
+                "partition": 4
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_kafka_to_consumer",
+              "from": "kafka_buffer",
+              "to": "backfill_consumer",
+              "edgeId": "e_kafka_consumer",
+              "label": "Batch Consumption",
+              "payload": {
+                "consumerGroup": "orders-backfill-grp",
+                "batchCount": 500
+              },
+              "status": "success"
+            },
+            {
+              "id": "stage_consumer_bulk_upsert",
               "from": "backfill_consumer",
               "to": "partitioned_orders_db",
               "edgeId": "e_consumer_partitioned",
@@ -3047,7 +3302,25 @@
                   "status": "success",
                   "metadata": {
                     "canaryRamp": "100%"
-                  }
+                  },
+                  "kind": "interaction",
+                  "interactions": [
+                    {
+                      "id": "stage_promote_partitioned_primary",
+                      "from": "migration_proxy",
+                      "to": "partitioned_orders_db",
+                      "edgeId": "e_proxy_target",
+                      "label": "Promote to Primary Target",
+                      "payload": {
+                        "primaryTarget": "partitioned_orders_db",
+                        "routingMode": "100% Partitioned"
+                      },
+                      "metadata": {
+                        "canaryRamp": "100%"
+                      },
+                      "status": "success"
+                    }
+                  ]
                 }
               ]
             },
@@ -3075,11 +3348,31 @@
                   "status": "recovery",
                   "metadata": {
                     "alertLevel": "P1_CRITICAL"
-                  }
+                  },
+                  "kind": "interaction",
+                  "interactions": [
+                    {
+                      "id": "stage_rollback_to_legacy",
+                      "from": "migration_proxy",
+                      "to": "legacy_orders_db",
+                      "edgeId": "e_proxy_legacy",
+                      "label": "Revert Primary Traffic",
+                      "payload": {
+                        "primaryTarget": "legacy_orders_db",
+                        "dualWritesEnabled": false,
+                        "reason": "CHECKSUM_MISMATCH_DETECTED"
+                      },
+                      "metadata": {
+                        "alertLevel": "P1_CRITICAL"
+                      },
+                      "status": "recovery"
+                    }
+                  ]
                 }
               ]
             }
-          ]
+          ],
+          "kind": "branch"
         }
       ],
       "origin": "author"
@@ -3944,6 +4237,10 @@
       },
       "labelX": 352.03,
       "labelY": 257,
+      "labelTether": {
+        "x": 352.03,
+        "y": 257
+      },
       "labelWidth": 123.5,
       "labelAnchor": {
         "x": 352.03,
@@ -4053,6 +4350,10 @@
       },
       "labelX": 700,
       "labelY": 262.9,
+      "labelTether": {
+        "x": 540,
+        "y": 262.9
+      },
       "labelWidth": 52,
       "labelAnchor": {
         "x": 700,
@@ -4162,6 +4463,10 @@
       },
       "labelX": 900,
       "labelY": -24.5,
+      "labelTether": {
+        "x": 900,
+        "y": -24.5
+      },
       "labelWidth": 117,
       "labelAnchor": {
         "x": 900,
@@ -4271,6 +4576,10 @@
       },
       "labelX": 900,
       "labelY": 40.5,
+      "labelTether": {
+        "x": 900,
+        "y": 40.5
+      },
       "labelWidth": 104,
       "labelAnchor": {
         "x": 900,
@@ -4379,6 +4688,10 @@
       },
       "labelX": 1081.1,
       "labelY": 150.5,
+      "labelTether": {
+        "x": 1081.1,
+        "y": 196.5
+      },
       "labelWidth": 130,
       "labelAnchor": {
         "x": 1081.1,
@@ -4489,6 +4802,10 @@
       },
       "labelX": 1060,
       "labelY": 256.62,
+      "labelTether": {
+        "x": 900,
+        "y": 256.62
+      },
       "labelWidth": 117,
       "labelAnchor": {
         "x": 1060,
@@ -4598,6 +4915,10 @@
       },
       "labelX": 1060,
       "labelY": 381.1,
+      "labelTether": {
+        "x": 900,
+        "y": 381.1
+      },
       "labelWidth": 97.5,
       "labelAnchor": {
         "x": 1060,
@@ -4706,6 +5027,10 @@
       },
       "labelX": 1082.52,
       "labelY": 421.1,
+      "labelTether": {
+        "x": 1082.52,
+        "y": 377.1
+      },
       "labelWidth": 130,
       "labelAnchor": {
         "x": 1082.52,
@@ -4901,6 +5226,7 @@
       presentation: false,
       scenarioId: null,
       scenarioStage: 0,
+      scenarioActive: false,
       scenarioTimer: null,
       prefersReducedMotion: false
     };
@@ -5192,6 +5518,9 @@
 
     const FOCUS_MODES = { NEIGHBORS: 'neighbors', AFFECTED: 'affected' };
     let restoringViewState = false;
+    // Until init has read the incoming hash, nothing may write one: an early write would replace a shared
+    // deep link (and the fitted camera) with the half-initialised default state.
+    let viewStateReady = false;
     let urlStateTimer = null;
 
     function modelIdentity() {
@@ -5310,21 +5639,23 @@
     }
 
     function scheduleUrlState() {
-      if (restoringViewState) return;
+      if (restoringViewState || !viewStateReady) return;
       window.clearTimeout(urlStateTimer);
       urlStateTimer = window.setTimeout(updateUrlState, 60);
     }
 
     function updateUrlState() {
-      if (restoringViewState) return;
+      if (restoringViewState || !viewStateReady) return;
       const params = new URLSearchParams();
       params.set('view', state.currentView);
       if (state.selectedNodeId) params.set('node', state.selectedNodeId);
       if (state.selectedEdgeId) params.set('edge', state.selectedEdgeId);
       if (state.activeFilter !== 'all') params.set('filter', state.activeFilter);
       if (state.sequenceIndex) params.set('step', String(state.sequenceIndex));
-      if (state.scenarioId) params.set('scenario', state.scenarioId);
-      if (state.scenarioStage) params.set('stage', String(state.scenarioStage));
+      if (state.scenarioActive && state.scenarioId) {
+        params.set('scenario', state.scenarioId);
+        if (state.scenarioStage) params.set('stage', String(state.scenarioStage));
+      }
       if (state.focusMode) params.set('focus', state.focusMode);
       if (state.presentation) params.set('present', '1');
       params.set('z', String(Math.round(state.zoom * 1000) / 1000));
@@ -5354,6 +5685,7 @@
           state.scenarioId = scenario;
           const scenarioStage = Number.parseInt(params.get('stage'), 10);
           state.scenarioStage = Number.isInteger(scenarioStage) && scenarioStage >= 0 ? scenarioStage : 0;
+          state.scenarioActive = true;
           renderScenarioNavigator();
         }
         const focus = params.get('focus');
@@ -5364,9 +5696,11 @@
         const step = Number.parseInt(params.get('step'), 10);
         if (Number.isInteger(step) && step >= 0) goToSequenceStep(step);
         if (params.get('present') === '1') setPresentation(true);
-        const zoom = Number(params.get('z'));
-        const panX = Number(params.get('x'));
-        const panY = Number(params.get('y'));
+        // Number(null) is 0, so a missing parameter must stay NaN rather than read as "pan to the origin".
+        const numberParam = name => (params.has(name) ? Number(params.get(name)) : NaN);
+        const zoom = numberParam('z');
+        const panX = numberParam('x');
+        const panY = numberParam('y');
         if (Number.isFinite(zoom) && zoom >= 0.15 && zoom <= 4) state.zoom = zoom;
         if (Number.isFinite(panX)) state.panX = panX;
         if (Number.isFinite(panY)) state.panY = panY;
@@ -5463,7 +5797,12 @@
         result.push({ ...stage, group, depth });
         if (stage.kind === 'branch') {
           (stage.branches || []).forEach(branch => {
-            result.push(...flattenScenarioStages(branch.stages, `branch: ${branch.condition || branch.name || branch.id || 'condition'}`, depth + 1));
+            const branchStages = flattenScenarioStages(branch.stages, `branch: ${branch.name || branch.condition || branch.id || 'condition'}`, depth + 1);
+            branchStages.forEach(child => {
+              if (!child.branchStatus) child.branchStatus = branch.status;
+              if (!child.branchRecovery) child.branchRecovery = branch.recovery || branch.failure;
+            });
+            result.push(...branchStages);
           });
         }
       });
@@ -5488,15 +5827,20 @@
         return;
       }
       target.className = 'workbench-stage';
-      const status = stage.status || (stage.optional ? 'optional' : 'ready');
+      const interactions = stageInteractions(stage);
+      const status = stage.status || interactions.find(item => item.status)?.status || stage.branchStatus || (stage.optional ? 'optional' : 'ready');
+      const nodeName = id => nodeById.get(id)?.label || id;
       target.setAttribute('data-stage-status', status);
-      appendReviewField(target, 'Stage', `${state.scenarioStage + 1}/${stages.length} · ${stage.id || stage.kind || 'stage'}`);
-      appendReviewField(target, 'Group', stage.group || stage.kind || 'serial');
+      appendReviewField(target, 'Stage', `${state.scenarioStage + 1}/${stages.length} · ${stage.name || stage.label || stage.id || stage.kind || 'stage'}`);
+      appendReviewField(target, 'Group', stage.kind === 'branch' ? `decision: ${stage.condition || 'condition'}` : (stage.group || stage.kind || 'serial'));
       appendReviewField(target, 'Status', status);
-      appendReviewField(target, 'Participants', (stage.interactions || []).flatMap(item => [item.from, item.to]).filter(Boolean));
-      appendReviewField(target, 'Interactions', (stage.interactions || []).map(item => item.label || item.id));
-      appendReviewField(target, 'Payload / metadata', (stage.interactions || []).map(item => item.payload || item.metadata).filter(Boolean));
-      appendReviewField(target, 'Failure / recovery', stage.failure || stage.recovery || stage.onFailure || 'Not specified');
+      appendReviewField(target, 'Participants', [...new Set(interactions.flatMap(item => [item.from, item.to]).filter(Boolean))].map(nodeName));
+      appendReviewField(target, 'Interactions', interactions.map(item => item.label || item.id));
+      appendReviewField(target, 'Payload / metadata', interactions.map(item => item.payload || item.metadata).filter(Boolean));
+      appendReviewField(target, 'Failure / recovery', stage.failure || stage.recovery || stage.onFailure
+        || interactions.map(item => item.failure || item.recovery).filter(Boolean).join(' · ')
+        || stage.branchRecovery || 'Not specified');
+      if (state.scenarioActive) spotlightInteractions(interactions);
       const slider = document.querySelector('[data-scenario-scrubber]');
       slider.max = Math.max(stages.length - 1, 0);
       slider.value = state.scenarioStage;
@@ -5504,15 +5848,37 @@
       updateUrlState();
     }
 
+    // A branch stage has no hops of its own; it stands for every path it can take.
+    function stageInteractions(stage) {
+      if (stage.kind !== 'branch') return stage.interactions || [];
+      const collect = stages => (stages || []).flatMap(child => [...(child.interactions || []), ...(child.branches || []).flatMap(b => collect(b.stages))]);
+      return (stage.branches || []).flatMap(branch => collect(branch.stages));
+    }
+
+    function activateScenario() {
+      if (state.currentView !== VIEWS.ARCHITECTURE) switchView(VIEWS.ARCHITECTURE);
+      state.scenarioActive = true;
+    }
+
+    function deactivateScenario() {
+      if (!state.scenarioActive) return;
+      state.scenarioActive = false;
+      stopScenarioPlayback();
+      clearSpotlight();
+      updateUrlState();
+    }
+
     function selectScenario(id) {
       const scenario = (ARCH_SPEC.scenarios || []).find(item => item.id === id);
       if (!scenario) return;
+      activateScenario();
       state.scenarioId = scenario.id;
       state.scenarioStage = 0;
       renderScenarioStage();
     }
 
     function stepScenario(delta) {
+      activateScenario();
       state.scenarioStage += delta;
       renderScenarioStage();
     }
@@ -5529,6 +5895,7 @@
         stopScenarioPlayback();
         return;
       }
+      activateScenario();
       document.querySelector('[data-scenario-play]').setAttribute('aria-pressed', 'true');
       state.scenarioTimer = window.setInterval(() => {
         const stages = flattenScenarioStages(selectedScenario()?.stages);
@@ -5573,7 +5940,7 @@
       next.addEventListener('click', () => stepScenario(1));
       const scrubber = document.createElement('input');
       scrubber.type = 'range'; scrubber.min = '0'; scrubber.value = '0'; scrubber.setAttribute('data-scenario-scrubber', ''); scrubber.setAttribute('aria-label', 'Scenario stage');
-      scrubber.addEventListener('input', () => { state.scenarioStage = Number(scrubber.value); renderScenarioStage(); });
+      scrubber.addEventListener('input', () => { activateScenario(); state.scenarioStage = Number(scrubber.value); renderScenarioStage(); });
       const stage = document.createElement('div');
       stage.setAttribute('data-scenario-stage', '');
       toolbar.append(previous, play, next, scrubber);
@@ -5639,6 +6006,7 @@
       applyVisibility();
       fitToScreen();
       restoreUrlState();
+      viewStateReady = true;
       applyFocusMode();
       document.body.setAttribute('data-ready-ms', String(Math.round(performance.now())));
       announceStatus('Architecture workbench ready.');
@@ -5839,6 +6207,7 @@
           if (state.presentation) { setPresentation(false); break; }
           if (document.fullscreenElement) { document.exitFullscreen?.(); break; }
           if (state.focusMode) { setFocusMode(state.focusMode); break; }
+          deactivateScenario();
           closeActiveDrawer();
           closeModal();
           document.getElementById('gate-panel').classList.remove('open');
@@ -5878,6 +6247,7 @@
 
     function switchView(viewName) {
       if (viewName !== VIEWS.SEQUENCE) stopScenarioPlayback();
+      if (viewName !== VIEWS.ARCHITECTURE) state.scenarioActive = false;
       state.currentView = viewName;
       document.getElementById('delta-bar').classList.toggle('visible', viewName === VIEWS.BEFORE_AFTER);
       document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
@@ -6036,6 +6406,7 @@
         }
 
         edgesLayer.appendChild(g);
+        if (labelText) syncLabelLeader(e);
       });
 
       (LAYOUT_DATA.nodes || []).forEach(n => {
@@ -6230,7 +6601,7 @@
         group.classList.toggle('dimmed', isDimmed);
 
         const path = document.getElementById(`path-${e.id}`);
-        if (path && !state.sequencePlaying && state.currentView !== VIEWS.SEQUENCE) {
+        if (path && !state.sequencePlaying && !state.scenarioActive && state.currentView !== VIEWS.SEQUENCE) {
           path.classList.toggle('highlighted', Boolean(chain) && chain.has(e.source) && chain.has(e.target));
         }
       });
@@ -6421,43 +6792,68 @@
       state.sequenceIndex = Math.max(0, Math.min(index, steps.length - 1));
       const step = steps[state.sequenceIndex];
 
-      document.getElementById('seq-step-info').textContent = `Step ${state.sequenceIndex + 1}/${steps.length}: ${step.label || ''}`;
+      const stepInfo = document.getElementById('seq-step-info');
+      stepInfo.textContent = `Step ${state.sequenceIndex + 1}/${steps.length}: ${step.label || ''}`;
+      stepInfo.title = stepInfo.textContent;
       document.getElementById('seq-slider').value = state.sequenceIndex + 1;
 
-      document.querySelectorAll('.node-group').forEach(el2 => {
-        const id = el2.id.replace('node-', '');
-        el2.classList.toggle('selected', id === step.from || id === step.to);
-      });
-
-      let matched = false;
-      document.querySelectorAll('.edge-path').forEach(p => {
-        const edgeId = p.id.replace('path-', '');
-        const edge = edgeById.get(edgeId);
-        const isActive = Boolean(edge) && (
-          (edge.source === step.from && edge.target === step.to) ||
-          (edge.source === step.to && edge.target === step.from)
-        );
-        if (isActive) matched = true;
-        p.classList.toggle('highlighted', isActive);
-        p.classList.toggle('dimmed', !isActive);
-      });
-
-      drawGhostStep(matched ? null : step);
+      spotlightInteractions([step]);
       updateUrlState();
     }
 
-    // A sequence hop with no modelled edge still has to be visible: draw it as a dashed ghost link.
-    function drawGhostStep(step) {
-      ghostLayer.innerHTML = '';
-      if (!step) return;
-      const from = nodeById.get(step.from);
-      const to = nodeById.get(step.to);
-      if (!from || !to) return;
+    function interactionEdge(interaction) {
+      const byId = interaction.edgeId && edgeById.get(interaction.edgeId);
+      if (byId) return byId;
+      return (LAYOUT_DATA.edges || []).find(edge =>
+        (edge.source === interaction.from && edge.target === interaction.to) ||
+        (edge.source === interaction.to && edge.target === interaction.from)) || null;
+    }
 
-      const geometry = buildEdgeGeometry(from, to, isLRLayout);
-      const path = el('path', { class: 'edge-path ghost highlighted', d: geometry.path, 'marker-end': 'url(#arrow-highlight)' });
-      withTooltip(path, `${step.label || 'Sequence step'} (no modelled edge)`);
-      ghostLayer.appendChild(path);
+    // Light up the participants and edges of one playback step (a sequence hop or a scenario stage).
+    function spotlightInteractions(interactions) {
+      const participants = new Set(interactions.flatMap(item => [item.from, item.to]).filter(Boolean));
+      const activeEdges = new Set();
+      const unmatched = [];
+      interactions.forEach(item => {
+        const edge = interactionEdge(item);
+        if (edge) activeEdges.add(edge.id);
+        else unmatched.push(item);
+      });
+
+      document.querySelectorAll('.node-group').forEach(el2 => {
+        el2.classList.toggle('selected', participants.has(el2.id.replace('node-', '')));
+      });
+      document.querySelectorAll('.edge-path').forEach(p => {
+        const isActive = activeEdges.has(p.id.replace('path-', ''));
+        p.classList.toggle('highlighted', isActive);
+        p.classList.toggle('dimmed', !isActive);
+      });
+      drawGhostSteps(unmatched);
+    }
+
+    function clearSpotlight() {
+      ghostLayer.innerHTML = '';
+      document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
+      document.querySelectorAll('.edge-path').forEach(p => p.classList.remove('highlighted', 'dimmed'));
+      if (state.selectedNodeId) {
+        const selected = document.getElementById(`node-${state.selectedNodeId}`);
+        if (selected) selected.classList.add('selected');
+      }
+    }
+
+    // A playback hop with no modelled edge still has to be visible: draw it as a dashed ghost link.
+    function drawGhostSteps(steps) {
+      ghostLayer.innerHTML = '';
+      steps.forEach(step => {
+        const from = nodeById.get(step.from);
+        const to = nodeById.get(step.to);
+        if (!from || !to) return;
+
+        const geometry = buildEdgeGeometry(from, to, isLRLayout);
+        const path = el('path', { class: 'edge-path ghost highlighted', d: geometry.path, 'marker-end': 'url(#arrow-highlight)' });
+        withTooltip(path, `${step.label || 'Playback step'} (no modelled edge)`);
+        ghostLayer.appendChild(path);
+      });
     }
 
     function stepSequence(dir) {
@@ -6496,13 +6892,7 @@
 
     function stopSequencePlayback() {
       stopSequenceTimer();
-      ghostLayer.innerHTML = '';
-      document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
-      document.querySelectorAll('.edge-path').forEach(p => p.classList.remove('highlighted', 'dimmed'));
-      if (state.selectedNodeId) {
-        const selected = document.getElementById(`node-${state.selectedNodeId}`);
-        if (selected) selected.classList.add('selected');
-      }
+      clearSpotlight();
     }
 
     // Database ER Sub-view
@@ -6764,6 +7154,22 @@
       });
     }
 
+    function syncLabelLeader(edge) {
+      const labelGroup = document.getElementById(`label-${edge.id}`);
+      if (!labelGroup) return;
+      const leader = ArchVizGeometry.labelLeader(edge);
+      let line = labelGroup.querySelector('.edge-label-leader');
+      if (!leader) {
+        if (line && line.parentNode) line.parentNode.removeChild(line);
+        return;
+      }
+      if (!line) {
+        line = el('line', { class: 'edge-label-leader' });
+        labelGroup.insertBefore(line, labelGroup.firstChild);
+      }
+      Object.entries(leader).forEach(([key, value]) => line.setAttribute(key, value));
+    }
+
     function contentBand() {
       return (LAYOUT_DATA.nodes || []).reduce((acc, n) => ({
         top: Math.min(acc.top, n.y),
@@ -6802,6 +7208,7 @@
         bg.setAttribute('y', edge.labelY - 9);
         txt.setAttribute('x', edge.labelX);
         txt.setAttribute('y', edge.labelY);
+        syncLabelLeader(edge);
       });
     }
 
@@ -6846,6 +7253,7 @@
           edge.segments = geometry.segments;
           edge.labelX = geometry.labelX;
           edge.labelY = geometry.labelY;
+          edge.labelTether = geometry.labelTether;
           edge.labelWidth = labelRect ? parseFloat(labelRect.getAttribute('width')) : 0;
           edge.labelAnchor = geometry.labelAnchor;
           edge.labelBounds = geometry.labelBounds;
@@ -6942,7 +7350,7 @@
       const contentHeight = bounds.maxY - bounds.minY + padding * 2;
 
       const fitZoom = Math.min(Math.min(rect.width / contentWidth, rect.height / contentHeight), 1.4);
-      state.zoom = Math.max(fitZoom, 0.25);
+      state.zoom = clampZoom(fitZoom);
       state.panX = (rect.width - contentWidth * state.zoom) / 2 - bounds.minX * state.zoom + padding * state.zoom;
       state.panY = (rect.height - contentHeight * state.zoom) / 2 - bounds.minY * state.zoom + padding * state.zoom;
       updateTransform();

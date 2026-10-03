@@ -363,10 +363,51 @@ function findEdgeId(edges, from, to) {
   return undirected ? undirected.id || null : null;
 }
 
+const INTERACTION_FIELDS = ['edgeId', 'label', 'sync', 'durationMs', 'condition', 'payload', 'metadata', 'optional', 'status', 'failure', 'recovery'];
+
+// A stage written as one flat hop ({ type, from|source, to|target, label, ... }) becomes the canonical
+// { kind, interactions: [...] } shape, so the validator and the player see a single dialect.
+function stageAsInteraction(stage, edges) {
+  const from = stage.from || stage.source;
+  const to = stage.to || stage.target;
+  if (!from && !to) return null;
+  const interaction = { id: stage.id, from, to };
+  INTERACTION_FIELDS.forEach((field) => {
+    if (stage[field] !== undefined) interaction[field] = stage[field];
+  });
+  if (!interaction.label && stage.name) interaction.label = stage.name;
+  if (!interaction.edgeId && from && to) {
+    const edgeId = findEdgeId(edges, from, to);
+    if (edgeId) interaction.edgeId = edgeId;
+  }
+  return interaction;
+}
+
+function normalizeStage(stage, edges) {
+  if (!stage || typeof stage !== 'object') return stage;
+  if (!stage.kind && typeof stage.type === 'string') stage.kind = stage.type;
+  if (!Array.isArray(stage.interactions)) {
+    if (stage.kind === STAGE_KIND.PARALLEL && Array.isArray(stage.stages)) {
+      stage.interactions = stage.stages
+        .map((child) => normalizeStage(child, edges))
+        .flatMap((child) => (child && Array.isArray(child.interactions) ? child.interactions : []));
+    } else if (stage.kind !== STAGE_KIND.BRANCH) {
+      const interaction = stageAsInteraction(stage, edges);
+      if (interaction) stage.interactions = [interaction];
+    }
+  }
+  if (!stage.kind) stage.kind = STAGE_KIND.INTERACTION;
+  (stage.branches || []).forEach((branch) => {
+    (branch.stages || []).forEach((child) => normalizeStage(child, edges));
+  });
+  return stage;
+}
+
 function normalizeScenarios(model) {
   if (Array.isArray(model.scenarios) && model.scenarios.length > 0) {
     model.scenarios.forEach((scenario) => {
       if (!scenario.origin) scenario.origin = SCENARIO_ORIGIN.AUTHOR;
+      (scenario.stages || []).forEach((stage) => normalizeStage(stage, model.edges));
     });
     return;
   }

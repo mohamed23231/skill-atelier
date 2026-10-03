@@ -386,7 +386,7 @@ function runBrowser(config) {
   return JSON.parse(match[1].trim());
 }
 
-function runPhases(specRelOrSpec, phases, timeoutMs) {
+function runPhases(specRelOrSpec, phases, timeoutMs, options = {}) {
   const chrome = findChrome();
   assert.ok(chrome, 'no Chrome/Chromium binary available for rendered verification');
 
@@ -405,7 +405,8 @@ function runPhases(specRelOrSpec, phases, timeoutMs) {
     return runBrowser({
       chrome,
       url: 'file://' + pagePath,
-      preload: ERROR_PRELOAD,
+      // A deep link is injected before the page boots: file:// fragments are not reliably kept by navigation.
+      preload: options.hash ? `${ERROR_PRELOAD} history.replaceState(null, '', ${JSON.stringify(`#${options.hash}`)});` : ERROR_PRELOAD,
       phases,
       timeoutMs,
     });
@@ -1396,6 +1397,142 @@ const cases = [
     () => {
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps: minimapSteps() }]);
       assertMinimapBehavior(lastEvalValue(results[0]));
+    },
+  ],
+
+  [
+    'Phase 0: every example opens with the whole diagram fitted inside the canvas at 1280 and 1600',
+    () => {
+      const FIT = ev(`(function () {
+        const b = computeTotalVisualBounds();
+        const r = document.querySelector('#canvas-container svg').getBoundingClientRect();
+        const box = { left: state.panX + b.minX * state.zoom, right: state.panX + b.maxX * state.zoom, top: state.panY + b.minY * state.zoom, bottom: state.panY + b.maxY * state.zoom };
+        return { box, width: r.width, height: r.height, hash: location.hash };
+      })()`);
+      ['examples/1-crud-business-feature/architecture.json', 'examples/3-async-event-driven-workflow/architecture.json'].forEach((spec) => {
+        const results = runPhases(spec, [{ width: 1280, height: 800, steps: [FIT] }, { width: 1600, height: 960, steps: [ev('fitToScreen(); 0'), FIT] }]);
+        results.forEach((phase) => {
+          const { box, width, height, hash } = lastEvalValue(phase);
+          assert.ok(box.left >= -1 && box.top >= -1 && box.right <= width + 1 && box.bottom <= height + 1, `${spec}: diagram not fitted ${JSON.stringify({ box, width, height })}`);
+          assert.ok(!/[#&]z=1&x=0&y=0/.test(hash), `${spec}: init wrote a default camera into the URL: ${hash}`);
+        });
+      });
+    },
+  ],
+
+  [
+    'Phase 0: a scenario stage spotlights its participants and edges on the canvas, names them, and Esc clears it',
+    () => {
+      const SNAPSHOT = `JSON.stringify({
+        edges: [...document.querySelectorAll('.edge-path.highlighted')].map((p) => p.id).sort(),
+        nodes: [...document.querySelectorAll('.node-group.selected')].map((n) => n.id).sort(),
+        dimmed: document.querySelectorAll('.edge-path.dimmed').length,
+        text: (document.querySelector('[data-scenario-stage]') || {}).innerText || '',
+        hash: location.hash,
+      })`;
+      const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{
+        width: 1440,
+        height: 900,
+        steps: [ev(SNAPSHOT), ev(`stepScenario(3); ${SNAPSHOT}`), ev(`stepScenario(1); ${SNAPSHOT}`), ESCAPE(), ev(SNAPSHOT)],
+      }]);
+      const [idle, single, parallel, cleared] = results[0].filter((step) => step.kind === 'eval').map((step) => JSON.parse(step.value));
+      assert.deepStrictEqual(idle.edges, [], 'canvas must not open mid-walkthrough');
+      assert.deepStrictEqual(single.edges, ['path-e_poller_kafka']);
+      assert.deepStrictEqual(single.nodes, ['node-kafka_broker', 'node-outbox_poller']);
+      assert.ok(single.dimmed > 0, 'non-participating edges should dim');
+      assert.ok(/Publish to Kafka Event Bus/.test(single.text) && /Outbox Relay Worker/.test(single.text), single.text);
+      assert.ok(!/stage_publish_order_created|outbox_poller/.test(single.text), `raw ids leaked into the stage panel: ${single.text}`);
+      assert.ok(/scenario=scenario_fulfillment_saga_dlq&stage=3/.test(single.hash), single.hash);
+      assert.strictEqual(parallel.edges.length, 4, `parallel stage should light every branch: ${parallel.edges}`);
+      assert.deepStrictEqual([cleared.edges.length, cleared.dimmed], [0, 0], 'Esc should end the walkthrough spotlight');
+      assert.ok(!/scenario=/.test(cleared.hash), cleared.hash);
+    },
+  ],
+
+  [
+    'Phase 0: a shared deep link restores the selected node and camera instead of being overwritten on boot',
+    () => {
+      const results = runPhases(fixtures.VALID_SPEC, [{
+        width: 1440,
+        height: 900,
+        steps: [ev('JSON.stringify({ node: state.selectedNodeId, zoom: state.zoom, x: state.panX, y: state.panY })')],
+      }], undefined, { hash: 'node=api&z=0.9&x=10&y=20' });
+      assert.deepStrictEqual(JSON.parse(lastEvalValue(results[0])), { node: 'api', zoom: 0.9, x: 10, y: 20 });
+    },
+  ],
+
+  [
+    'Phase 0: playback, delta and gate overlays never sit under each other or a docked panel at 1440 and 1600',
+    () => {
+      const OVERLAPS = ev(`(function () {
+        const sel = ['.filter-bar', '#delta-bar', '#sequence-bar', '.legend-box', '#gate-panel', '.workbench-minimap', '.viewport-controls', '[data-region=navigator]', '#inspector'];
+        const vis = sel.map((s) => [s, document.querySelector(s)])
+          .filter(([, e]) => e && e.getAttribute('data-open') !== 'false' && getComputedStyle(e).display !== 'none')
+          .map(([s, e]) => [s, e.getBoundingClientRect()])
+          .filter(([, r]) => r.width > 0 && r.right > 0 && r.left < innerWidth);
+        const hits = [];
+        for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
+          const a = vis[i][1], b = vis[j][1];
+          if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2) hits.push(vis[i][0] + ' x ' + vis[j][0]);
+        }
+        return hits;
+      })()`);
+      const settle = ev('new Promise((resolve) => setTimeout(() => resolve(0), 350))');
+      const steps = [
+        ev("document.getElementById('gate-panel').classList.remove('open'); switchView('sequence'); goToSequenceStep(2); 0"), settle, OVERLAPS,
+        ev("openInspectorForNode('saga_orchestrator'); 0"), settle, OVERLAPS,
+        ev("closeInspector(); switchView('before_after'); 0"), settle, OVERLAPS,
+        ev("switchView('architecture'); document.getElementById('btn-gate').click(); 0"), settle, OVERLAPS,
+      ];
+      const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [
+        { width: 1440, height: 900, steps },
+        { width: 1600, height: 960, steps },
+      ]);
+      results.forEach((phase, index) => {
+        const checks = phase.filter((step) => step.kind === 'eval' && Array.isArray(step.value)).map((step) => step.value);
+        assert.strictEqual(checks.length, 4);
+        checks.forEach((hits, state) => assert.deepStrictEqual(hits, [], `viewport ${index}, state ${state}: ${hits.join('; ')}`));
+      });
+    },
+  ],
+
+  [
+    'Phase 0: a label displaced off a short edge is tethered to it by a leader line',
+    () => {
+      const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{
+        width: 1440,
+        height: 900,
+        steps: [ev(`(function () {
+          const edge = LAYOUT_DATA.edges.find((e) => e.id === 'e_dlq_triage');
+          const leader = document.querySelector('#label-e_dlq_triage .edge-label-leader');
+          return { leader: Boolean(leader), x1: leader && Number(leader.getAttribute('x1')), tetherX: edge.labelTether.x };
+        })()`)],
+      }]);
+      const value = lastEvalValue(results[0]);
+      assert.ok(value.leader, 'the pushed-out "Consume Poison Message" label must have a leader back to its edge');
+      assert.strictEqual(value.x1, value.tetherX);
+    },
+  ],
+
+  [
+    'Phase 0: the sequence playback bar keeps every control inside it and on screen from phone to tablet widths',
+    () => {
+      const MEASURE = ev(`(function () {
+        switchView('sequence'); goToSequenceStep(1);
+        const bar = document.getElementById('sequence-bar').getBoundingClientRect();
+        const out = [...document.getElementById('sequence-bar').children].filter((c) => { const r = c.getBoundingClientRect(); return r.left < bar.left - 1 || r.right > bar.right + 1; }).length;
+        return { left: bar.left, right: bar.right, width: bar.width, out, viewport: innerWidth };
+      })()`);
+      const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [
+        { width: 390, height: 844, steps: [MEASURE] },
+        { width: 768, height: 900, steps: [MEASURE] },
+        { width: 1024, height: 768, steps: [MEASURE] },
+      ]);
+      results.forEach((phase) => {
+        const m = lastEvalValue(phase);
+        assert.strictEqual(m.out, 0, `controls spill out of the playback bar at ${m.viewport}px: ${JSON.stringify(m)}`);
+        assert.ok(m.left >= 0 && m.right <= m.viewport, `playback bar leaves the viewport at ${m.viewport}px: ${JSON.stringify(m)}`);
+      });
     },
   ],
 

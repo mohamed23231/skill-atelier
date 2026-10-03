@@ -163,10 +163,10 @@
         }
 
         if (collision === 0) {
-          return { x: point.x, y: centerY, collision: 0, offset: LABEL_OFFSETS[k] };
+          return { x: point.x, y: centerY, collision: 0, offset: LABEL_OFFSETS[k], tether: { x: point.x, y: point.y } };
         }
         if (best === null || collision < best.collision) {
-          best = { x: point.x, y: centerY, collision, offset: LABEL_OFFSETS[k] };
+          best = { x: point.x, y: centerY, collision, offset: LABEL_OFFSETS[k], tether: { x: point.x, y: point.y } };
         }
       }
     }
@@ -194,15 +194,28 @@
         }
 
         if (collision === 0) {
-          return { x: centerX, y: point.y, collision: 0, offset: LABEL_OFFSETS_X[k] };
+          return { x: centerX, y: point.y, collision: 0, offset: LABEL_OFFSETS_X[k], tether: { x: point.x, y: point.y } };
         }
         if (best === null || collision < best.collision) {
-          best = { x: centerX, y: point.y, collision, offset: LABEL_OFFSETS_X[k] };
+          best = { x: centerX, y: point.y, collision, offset: LABEL_OFFSETS_X[k], tether: { x: point.x, y: point.y } };
         }
       }
     }
 
     return best;
+  }
+
+  // A label pushed off its curve gets a short leader back to the point it was searched from,
+  // so it never reads as an orphan floating between unrelated edges.
+  function labelLeader(edge, minLength = 24) {
+    const tether = edge && edge.labelTether;
+    if (!tether || typeof edge.labelX !== 'number' || !(edge.labelWidth > 0)) return null;
+    const halfW = edge.labelWidth / 2;
+    const halfH = LABEL_HEIGHT / 2;
+    const x2 = Math.min(Math.max(tether.x, edge.labelX - halfW), edge.labelX + halfW);
+    const y2 = Math.min(Math.max(tether.y, edge.labelY - halfH), edge.labelY + halfH);
+    if (Math.hypot(x2 - tether.x, y2 - tether.y) < minLength) return null;
+    return { x1: round(tether.x), y1: round(tether.y), x2: round(x2), y2: round(y2) };
   }
 
   function resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes) {
@@ -261,6 +274,7 @@
             if (newAnchor && (Math.abs(newAnchor.x - e2.labelX) > 0.01 || Math.abs(newAnchor.y - e2.labelY) > 0.01)) {
               e2.labelX = newAnchor.x;
               e2.labelY = newAnchor.y;
+              e2.labelTether = newAnchor.tether;
               movedAny = true;
             } else {
               const shift = LABEL_HEIGHT + 4;
@@ -648,6 +662,7 @@
       endpoint,
       labelX: anchor.x,
       labelY: anchor.y,
+      labelTether: anchor.tether,
       labelWidth,
       labelAnchor,
       labelBounds,
@@ -846,6 +861,7 @@
     labelDisplayText,
     estimateLabelWidth,
     findLabelAnchor,
+    labelLeader,
     resolveLabelCollisions,
     curveSanityScore,
     buildEdgeGeometry,
