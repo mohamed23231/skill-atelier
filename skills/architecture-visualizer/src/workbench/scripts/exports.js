@@ -44,17 +44,15 @@ function buildExportSvg() {
   const ghost = clone.querySelector('#ghost-layer');
   if (ghost) ghost.innerHTML = '';
 
+  // The exported file has no page around it, so it carries every design token resolved for the current theme.
   const computed = getComputedStyle(document.body);
-  const varNames = ['--bg-main', '--bg-panel', '--bg-elevated', '--border', '--text-main', '--text-muted', '--text-dim',
-    '--accent-blue', '--accent-purple', '--accent-green', '--accent-amber', '--accent-rose', '--edge-sync', '--edge-async',
-    '--border-node', '--badge-tint'];
-  const varBlock = varNames
+  const varBlock = DESIGN_TOKENS
     .map(name => `${name}: ${computed.getPropertyValue(name).trim()};`)
     .filter(decl => !decl.endsWith(': ;'))
     .join(' ');
 
   const style = document.createElementNS(SVG_NS, 'style');
-  style.textContent = `svg { ${varBlock} background: ${computed.getPropertyValue('--bg-main').trim() || '#0b1120'}; }\n${collectStyles()}`;
+  style.textContent = `svg { ${varBlock} background: var(--bg); }\n${collectStyles()}`;
   clone.insertBefore(style, clone.firstChild);
 
   return { markup: new XMLSerializer().serializeToString(clone), width, height };
@@ -124,8 +122,8 @@ function copyModalContent() {
   const text = document.getElementById('modal-content').textContent;
   const btn = document.getElementById('modal-copy');
   const done = () => {
-    btn.textContent = '✅ Copied';
-    window.setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
+    setIconLabel(btn, 'ui-check', 'Copied');
+    window.setTimeout(() => { setIconLabel(btn, 'ui-copy', 'Copy'); }, 1500);
   };
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).then(done).catch(() => { btn.textContent = 'Copy failed'; });

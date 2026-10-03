@@ -20,6 +20,10 @@ const DELTA = { ADDED: 'ADDED', CHANGED: 'CHANGED', REMOVED: 'REMOVED', UNCHANGE
 const THEMES = { DARK: 'dark', LIGHT: 'light' };
 const THEME_STORAGE_KEY = 'arch-viz-theme';
 const COLLAPSED_PILL_HEIGHT = 56;
+// Every custom property defined in styles/tokens.css; exports resolve these into a standalone file.
+const DESIGN_TOKENS = ['--bg', '--surface', '--surface-2', '--lane', '--ink', '--muted', '--faint', '--line', '--edge',
+  '--edge-dim', '--grid', '--accent', '--accent-ink', '--accent-soft', '--ok', '--ok-soft', '--warn', '--warn-soft',
+  '--risk', '--risk-soft', '--scrim', '--shadow', '--shadow-card', '--sans', '--serif', '--mono'];
 
 const state = {
   theme: THEMES.DARK,

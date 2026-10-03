@@ -415,22 +415,52 @@ const cases = [
   ],
 
   [
-    'workbench template defines WCAG AA contrast tokens and excludes dead accent-indigo',
+    'every design token pair meets WCAG contrast in both themes (text 4.5:1, graphics 3:1)',
     () => {
-      const html = loadTemplate();
+      const css = fs.readFileSync(path.join(__dirname, '../src/workbench/styles/tokens.css'), 'utf8');
+      const block = (selector) => {
+        const start = css.indexOf(`${selector} {`);
+        assert.ok(start >= 0, `tokens.css must define ${selector}`);
+        const body = css.slice(start, css.indexOf('}', start));
+        return Object.fromEntries([...body.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+      };
+      const parse = (value) => {
+        const hex = value.match(/^#([0-9a-f]{6})$/i);
+        if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)).concat(1);
+        const rgba = value.match(/^rgba?\(([^)]+)\)$/);
+        assert.ok(rgba, `unparseable color ${value}`);
+        const parts = rgba[1].split(',').map((p) => Number(p.trim()));
+        return [parts[0], parts[1], parts[2], parts.length > 3 ? parts[3] : 1];
+      };
+      const over = (fg, bg) => fg.slice(0, 3).map((c, i) => Math.round(c * fg[3] + bg[i] * (1 - fg[3])));
+      const luminance = (rgb) => {
+        const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const ratio = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
-      assert.strictEqual(html.includes('--accent-indigo'), false, 'dead --accent-indigo should be removed');
-      assert.ok(html.includes('--text-dim: #8b9bb0;'), 'dark text-dim token should be #8b9bb0');
-      assert.ok(html.includes('--text-dim: #64748b;'), 'light text-dim token should be #64748b');
-      assert.ok(html.includes('--accent-blue: #0369a1;'), 'light accent-blue token should be #0369a1');
-      assert.ok(html.includes('--accent-green: #047857;'), 'light accent-green token should be #047857');
-      assert.ok(html.includes('--accent-amber: #b45309;'), 'light accent-amber token should be #b45309');
-      assert.ok(html.includes('--accent-rose: #be123c;'), 'light accent-rose token should be #be123c');
-      assert.ok(html.includes('--badge-tint: rgba(148, 163, 184, 0.15);'), 'dark badge-tint should be defined');
-      assert.ok(html.includes('--badge-tint: #f1f5f9;'), 'light badge-tint should be defined');
-      assert.ok(html.includes('border: 1px solid currentColor;'), 'badge-status should use currentColor border');
-      assert.ok(html.includes('--border-node: #64748b;'), 'dark border-node should be #64748b');
-      assert.ok(html.includes('--border-node: #7c8aa3;'), 'light border-node should be #7c8aa3');
+      const dark = block(':root');
+      const themes = { dark, light: { ...dark, ...block('[data-theme="light"]') } };
+      const failures = [];
+      Object.entries(themes).forEach(([theme, tokens]) => {
+        const solid = (name) => { const c = parse(tokens[name]); return c[3] === 1 ? c.slice(0, 3) : over(c, solid('--surface')); };
+        const check = (fg, bg, min, fgColor) => {
+          const value = ratio(fgColor || solid(fg), solid(bg));
+          if (value < min) failures.push(`${theme}: ${fg} on ${bg} is ${value.toFixed(2)}:1, needs ${min}:1`);
+        };
+        // Text people must read.
+        ['--ink', '--muted'].forEach((fg) => ['--bg', '--surface', '--surface-2', '--lane'].forEach((bg) => check(fg, bg, 4.5)));
+        check('--accent', '--surface', 4.5);
+        check('--accent-ink', '--accent', 4.5);
+        ['--ok', '--warn', '--risk'].forEach((tone) => {
+          check(tone, '--surface', 4.5);
+          check(tone, `${tone}-soft`, 4.5, solid(tone)); // badge text on its own tint, composited over the surface
+        });
+        // Supplementary text (counts, hints) and information-bearing graphics.
+        ['--bg', '--surface'].forEach((bg) => check('--faint', bg, 3));
+        ['--edge', '--accent', '--ok', '--warn', '--risk'].forEach((fg) => ['--bg', '--surface', '--lane'].forEach((bg) => check(fg, bg, 3)));
+      });
+      assert.deepStrictEqual(failures, []);
     },
   ],
 

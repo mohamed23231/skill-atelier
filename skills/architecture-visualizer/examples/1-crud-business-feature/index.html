@@ -5,70 +5,90 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Supplier Discounts &amp; Volume Rebates in Inventory Valuation</title>
   <style>
+    /* Design tokens. One accent means "active"; ok, warn and risk carry meaning; everything else is neutral.
+       Dark is the base palette and [data-theme="light"] redefines every color token. Every pair the workbench
+       draws is checked by the contrast test: text 4.5:1, information-bearing graphics 3:1, in both themes. */
     :root {
-      --bg-canvas: #0f172a;
-      --bg-panel: #1e293b;
-      --bg-card: #1e293b;
-      --bg-card-hover: #334155;
-      --border-color: #334155;
-      --border-subtle: #1e293b;
-      --border-node: #64748b;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --text-dim: #8b9bb0;
-      --accent-blue: #38bdf8;
-      --accent-green: #34d399;
-      --accent-amber: #fbbf24;
-      --accent-rose: #fb7185;
-      --accent-purple: #c084fc;
-      --grid-dot: #475569;
-      --edge-sync: #38bdf8;
-      --edge-async: #c084fc;
-      --edge-dim: #334155;
-      --badge-tint: rgba(148, 163, 184, 0.15);
-      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      --bg: #0c0f13;
+      --surface: #151a21;
+      --surface-2: #1c222b;
+      --lane: #11161c;
+      --ink: #e8ecf1;
+      --muted: #a3adba;
+      --faint: #808b99;
+      --line: #2a323c;
+      --edge: #6f7b8a;
+      --edge-dim: #232a33;
+      --grid: #1d242d;
+      --accent: #7f9cff;
+      --accent-ink: #0c0f13;
+      --accent-soft: rgba(127, 156, 255, 0.16);
+      --ok: #4cc58e;
+      --ok-soft: rgba(76, 197, 142, 0.14);
+      --warn: #e3ae4a;
+      --warn-soft: rgba(227, 174, 74, 0.15);
+      --risk: #f0756c;
+      --risk-soft: rgba(240, 117, 108, 0.14);
+      --scrim: rgba(4, 6, 9, 0.62);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.35);
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+
+      --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --serif: ui-serif, "New York", "Iowan Old Style", Charter, "Source Serif Pro", Georgia, serif;
+      --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
     }
 
     [data-theme="light"] {
-      --bg-canvas: #f8fafc;
-      --bg-panel: #ffffff;
-      --bg-card: #ffffff;
-      --bg-card-hover: #f1f5f9;
-      --border-color: #cbd5e1;
-      --border-subtle: #e2e8f0;
-      --border-node: #7c8aa3;
-      --text-main: #0f172a;
-      --text-muted: #475569;
-      --text-dim: #64748b;
-      --accent-blue: #0369a1;
-      --accent-green: #047857;
-      --accent-amber: #b45309;
-      --accent-rose: #be123c;
-      --accent-purple: #9333ea;
-      --grid-dot: #94a3b8;
-      --edge-sync: #0369a1;
-      --edge-async: #9333ea;
-      --edge-dim: #cbd5e1;
-      --badge-tint: #f1f5f9;
-      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+      --bg: #eef1f4;
+      --surface: #ffffff;
+      --surface-2: #f5f7f9;
+      --lane: #e7ebf0;
+      --ink: #141a22;
+      --muted: #525d6c;
+      --faint: #6e7988;
+      --line: #d3d9e1;
+      --edge: #737e8e;
+      --edge-dim: #dde2e8;
+      --grid: #dfe4ea;
+      --accent: #2754e6;
+      --accent-ink: #ffffff;
+      --accent-soft: rgba(39, 84, 230, 0.10);
+      --ok: #127349;
+      --ok-soft: rgba(18, 115, 73, 0.12);
+      --warn: #8a5807;
+      --warn-soft: rgba(196, 128, 16, 0.14);
+      --risk: #b5322b;
+      --risk-soft: rgba(181, 50, 43, 0.11);
+      --scrim: rgba(20, 26, 34, 0.38);
+      --shadow: 0 1px 2px rgba(20, 26, 34, 0.06), 0 8px 24px rgba(20, 26, 34, 0.08);
+      --shadow-card: 0 1px 2px rgba(20, 26, 34, 0.06);
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-family: var(--sans);
     }
 
     body {
-      background-color: var(--bg-canvas);
-      color: var(--text-main);
+      background-color: var(--bg);
+      color: var(--ink);
       overflow: hidden;
       height: 100vh;
       height: 100dvh;
       width: 100%;
       user-select: none;
+      -webkit-font-smoothing: antialiased;
     }
+
+    /* Three voices: interface (sans), explanation (serif), machine facts (mono). */
+    .voice-serif { font-family: var(--serif); }
+    .voice-mono, code, kbd { font-family: var(--mono); }
+
+    /* Icons from the shared sprite: 16-unit line glyphs that take the current text color. */
+    .icon { width: 15px; height: 15px; flex: none; display: inline-block; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    .icon.filled { fill: currentColor; stroke: none; }
 
     /* Top Navigation Bar */
     header {
@@ -77,14 +97,14 @@
       left: 0;
       right: 0;
       height: 56px;
-      background: var(--bg-panel);
-      border-bottom: 1px solid var(--border-color);
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 16px;
       z-index: 50;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      box-shadow: none;
     }
 
     .brand-section {
@@ -97,35 +117,35 @@
     .filter-bar .badge-status { flex-shrink: 0; white-space: nowrap; }
     .badge-status {
       font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 9999px;
+      padding: 2px 7px;
+      border-radius: 6px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      background: var(--badge-tint);
-      border: 1px solid currentColor;
+      letter-spacing: 0.04em;
+      background: var(--surface-2);
+      border: 1px solid transparent;
     }
-    .badge-status.PROPOSED { color: var(--accent-blue); }
-    .badge-status.ACCEPTED { color: var(--accent-green); }
+    .badge-status.PROPOSED { color: var(--accent); background: var(--accent-soft); }
+    .badge-status.ACCEPTED { color: var(--ok); background: var(--ok-soft); }
     .badge-status.VERIFIED,
-    .badge-status.ADDED { color: var(--accent-green); }
+    .badge-status.ADDED { color: var(--ok); background: var(--ok-soft); }
     .badge-status.INFERRED,
     .badge-status.CHANGED,
     .badge-status.IN_REVIEW,
-    .badge-status.MOVED { color: var(--accent-amber); }
+    .badge-status.MOVED { color: var(--warn); background: var(--warn-soft); }
     .badge-status.ASSUMED,
-    .badge-status.REMOVED { color: #fda4af; }
-    [data-theme="light"] .badge-status.ASSUMED,
-    [data-theme="light"] .badge-status.REMOVED { color: var(--accent-rose); }
+    .badge-status.REMOVED { color: var(--risk); background: var(--risk-soft); }
     .badge-status.UNKNOWN,
     .badge-status.UNCHANGED,
-    .badge-status.CURRENT { color: var(--text-muted); }
+    .badge-status.CURRENT { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+
+    .brand-mark { width: 26px; height: 26px; color: var(--ink); stroke-width: 1.2; }
 
     .tabs-section {
       display: flex;
       align-items: center;
-      background: var(--bg-canvas);
-      border: 1px solid var(--border-color);
+      background: var(--bg);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 3px;
       gap: 2px;
@@ -143,7 +163,7 @@
     .tab-btn {
       background: transparent;
       border: none;
-      color: var(--text-muted);
+      color: var(--muted);
       padding: 6px 10px;
       font-size: 12px;
       white-space: nowrap;
@@ -158,14 +178,14 @@
     }
 
     .tab-btn:hover {
-      color: var(--text-main);
-      background: var(--bg-card-hover);
+      color: var(--ink);
+      background: var(--surface-2);
     }
 
     .tab-btn.active {
-      color: var(--text-main);
-      background: var(--bg-panel);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 0 0 1px var(--line);
     }
 
     .header-actions {
@@ -175,12 +195,12 @@
     }
 
     .btn-icon {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
-      color: var(--text-muted);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--muted);
       height: 32px;
       padding: 0 10px;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -191,10 +211,17 @@
       transition: all 0.15s;
     }
 
+    /* Square buttons that hold only an icon; their name comes from aria-label. */
+    .btn-icon.icon-only {
+      width: 32px;
+      padding: 0;
+      flex: none;
+    }
+
     .btn-icon:hover {
-      color: var(--text-main);
-      background: var(--bg-card-hover);
-      border-color: var(--text-dim);
+      color: var(--ink);
+      background: var(--surface-2);
+      border-color: var(--faint);
     }
 
     /* Search & Filter Bar Overlay */
@@ -206,17 +233,17 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       padding: 6px 12px;
       border-radius: 8px;
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow);
     }
 
     .search-input {
-      background: var(--bg-canvas);
-      border: 1px solid var(--border-color);
-      color: var(--text-main);
+      background: var(--bg);
+      border: 1px solid var(--line);
+      color: var(--ink);
       padding: 5px 10px;
       border-radius: 6px;
       font-size: 12px;
@@ -225,13 +252,13 @@
     }
 
     .search-input:focus {
-      border-color: var(--accent-blue);
+      border-color: var(--accent);
     }
 
     .filter-chip {
-      background: var(--bg-canvas);
-      border: 1px solid var(--border-color);
-      color: var(--text-muted);
+      background: var(--bg);
+      border: 1px solid var(--line);
+      color: var(--muted);
       padding: 4px 8px;
       font-size: 11px;
       border-radius: 6px;
@@ -239,13 +266,9 @@
     }
 
     .filter-chip.active {
-      background: var(--accent-blue);
-      color: #0f172a;
-      border-color: var(--accent-blue);
-    }
-
-    [data-theme="light"] .filter-chip.active {
-      color: #ffffff;
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
     }
 
     /* Bottom Floating Controls: Zoom, Pan, Fit */
@@ -256,17 +279,17 @@
       z-index: 40;
       display: flex;
       flex-direction: column;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow);
     }
 
     .viewport-btn {
       background: transparent;
       border: none;
-      color: var(--text-muted);
+      color: var(--muted);
       width: 36px;
       height: 36px;
       cursor: pointer;
@@ -274,7 +297,7 @@
       align-items: center;
       justify-content: center;
       font-size: 14px;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--line);
     }
 
     .viewport-btn:last-child {
@@ -282,8 +305,8 @@
     }
 
     .viewport-btn:hover {
-      background: var(--bg-card-hover);
-      color: var(--text-main);
+      background: var(--surface-2);
+      color: var(--ink);
     }
 
     /* Overlays centre on the canvas, not the window, so docked panels never push them under each other. */
@@ -305,11 +328,11 @@
       display: none;
       align-items: center;
       gap: 12px;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       padding: 8px 16px;
       border-radius: 9999px;
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow);
     }
 
     .sequence-controls.visible {
@@ -324,12 +347,12 @@
       z-index: 40;
       display: none;
       align-items: center;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 3px;
       gap: 4px;
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow);
     }
 
     .delta-controls.visible {
@@ -342,22 +365,22 @@
     .workbench-hidden { display: none !important; }
     .workbench-sr-only { position: fixed; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .workbench-review-list { display: grid; gap: 6px; }
-    .workbench-review-item, .workbench-scenario-control { width: 100%; padding: 7px 8px; color: var(--text-main); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; text-align: left; cursor: pointer; font: inherit; }
-    .workbench-review-item[data-state="unresolved"], .workbench-review-item[data-state="warn"], .workbench-stage[data-stage-status="failed"], .workbench-stage[data-stage-status="blocked"] { border-left: 5px double var(--accent-amber); }
-    .workbench-review-item[data-state="verified"], .workbench-stage[data-stage-status="completed"] { border-left: 5px solid var(--accent-green); }
-    .workbench-review-field { padding: 9px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); overflow-wrap: anywhere; }
-    .workbench-review-field strong { display: block; margin-bottom: 4px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+    .workbench-review-item, .workbench-scenario-control { width: 100%; padding: 7px 8px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; text-align: left; cursor: pointer; font: inherit; }
+    .workbench-review-item[data-state="unresolved"], .workbench-review-item[data-state="warn"], .workbench-stage[data-stage-status="failed"], .workbench-stage[data-stage-status="blocked"] { border-left: 5px double var(--warn); }
+    .workbench-review-item[data-state="verified"], .workbench-stage[data-stage-status="completed"] { border-left: 5px solid var(--ok); }
+    .workbench-review-field { padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow-wrap: anywhere; }
+    .workbench-review-field strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; }
     .workbench-scenario-player { display: grid; gap: 8px; }
     .workbench-scenario-toolbar { display: grid; grid-template-columns: auto auto auto 1fr; gap: 5px; }
     .workbench-scenario-toolbar button { min-width: 32px; text-align: center; }
     .workbench-scenario-toolbar input { min-width: 0; }
-    .workbench-stage { padding: 9px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); }
-    .workbench-stage-group { display: grid; gap: 6px; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--border-color); }
+    .workbench-stage { padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+    .workbench-stage-group { display: grid; gap: 6px; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--line); }
 
     .delta-btn {
       background: transparent;
       border: none;
-      color: var(--text-muted);
+      color: var(--muted);
       padding: 5px 12px;
       font-size: 11px;
       font-weight: 600;
@@ -366,8 +389,8 @@
     }
 
     .delta-btn.active {
-      background: var(--bg-card-hover);
-      color: var(--text-main);
+      background: var(--surface-2);
+      color: var(--ink);
     }
 
     /* Canvas Viewport */
@@ -394,9 +417,8 @@
     /* SVG Grid Pattern */
     .grid-pattern {
       fill: none;
-      stroke: var(--grid-dot);
+      stroke: var(--grid);
       stroke-width: 1;
-      opacity: 0.6;
     }
 
     /* SVG Elements */
@@ -404,22 +426,32 @@
       transition: opacity 0.2s;
     }
 
+    /* Boundaries are quiet tinted lanes: they group, they do not compete with the cards inside them. */
     .boundary-rect {
-      fill: var(--bg-card);
-      fill-opacity: 0.4;
-      stroke: var(--border-node);
-      stroke-width: 1.5;
-      stroke-dasharray: 4 4;
-      rx: 12px;
+      fill: var(--lane);
+      stroke: none;
+      rx: 14px;
       transition: all 0.2s ease;
     }
 
     .boundary-header {
       font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      fill: var(--text-muted);
+      font-weight: 600;
+      fill: var(--ink);
+    }
+
+    .boundary-count {
+      font-size: 11px;
+      font-weight: 500;
+      fill: var(--muted);
+    }
+
+    .boundary-chevron {
+      fill: none;
+      stroke: var(--muted);
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .node-group {
@@ -428,48 +460,87 @@
     }
 
     .node-rect {
-      fill: var(--bg-card);
-      stroke: var(--border-node);
-      stroke-width: 1.5;
-      rx: 10px;
-      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));
-      transition: stroke 0.15s, stroke-width 0.15s, filter 0.15s;
+      fill: var(--surface);
+      stroke: var(--line);
+      stroke-width: 1;
+      rx: 12px;
+      transition: stroke 0.15s, stroke-width 0.15s;
     }
 
     .node-group:hover .node-rect {
-      stroke: var(--accent-blue);
-      stroke-width: 2;
-      filter: drop-shadow(0 8px 16px rgba(56, 189, 248, 0.2));
+      stroke: var(--faint);
     }
 
+    /* Selected reads as ink, distinct from active (accent) and from change states (ok / warn / risk). */
     .node-group.selected .node-rect {
-      stroke: var(--accent-blue);
-      stroke-width: 2.5;
-      filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.4));
+      stroke: var(--ink);
+      stroke-width: 2;
     }
 
     .node-group.dimmed {
       opacity: 0.2 !important;
     }
 
+    .node-tile {
+      fill: var(--surface-2);
+      stroke: var(--line);
+      stroke-width: 1;
+    }
+
+    .node-icon {
+      color: var(--ink);
+    }
+
+    .node-name {
+      font-size: 13.5px;
+      font-weight: 620;
+      fill: var(--ink);
+    }
+
+    .node-tech {
+      font-family: var(--mono);
+      font-size: 11px;
+      fill: var(--muted);
+    }
+
+    /* Anything not verified carries a dashed ring; verified is the quiet default. */
+    .node-exception {
+      fill: none;
+      stroke: var(--warn);
+      stroke-width: 1.5;
+      stroke-dasharray: 2 2;
+    }
+
+    .node-badge rect.base { fill: var(--surface); }
+    .node-badge rect.tint { stroke: none; }
+    .node-badge text { font-size: 10.5px; font-weight: 600; }
+    .node-badge.ok rect.tint { fill: var(--ok-soft); }
+    .node-badge.ok text { fill: var(--ok); }
+    .node-badge.warn rect.tint { fill: var(--warn-soft); }
+    .node-badge.warn text { fill: var(--warn); }
+    .node-badge.risk rect.tint { fill: var(--risk-soft); }
+    .node-badge.risk text { fill: var(--risk); }
+    .node-badge.neutral rect.tint { fill: var(--surface-2); stroke: var(--line); }
+    .node-badge.neutral text { fill: var(--muted); }
+
     .edge-path {
       fill: none;
-      stroke: var(--edge-sync);
-      stroke-width: 1.75;
+      stroke: var(--edge);
+      stroke-width: 1.4;
+      stroke-linejoin: round;
       transition: stroke 0.15s, stroke-width 0.15s, opacity 0.2s;
     }
 
     .edge-path.async {
-      stroke: var(--edge-async);
-      stroke-dasharray: 6 4;
+      stroke-dasharray: 5 4;
     }
 
     .edge-path.read {
-      stroke-dasharray: 3 3;
+      stroke-dasharray: 2 3;
     }
 
     .edge-path.async.read {
-      stroke-dasharray: 6 4;
+      stroke-dasharray: 5 4;
       stroke-width: 1.25;
     }
 
@@ -479,51 +550,54 @@
     }
 
     .edge-path.highlighted {
-      stroke-width: 3.5 !important;
-      filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.8));
+      stroke: var(--accent);
+      stroke-width: 2.2 !important;
     }
 
     .edge-label-bg {
-      fill: var(--bg-panel);
-      rx: 4px;
-      stroke: var(--border-color);
-      stroke-width: 0.5;
+      fill: var(--surface);
+      rx: 5px;
+      stroke: var(--line);
+      stroke-width: 0.75;
     }
 
     .edge-label-leader {
-      stroke: var(--text-dim);
+      stroke: var(--edge);
       stroke-width: 1;
       stroke-dasharray: 2 3;
       pointer-events: none;
     }
 
     .edge-label-text {
+      font-family: var(--mono);
       font-size: 10px;
-      fill: var(--text-muted);
-      font-weight: 500;
+      fill: var(--muted);
+      font-weight: 400;
       text-anchor: middle;
       dominant-baseline: central;
     }
 
+    .arrowhead { fill: var(--edge); }
+    .arrowhead-active { fill: var(--accent); }
+
     /* Delta Badges */
     .delta-added .node-rect {
-      stroke: var(--accent-green) !important;
+      stroke: var(--ok) !important;
       stroke-width: 2px !important;
     }
     .delta-changed .node-rect {
-      stroke: var(--accent-amber) !important;
+      stroke: var(--warn) !important;
       stroke-width: 2px !important;
     }
     .delta-removed .node-rect {
-      stroke: var(--accent-rose) !important;
+      stroke: var(--risk) !important;
       stroke-dasharray: 4 3;
-      stroke-opacity: 0.75;
     }
+    .delta-removed .node-name { text-decoration: line-through; }
 
     /* Flow Particles */
     .flow-particle {
-      fill: var(--accent-blue);
-      filter: drop-shadow(0 0 4px var(--accent-blue));
+      fill: var(--accent);
     }
 
     /* Inspector Drawer Panel - visibility is controlled solely by data-open */
@@ -533,10 +607,10 @@
       bottom: 0;
       right: calc(-1 * min(430px, 102vw));
       width: min(420px, 100vw);
-      background: var(--bg-panel);
-      border-left: 1px solid var(--border-color);
+      background: var(--surface);
+      border-left: 1px solid var(--line);
       z-index: 60;
-      box-shadow: -8px 0 24px rgba(0,0,0,0.3);
+      box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -551,7 +625,7 @@
 
     .inspector-header {
       padding: 16px 20px;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--line);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -571,20 +645,20 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: var(--text-dim);
+      color: var(--muted);
       margin-bottom: 8px;
     }
 
     .detail-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 12px;
       font-size: 13px;
     }
 
     .file-link {
-      color: var(--accent-blue);
+      color: var(--accent);
       text-decoration: none;
       display: inline-flex;
       align-items: center;
@@ -605,18 +679,18 @@
       bottom: 20px;
       left: 16px;
       z-index: 40;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 10px 14px;
       font-size: 11px;
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow);
       max-width: 280px;
       max-height: min(46vh, 320px);
       overflow-y: auto;
     }
     .legend-box:not([open]) { padding: 6px 12px; }
-    .legend-summary { cursor: pointer; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+    .legend-summary { cursor: pointer; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
     .legend-box[open] .legend-summary { margin-bottom: 6px; }
 
     .legend-row {
@@ -624,7 +698,7 @@
       align-items: center;
       gap: 8px;
       margin-bottom: 4px;
-      color: var(--text-muted);
+      color: var(--muted);
     }
     .legend-row:last-child { margin-bottom: 0; }
 
@@ -643,7 +717,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: var(--bg-canvas);
+      background: var(--bg);
       z-index: 30;
       display: none;
       padding: 30px;
@@ -663,19 +737,19 @@
     }
 
     .er-table-card {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 10px;
       overflow: hidden;
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow);
     }
 
     .er-table-header {
-      background: var(--bg-card-hover);
+      background: var(--surface-2);
       padding: 10px 14px;
       font-weight: 700;
       font-size: 13px;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--line);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -686,7 +760,7 @@
       justify-content: space-between;
       padding: 6px 14px;
       font-size: 12px;
-      border-bottom: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--line);
     }
     .er-col-row:last-child { border-bottom: none; }
 
@@ -699,11 +773,11 @@
     }
 
     .phase-card {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 10px;
       padding: 20px;
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow);
     }
 
     .phase-header {
@@ -711,9 +785,37 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 14px;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--line);
       padding-bottom: 10px;
     }
+
+    /* Legend swatches: the same encodings the canvas draws. */
+    .legend-icon .icon { width: 14px; height: 14px; }
+    .legend-swatch { width: 18px; height: 10px; flex: none; border-radius: 3px; border: 1.5px solid var(--edge); background: var(--surface); }
+    .legend-swatch.line { height: 0; border-width: 1.5px 0 0; border-radius: 0; background: none; }
+    .legend-swatch.line.dashed { border-top-style: dashed; }
+    .legend-swatch.ok { border-color: var(--ok); background: var(--ok-soft); }
+    .legend-swatch.warn { border-color: var(--warn); background: var(--warn-soft); }
+    .legend-swatch.risk { border-color: var(--risk); border-style: dashed; background: var(--risk-soft); }
+    .legend-swatch.exception { width: 10px; height: 10px; border-radius: 50%; border: 1.5px dashed var(--warn); background: none; margin: 0 4px; }
+
+    /* Rows that pair an icon with text: file paths, tables, failure modes, quality gate checks. */
+    .detail-row, .file-link { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .detail-row > span, .file-link > span { min-width: 0; overflow-wrap: anywhere; }
+    .detail-row .icon, .file-link .icon { color: var(--muted); }
+    .gate-icon { display: inline-flex; color: var(--ok); }
+    .gate-row[data-gate-status="warn"] .gate-icon { color: var(--warn); }
+    .gate-row[data-gate-status="skip"] .gate-icon { color: var(--muted); }
+    #btn-gate[data-gate-state="pass"] .icon { color: var(--ok); }
+    #btn-gate[data-gate-state="warn"] .icon { color: var(--warn); }
+
+    /* Key chips in the data model: primary and foreign keys as tinted chips, not bracketed text. */
+    .key-chip { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 4px; font-family: var(--mono); font-size: 10px; font-weight: 600; line-height: 16px; }
+    .key-chip.pk { color: var(--warn); background: var(--warn-soft); }
+    .key-chip.fk { color: var(--accent); background: var(--accent-soft); }
+
+    /* The explanation voice: descriptions written for people. */
+    #ins-description { font-family: var(--serif); font-size: 14px; line-height: 1.55; }
 
     /* --- 1.1.0 additions --- */
     .hidden { display: none !important; }
@@ -723,24 +825,24 @@
 
     .node-group:focus { outline: none; }
     .node-group:focus-visible .node-rect {
-      stroke: var(--accent-amber);
+      stroke: var(--accent);
       stroke-width: 3;
-      filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.5));
+      filter: none;
     }
 
     .boundary-toggle { cursor: pointer; }
     .boundary-toggle:focus { outline: none; }
     .boundary-toggle:focus-visible { outline: none; }
     .boundary-toggle:focus-visible .boundary-hit-rect {
-      stroke: var(--accent-amber);
+      stroke: var(--accent);
       stroke-width: 2;
       rx: 4px;
-      filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5));
+      filter: none;
     }
     .boundary-toggle:focus-visible .boundary-header {
-      fill: var(--accent-amber);
+      fill: var(--accent);
     }
-    .boundary-toggle:hover .boundary-header { fill: var(--accent-blue); }
+    .boundary-toggle:hover .boundary-header { fill: var(--accent); }
     .boundary-group.collapsed .boundary-rect { fill-opacity: 0.75; stroke-dasharray: none; }
 
     .tab-btn:focus,
@@ -757,39 +859,39 @@
     .filter-chip:focus-visible,
     .delta-btn:focus-visible,
     .export-menu button:focus-visible {
-      outline: 2px solid var(--accent-amber);
+      outline: 2px solid var(--accent);
       outline-offset: 2px;
-      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+      box-shadow: 0 0 0 3px var(--accent-soft);
     }
 
     .viewport-btn:focus-visible {
-      outline: 2px solid var(--accent-amber);
+      outline: 2px solid var(--accent);
       outline-offset: -2px;
-      box-shadow: inset 0 0 0 1px var(--accent-amber);
+      box-shadow: inset 0 0 0 1px var(--accent);
     }
 
     .search-input:focus-visible {
-      border-color: var(--accent-amber);
-      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
     }
 
     .shape-external { stroke-dasharray: 6 4; }
     .shape-queue, .shape-cylinder, .shape-actor, .shape-worker { rx: 0; }
 
-    .edge-path.ghost { stroke: var(--accent-amber); stroke-dasharray: 8 5; opacity: 0.95; }
+    .edge-path.ghost { stroke: var(--accent); stroke-dasharray: 8 5; opacity: 0.95; }
     .edge-path.write { stroke-width: 2.5; }
     .edge-path.event { stroke-dasharray: 10 4; }
 
-    .legend-divider { height: 1px; background: var(--border-color); margin: 6px 0; }
+    .legend-divider { height: 1px; background: var(--line); margin: 6px 0; }
 
     .flow-hint {
       position: absolute;
       top: 150px;
       left: 50%;
       transform: translateX(-50%);
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
-      color: var(--text-muted);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--muted);
       font-size: 11px;
       padding: 6px 12px;
       border-radius: 999px;
@@ -803,28 +905,28 @@
       position: absolute;
       top: 38px;
       right: 0;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 10px;
       padding: 6px;
       display: none;
       flex-direction: column;
       min-width: 190px;
       z-index: 60;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+      box-shadow: var(--shadow);
     }
     .export-menu.open { display: flex; }
     .export-menu button {
       background: transparent;
       border: none;
-      color: var(--text-main);
+      color: var(--ink);
       text-align: left;
       padding: 8px 10px;
       border-radius: 6px;
       font-size: 12px;
       cursor: pointer;
     }
-    .export-menu button:hover { background: var(--bg-elevated, rgba(127, 127, 127, 0.15)); }
+    .export-menu button:hover { background: var(--surface-2); }
 
     .gate-panel {
       position: absolute;
@@ -834,12 +936,12 @@
       /* Stop above the zoom controls docked at the canvas' bottom-right. */
       max-height: calc(100vh - 240px);
       overflow-y: auto;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 12px;
       z-index: 70;
       display: none;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      box-shadow: var(--shadow);
     }
     .gate-panel.open { display: block; }
     .gate-header {
@@ -847,7 +949,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 10px 12px;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--line);
       font-size: 13px;
     }
     .gate-body { padding: 8px 12px 12px; }
@@ -856,7 +958,7 @@
       grid-template-columns: 20px 1fr;
       gap: 8px;
       padding: 7px 0;
-      border-bottom: 1px dashed var(--border-color);
+      border-bottom: 1px dashed var(--line);
       font-size: 12px;
     }
     .gate-row:last-child { border-bottom: none; }
@@ -864,7 +966,7 @@
     .modal {
       position: absolute;
       inset: 0;
-      background: rgba(0, 0, 0, 0.55);
+      background: var(--scrim);
       display: none;
       align-items: center;
       justify-content: center;
@@ -874,8 +976,8 @@
     .modal-card {
       width: min(820px, 90vw);
       max-height: 80vh;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-color);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: 12px;
       display: flex;
       flex-direction: column;
@@ -885,7 +987,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 12px 14px;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--line);
     }
     .modal-content {
       margin: 0;
@@ -894,7 +996,7 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 12px;
       line-height: 1.5;
-      color: var(--text-main);
+      color: var(--ink);
       white-space: pre-wrap;
     }
 
@@ -907,8 +1009,8 @@
       z-index: 60;
       display: flex;
       flex-direction: column;
-      background: var(--bg-panel);
-      border-right: 1px solid var(--border-color);
+      background: var(--surface);
+      border-right: 1px solid var(--line);
       overflow: hidden;
       transform: translateX(-105%);
       pointer-events: none;
@@ -918,12 +1020,12 @@
       transform: translateX(0);
       pointer-events: auto;
     }
-    .workbench-panel-header { min-height: 48px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--border-color); }
+    .workbench-panel-header { min-height: 48px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line); }
     .workbench-panel-body { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 16px; }
-    .workbench-panel-body h2 { margin: 0 0 6px; color: var(--text-main); font-size: 12px; }
+    .workbench-panel-body h2 { margin: 0 0 6px; color: var(--ink); font-size: 12px; }
     .workbench-panel-body section { min-width: 0; }
-    .workbench-panel-body section > div { min-width: 0; color: var(--text-muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
-    .workbench-search-result, .workbench-outline-item { width: 100%; margin: 0 0 6px; padding: 7px 8px; text-align: left; color: var(--text-main); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; font: inherit; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+    .workbench-panel-body section > div { min-width: 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+    .workbench-search-result, .workbench-outline-item { width: 100%; margin: 0 0 6px; padding: 7px 8px; text-align: left; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font: inherit; overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
     [data-focus-member="true"] .node-rect, [data-focus-member="true"].edge-path { stroke-width: 3 !important; }
     [data-focus-member="false"] { opacity: 0.12 !important; }
     body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-affected { border-style: double; }
@@ -936,12 +1038,12 @@
     body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }
     .workbench-close, .workbench-mobile-toggle { min-width: 32px; }
     .workbench-mobile-toggle, .workbench-close { display: inline-flex; }
-    .workbench-backdrop { display: none; position: fixed; inset: 56px 0 0; z-index: 54; border: 0; background: rgba(2, 6, 23, 0.66); }
-    .workbench-minimap { position: absolute; left: 16px; bottom: 16px; width: 176px; height: 116px; z-index: 35; overflow: hidden; border: 1px solid var(--border-color); border-radius: 8px; background: color-mix(in srgb, var(--bg-panel) 92%, transparent); box-shadow: var(--shadow-lg); }
+    .workbench-backdrop { display: none; position: fixed; inset: 56px 0 0; z-index: 54; border: 0; background: var(--scrim); }
+    .workbench-minimap { position: absolute; left: 16px; bottom: 16px; width: 176px; height: 116px; z-index: 35; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); }
     .workbench-minimap svg { width: 100%; height: 100%; display: block; }
-    [data-minimap-viewport] { fill: rgba(56, 189, 248, 0.12); stroke: var(--accent-blue); stroke-width: 2; vector-effect: non-scaling-stroke; }
-    [data-selected="true"] { outline: 3px double var(--accent-blue); outline-offset: 3px; }
-    [data-action]:focus-visible, [data-search-result]:focus-visible { outline: 3px solid var(--accent-blue); outline-offset: 2px; }
+    [data-minimap-viewport] { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+    [data-selected="true"] { outline: 3px double var(--accent); outline-offset: 3px; }
+    [data-action]:focus-visible, [data-search-result]:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
     #canvas-container { margin-left: 0; width: 100%; }
     .viewport-controls { right: 20px; }
 
@@ -989,49 +1091,84 @@
   </style>
 </head>
 <body data-theme="dark">
+  <svg class="icon-sprite" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="ui-mark" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><rect x="4" y="4.5" width="4" height="3" rx="0.8" fill="currentColor" stroke="none"/><rect x="8.5" y="9" width="4" height="3" rx="0.8"/><path d="M6 7.5v3h2.5"/></g></symbol>
+        <symbol id="ui-architecture" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 14 5 8 8 2 5z"/><path d="m2 8 6 3 6-3M2 11l6 3 6-3"/></g></symbol>
+        <symbol id="ui-delta" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8" height="8" rx="1.5"/><rect x="6" y="6" width="8" height="8" rx="1.5"/></g></symbol>
+        <symbol id="ui-flow" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 5.5c2-2 4-2 6.5 0s4.5 2 6.5 0M1.5 10.5c2-2 4-2 6.5 0s4.5 2 6.5 0"/></g></symbol>
+        <symbol id="ui-sequence" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.5" cy="4" r="1.5"/><circle cx="12.5" cy="12" r="1.5"/><path d="M5 4h4a2 2 0 0 1 2 2v4.5"/></g></symbol>
+        <symbol id="ui-data" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M6.5 6.5v7"/></g></symbol>
+        <symbol id="ui-plan" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><path d="m2 4 1 1 1.6-1.8M2 8l1 1 1.6-1.8"/><circle cx="3.2" cy="12" r="1"/></g></symbol>
+        <symbol id="ui-menu" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></g></symbol>
+        <symbol id="ui-info" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v4M8 4.9v.2"/></g></symbol>
+        <symbol id="ui-play" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.2v9.6L12.6 8z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="ui-pause" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 3.2h2.3v9.6H4.6zM9.1 3.2h2.3v9.6H9.1z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="ui-prev" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v9"/><path d="M12.5 3.5 6 8l6.5 4.5z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="ui-next" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 3.5v9"/><path d="M3.5 3.5 10 8l-6.5 4.5z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="ui-moon" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/></g></symbol>
+        <symbol id="ui-sun" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/></g></symbol>
+        <symbol id="ui-check-circle" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="m5.4 8.2 1.8 1.8 3.5-3.7"/></g></symbol>
+        <symbol id="ui-alert" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2 14.3 13H1.7z"/><path d="M8 6.4v3.2M8 11.3v.2"/></g></symbol>
+        <symbol id="ui-skip" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M5 8h6"/></g></symbol>
+        <symbol id="ui-export" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M4.8 7.5 8 10.7l3.2-3.2M3 13.5h10"/></g></symbol>
+        <symbol id="ui-close" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m4 4 8 8M12 4l-8 8"/></g></symbol>
+        <symbol id="ui-plus" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></g></symbol>
+        <symbol id="ui-minus" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"/></g></symbol>
+        <symbol id="ui-fit" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></g></symbol>
+        <symbol id="ui-reset" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a5 5 0 1 0 1.5-3.6"/><path d="M2.8 2.4v2.8h2.8"/></g></symbol>
+        <symbol id="ui-file" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1.8h5.2L12.5 5v9.2H4z"/><path d="M9 1.8V5h3.5"/></g></symbol>
+        <symbol id="ui-table" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12M2 10h12"/></g></symbol>
+        <symbol id="ui-link" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.6 2.6 0 0 1 3.6 3.6L10.6 8M9 11.5l-1.3 1.3a2.6 2.6 0 0 1-3.6-3.6L5.4 8"/></g></symbol>
+        <symbol id="ui-copy" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></g></symbol>
+        <symbol id="ui-check" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></g></symbol>
+        <symbol id="ui-keyboard" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.1M6.5 6.5h.1M9 6.5h.1M11.5 6.5h.1M5 9.5h6"/></g></symbol>
+        <symbol id="ui-collapse" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4 5.5 8l4 4M13 4 9 8l4 4"/></g></symbol>
+      </defs>
+  </svg>
 
   <!-- Top Navigation -->
   <header data-region="topbar">
     <div class="brand-section">
-      <span style="font-size: 18px;">📐</span>
+      <svg class="icon brand-mark" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-mark"></use></svg>
       <div>
         <h1 id="doc-title" style="font-size: 14px; font-weight: 700;">Architecture Visualizer</h1>
         <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px;">
           <span id="doc-status" class="badge-status PROPOSED">PROPOSED</span>
-          <span id="doc-subtitle" style="font-size: 11px; color: var(--text-muted); max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Interactive System Model</span>
+          <span id="doc-subtitle" style="font-size: 11px; color: var(--muted); max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Interactive System Model</span>
         </div>
       </div>
     </div>
 
     <!-- View Mode Tabs -->
     <nav class="tabs-section" role="tablist" data-minimized="false">
-      <button class="tab-btn active" role="tab" aria-selected="true" data-view="architecture" aria-label="Architecture" title="Architecture">🏛️ Architecture</button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After">🔄 Delta</button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow">🌊 Data Flow</button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow">🎬 Sequence</button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="database_er" aria-label="Database ER" title="Database ER">🗄️ Data Model</button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-view="implementation_plan" aria-label="Implementation Plan" title="Implementation Plan">📋 Plan</button>
-      <button class="btn-icon tabs-min-toggle" data-action="tabs-minimize" aria-pressed="false" aria-label="Minimize view tabs" title="Minimize view tabs">«</button>
+      <button class="tab-btn active" role="tab" aria-selected="true" data-view="architecture" aria-label="Architecture" title="Architecture"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-architecture"></use></svg><span>Architecture</span></button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="before_after" aria-label="Before vs After" title="Before vs After"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-delta"></use></svg><span>Delta</span></button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="data_flow" aria-label="Data Flow" title="Data Flow"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-flow"></use></svg><span>Data Flow</span></button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="sequence" aria-label="Sequence Flow" title="Sequence Flow"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-sequence"></use></svg><span>Sequence</span></button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="database_er" aria-label="Database ER" title="Database ER"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-data"></use></svg><span>Data Model</span></button>
+      <button class="tab-btn" role="tab" aria-selected="false" data-view="implementation_plan" aria-label="Implementation Plan" title="Implementation Plan"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-plan"></use></svg><span>Plan</span></button>
+      <button class="btn-icon icon-only tabs-min-toggle" data-action="tabs-minimize" aria-pressed="false" aria-label="Minimize view tabs" title="Minimize view tabs"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-collapse"></use></svg></button>
     </nav>
 
     <!-- Header Actions -->
     <div class="header-actions">
-      <button class="btn-icon workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator">☰</button>
-      <button class="btn-icon workbench-mobile-toggle" data-action="inspector-toggle" aria-label="Open inspector">ⓘ</button>
+      <button class="btn-icon icon-only workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-menu"></use></svg></button>
+      <button class="btn-icon icon-only workbench-mobile-toggle" data-action="inspector-toggle" aria-label="Open inspector"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-info"></use></svg></button>
       <button id="btn-focus-neighbors" class="btn-icon" aria-pressed="false" title="Focus selected component and direct neighbors">Focus</button>
       <button id="btn-focus-affected" class="btn-icon" aria-pressed="false" title="Focus downstream affected path">Impact</button>
       <button id="btn-presentation" class="btn-icon" aria-pressed="false" title="Toggle presentation mode">Present</button>
       <button id="btn-fullscreen" class="btn-icon" aria-pressed="false" title="Toggle fullscreen">Fullscreen</button>
       <button id="btn-animate" class="btn-icon" title="Toggle flow animation">
-        <span id="anim-icon">▶</span>
+        <span id="anim-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-play"></use></svg></span>
         <span>Animate</span>
       </button>
-      <button id="btn-theme" class="btn-icon" title="Toggle Light/Dark Theme">
-        <span id="theme-icon">🌙</span>
+      <button id="btn-theme" class="btn-icon icon-only" title="Toggle Light/Dark Theme" aria-label="Toggle light and dark theme">
+        <span id="theme-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-moon"></use></svg></span>
       </button>
-      <button id="btn-gate" class="btn-icon" title="Show the 14-point quality gate result">✅ Gate</button>
+      <button id="btn-gate" class="btn-icon" title="Show the 14-point quality gate result"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-check-circle"></use></svg><span>Gate</span></button>
       <div class="export-wrap">
-        <button id="btn-export" class="btn-icon" title="Export this visualization">📥 Export</button>
+        <button id="btn-export" class="btn-icon" title="Export this visualization"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-export"></use></svg><span>Export</span></button>
         <div id="export-menu" class="export-menu">
           <button data-export="html">Standalone HTML</button>
           <button data-export="svg">SVG vector</button>
@@ -1063,52 +1200,38 @@
 
   <!-- Sequence Playback Bar -->
   <div id="sequence-bar" class="sequence-controls">
-    <button id="seq-prev" class="btn-icon" style="height: 28px;">⏮ Prev</button>
-    <button id="seq-play" class="btn-icon" style="height: 28px;">▶ Play</button>
-    <button id="seq-next" class="btn-icon" style="height: 28px;">⏭ Next</button>
+    <button id="seq-prev" class="btn-icon" style="height: 28px;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-prev"></use></svg><span>Prev</span></button>
+    <button id="seq-play" class="btn-icon" style="height: 28px;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-play"></use></svg><span>Play</span></button>
+    <button id="seq-next" class="btn-icon" style="height: 28px;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-next"></use></svg><span>Next</span></button>
     <span id="seq-step-info" style="font-size: 12px; font-weight: 600; min-width: 120px; flex: 1 1 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Step 1 of 5</span>
     <input type="range" id="seq-slider" min="1" max="5" value="1" style="cursor: pointer; width: 140px;" />
   </div>
 
   <!-- Viewport Zoom Controls -->
   <div class="viewport-controls">
-    <button id="btn-zoom-in" class="viewport-btn" title="Zoom In">+</button>
-    <button id="btn-zoom-out" class="viewport-btn" title="Zoom Out">−</button>
-    <button id="btn-fit" class="viewport-btn" title="Fit to Screen">⊡</button>
-    <button id="btn-reset" class="viewport-btn" title="Reset View">↺</button>
+    <button id="btn-zoom-in" class="viewport-btn" title="Zoom In" aria-label="Zoom in"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-plus"></use></svg></button>
+    <button id="btn-zoom-out" class="viewport-btn" title="Zoom Out" aria-label="Zoom out"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-minus"></use></svg></button>
+    <button id="btn-fit" class="viewport-btn" title="Fit to Screen" aria-label="Fit to screen"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-fit"></use></svg></button>
+    <button id="btn-reset" class="viewport-btn" title="Reset View" aria-label="Reset view"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-reset"></use></svg></button>
   </div>
 
   <!-- Legend Box -->
   <details class="legend-box">
     <summary class="legend-summary">Legend</summary>
-    <div class="legend-row">
-      <span class="legend-icon" style="color: var(--accent-blue);">―</span>
-      <span>Synchronous Request / API</span>
-    </div>
-    <div class="legend-row">
-      <span class="legend-icon" style="color: var(--accent-purple);">- -</span>
-      <span>Asynchronous Event / Queue</span>
-    </div>
-    <div class="legend-row">
-      <span class="legend-icon" style="color: var(--accent-green);">[+]</span>
-      <span>Added in Proposal</span>
-    </div>
-    <div class="legend-row">
-      <span class="legend-icon" style="color: var(--accent-amber);">[~]</span>
-      <span>Modified in Proposal</span>
-    </div>
-    <div class="legend-row">
-      <span class="legend-icon" style="color: var(--accent-rose);">[-]</span>
-      <span>Removed / Deprecated</span>
-    </div>
+    <div class="legend-row"><span class="legend-swatch line"></span><span>Synchronous request</span></div>
+    <div class="legend-row"><span class="legend-swatch line dashed"></span><span>Asynchronous event</span></div>
+    <div class="legend-row"><span class="legend-swatch ok"></span><span>Added in proposal</span></div>
+    <div class="legend-row"><span class="legend-swatch warn"></span><span>Changed in proposal</span></div>
+    <div class="legend-row"><span class="legend-swatch risk"></span><span>Removed or deprecated</span></div>
+    <div class="legend-row"><span class="legend-swatch exception"></span><span>Not verified by evidence</span></div>
     <div class="legend-divider"></div>
-    <div class="legend-row"><span class="legend-icon">🗄️ ⌷</span><span>Cylinder = datastore</span></div>
-    <div class="legend-row"><span class="legend-icon">📨 ⊳</span><span>Chevron = queue / topic</span></div>
-    <div class="legend-row"><span class="legend-icon">🌐 ⌸</span><span>Dashed border = external system</span></div>
-    <div class="legend-row"><span class="legend-icon">👤 ⬭</span><span>Pill = actor</span></div>
+    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-database"></use></svg></span><span>Cylinder: datastore</span></div>
+    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-topic"></use></svg></span><span>Chevron: queue or topic</span></div>
+    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-external"></use></svg></span><span>Dashed border: external system</span></div>
+    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-actor"></use></svg></span><span>Pill: actor</span></div>
     <div class="legend-divider"></div>
-    <div class="legend-row"><span class="legend-icon">⌨</span><span>F fit · 0 reset · +/− zoom · A animate · Esc close</span></div>
-    <div class="legend-row"><span class="legend-icon">▾</span><span>Click a boundary title to collapse it</span></div>
+    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-keyboard"></use></svg></span><span>F fit · 0 reset · +/− zoom · A animate · Esc close</span></div>
+    <div class="legend-row"><span class="legend-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-collapse"></use></svg></span><span>Click a boundary title to collapse it</span></div>
   </details>
 
   <!-- Data-flow hint -->
@@ -1118,7 +1241,7 @@
   <aside id="gate-panel" class="gate-panel">
     <div class="gate-header">
       <strong>14-Point Quality Gate</strong>
-      <button id="gate-close" class="btn-icon" style="width:26px;height:26px;padding:0;">✕</button>
+      <button id="gate-close" class="btn-icon" style="width:26px;height:26px;padding:0;" aria-label="Close quality gate"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
     </div>
     <div id="gate-body" class="gate-body"></div>
   </aside>
@@ -1129,8 +1252,8 @@
       <div class="modal-header">
         <strong id="modal-title">Source</strong>
         <div style="display:flex; gap:8px;">
-          <button id="modal-copy" class="btn-icon">📋 Copy</button>
-          <button id="modal-close" class="btn-icon" style="width:28px;padding:0;">✕</button>
+          <button id="modal-copy" class="btn-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-copy"></use></svg><span>Copy</span></button>
+          <button id="modal-close" class="btn-icon" style="width:28px;padding:0;" aria-label="Close"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
         </div>
       </div>
       <pre id="modal-content" class="modal-content"></pre>
@@ -1139,7 +1262,7 @@
 
 <button class="workbench-backdrop" data-action="drawer-backdrop" aria-label="Close open panel"></button>
 <aside class="workbench-navigator" data-region="navigator" data-open="false" aria-label="Architecture navigator" aria-modal="false">
-  <div class="workbench-panel-header"><strong>Navigator</strong><button class="btn-icon workbench-close" data-action="navigator-close" aria-label="Close navigator">✕</button></div>
+  <div class="workbench-panel-header"><strong>Navigator</strong><button class="btn-icon workbench-close" data-action="navigator-close" aria-label="Close navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button></div>
   <div class="workbench-panel-body">
     <section><h2>Model outline</h2><div data-navigator-section="outline">Select a component to inspect it.</div></section>
     <section><h2>Search results</h2><div data-navigator-section="search">Type in search to find nodes and relationships.</div></section>
@@ -1153,15 +1276,30 @@
   <div id="canvas-container" data-region="canvas">
     <svg id="arch-svg">
       <defs>
+        <!-- Component kind icons live in the canvas so exports carry them -->
+        <symbol id="kind-actor" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.6"/><path d="M3 14c.6-2.8 2.6-4.3 5-4.3s4.4 1.5 5 4.3"/></g></symbol>
+        <symbol id="kind-frontend" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.5" width="12.4" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11v3"/></g></symbol>
+        <symbol id="kind-mobile" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4.25" y="1.75" width="7.5" height="12.5" rx="1.75"/><path d="M7 11.75h2"/></g></symbol>
+        <symbol id="kind-api_gateway" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5v11M13 2.5v11"/><path d="M5.5 8h6M9.3 5.8 11.5 8l-2.2 2.2"/></g></symbol>
+        <symbol id="kind-service" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.9 13.3 5v6L8 14.1 2.7 11V5z"/><circle cx="8" cy="8" r="1.7" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="kind-worker" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 6.6A5.3 5.3 0 0 0 3.4 5M2.8 9.4a5.3 5.3 0 0 0 9.8 1.6"/><path d="M13.6 2.9v3.9H9.7M2.4 13.1V9.2h3.9"/></g></symbol>
+        <symbol id="kind-database" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="3.8" rx="5" ry="1.9"/><path d="M3 3.8v8.4c0 1 2.2 1.9 5 1.9s5-.9 5-1.9V3.8M3 8c0 1 2.2 1.9 5 1.9S13 9 13 8"/></g></symbol>
+        <symbol id="kind-storage" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="3.5" rx="1"/><path d="M3 6.5V13h10V6.5M6.5 9h3"/></g></symbol>
+        <symbol id="kind-cache" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.8 3.5 9h4.2L7 14.2 12.5 7H8.3z"/></g></symbol>
+        <symbol id="kind-queue" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9.5h3l1 2h4l1-2h3v3.2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M4 6.5h8M5.5 3.5h5"/></g></symbol>
+        <symbol id="kind-topic" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h9M2 8h12M2 11.5h9"/><path d="m11.8 6.2 2.2 1.8-2.2 1.8"/></g></symbol>
+        <symbol id="kind-external" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 1.8 2.6 3.8 2.6 6S9.8 12.2 8 14M8 2C6.2 3.8 5.4 5.8 5.4 8s.8 4.2 2.6 6"/></g></symbol>
+        <symbol id="kind-cloud_function" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5a3 3 0 0 1-.4-6 4 4 0 0 1 7.7-.9 2.9 2.9 0 0 1-.3 6.9z"/></g></symbol>
+        <symbol id="kind-component" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><rect x="5.5" y="5.5" width="5" height="5" rx="1"/></g></symbol>
         <!-- Marker definitions -->
         <marker id="arrow-sync" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
-          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="var(--edge-sync)" />
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" class="arrowhead" />
         </marker>
         <marker id="arrow-async" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
-          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="var(--edge-async)" />
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" class="arrowhead" />
         </marker>
         <marker id="arrow-highlight" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
-          <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#38bdf8" />
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" class="arrowhead-active" />
         </marker>
       </defs>
       <!-- Background Grid -->
@@ -1183,9 +1321,9 @@
     <div class="inspector-header">
       <div>
         <h2 id="ins-title" style="font-size: 15px; font-weight: 700;">Component Details</h2>
-        <span id="ins-tech" style="font-size: 11px; color: var(--text-dim);">Technology</span>
+        <span id="ins-tech" style="font-size: 11px; color: var(--muted);">Technology</span>
       </div>
-      <button id="ins-close" class="btn-icon" data-action="inspector-close" aria-label="Close inspector" style="width: 28px; height: 28px; padding: 0;">✕</button>
+      <button id="ins-close" class="btn-icon" data-action="inspector-close" aria-label="Close inspector" style="width: 28px; height: 28px; padding: 0;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
     </div>
     <div id="node-inspector-body" class="inspector-body">
       <!-- Status Badges -->
@@ -1204,7 +1342,7 @@
       <div>
         <div class="inspector-section-title">Repository Source Files</div>
         <div id="ins-files" class="detail-card">
-          <span style="color: var(--text-dim);">No files linked.</span>
+          <span style="color: var(--muted);">No files linked.</span>
         </div>
       </div>
 
@@ -1212,7 +1350,7 @@
       <div>
         <div class="inspector-section-title">APIs & Interfaces</div>
         <div id="ins-apis" class="detail-card">
-          <span style="color: var(--text-dim);">None</span>
+          <span style="color: var(--muted);">None</span>
         </div>
       </div>
 
@@ -1220,7 +1358,7 @@
       <div>
         <div class="inspector-section-title">Data Entities / Tables</div>
         <div id="ins-tables" class="detail-card">
-          <span style="color: var(--text-dim);">None</span>
+          <span style="color: var(--muted);">None</span>
         </div>
       </div>
 
@@ -1228,7 +1366,7 @@
       <div>
         <div class="inspector-section-title">Implementation Tasks</div>
         <div id="ins-tasks" class="detail-card">
-          <span style="color: var(--text-dim);">None</span>
+          <span style="color: var(--muted);">None</span>
         </div>
       </div>
 
@@ -1236,14 +1374,14 @@
       <div>
         <div class="inspector-section-title">Failure Modes & Risks</div>
         <div id="ins-risks" class="detail-card">
-          <span style="color: var(--text-dim);">None recorded</span>
+          <span style="color: var(--muted);">None recorded</span>
         </div>
       </div>
 
       <!-- Dependency Graph Highlights -->
       <div>
         <button id="ins-btn-highlight" class="btn-icon" style="width: 100%; justify-content: center;">
-          ⚡ Highlight Dependency Chain
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Highlight Dependency Chain</span>
         </button>
       </div>
     </div>
@@ -1254,7 +1392,7 @@
   <div id="view-database-er" class="subview-overlay">
     <div style="max-width: 1400px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center;">
       <h2 style="font-size: 18px; font-weight: 700;">Database Schema & Entity Relations</h2>
-      <span style="font-size: 12px; color: var(--text-dim);">Physical Data Model</span>
+      <span style="font-size: 12px; color: var(--muted);">Physical Data Model</span>
     </div>
     <div id="er-tables-container" class="er-grid"></div>
   </div>
@@ -1263,7 +1401,7 @@
   <div id="view-implementation-plan" class="subview-overlay">
     <div style="max-width: 1000px; margin: 0 auto 20px auto; display: flex; justify-content: space-between; align-items: center;">
       <h2 style="font-size: 18px; font-weight: 700;">Feature Implementation & Execution Plan</h2>
-      <span style="font-size: 12px; color: var(--text-dim);">Traceable phased execution</span>
+      <span style="font-size: 12px; color: var(--muted);">Traceable phased execution</span>
     </div>
     <div id="plan-container" class="plan-container"></div>
   </div>
@@ -5240,6 +5378,10 @@
     const THEMES = { DARK: 'dark', LIGHT: 'light' };
     const THEME_STORAGE_KEY = 'arch-viz-theme';
     const COLLAPSED_PILL_HEIGHT = 56;
+    // Every custom property defined in styles/tokens.css; exports resolve these into a standalone file.
+    const DESIGN_TOKENS = ['--bg', '--surface', '--surface-2', '--lane', '--ink', '--muted', '--faint', '--line', '--edge',
+      '--edge-dim', '--grid', '--accent', '--accent-ink', '--accent-soft', '--ok', '--ok-soft', '--warn', '--warn-soft',
+      '--risk', '--risk-soft', '--scrim', '--shadow', '--shadow-card', '--sans', '--serif', '--mono'];
 
     const state = {
       theme: THEMES.DARK,
@@ -5326,6 +5468,58 @@
       const node = document.createElementNS(SVG_NS, tag);
       Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
       return node;
+    }
+
+    // Text measuring for SVG labels, which never wrap on their own.
+    let textMeasure = null;
+    function cssToken(name) {
+      return getComputedStyle(document.body).getPropertyValue(name).trim();
+    }
+    function measureText(text, font) {
+      if (!textMeasure) textMeasure = document.createElement('canvas').getContext('2d');
+      textMeasure.font = font;
+      return textMeasure.measureText(text).width;
+    }
+    // Break text into at most maxLines lines of maxWidth; the last line ends with an ellipsis when text remains.
+    function wrapText(text, font, maxWidth, maxLines) {
+      const words = String(text || '').split(/\s+/).filter(Boolean);
+      const lines = [];
+      let line = '';
+      for (let i = 0; i < words.length; i++) {
+        const candidate = line ? `${line} ${words[i]}` : words[i];
+        if (measureText(candidate, font) <= maxWidth || !line) {
+          line = candidate;
+          continue;
+        }
+        if (lines.length === maxLines - 1) {
+          // No line left to break onto: the rest joins the last line, which is ellipsized below.
+          line = [line, ...words.slice(i)].join(' ');
+          break;
+        }
+        lines.push(line);
+        line = words[i];
+      }
+      if (line) lines.push(line);
+      const last = lines.length - 1;
+      if (last >= 0 && measureText(lines[last], font) > maxWidth) {
+        let cut = lines[last];
+        while (cut.length > 1 && measureText(`${cut}…`, font) > maxWidth) cut = cut.slice(0, -1).trimEnd();
+        lines[last] = `${cut}…`;
+      }
+      return lines;
+    }
+    function fitText(text, font, maxWidth) {
+      return wrapText(text, font, maxWidth, 1)[0] || '';
+    }
+
+    // Inline icon markup from the shared sprite; decorative, so it is hidden from assistive technology.
+    function iconMarkup(id, className = 'icon') {
+      return `<svg class="${className}" viewBox="0 0 16 16" aria-hidden="true"><use href="#${id}"></use></svg>`;
+    }
+
+    // Replace a button's content with an icon and an optional text label.
+    function setIconLabel(target, iconId, text) {
+      target.innerHTML = iconMarkup(iconId) + (text ? `<span>${escapeHtml(text)}</span>` : '');
     }
 
     function withTooltip(parent, text) {
@@ -5528,13 +5722,13 @@
       (LAYOUT_DATA.boundaries || []).forEach(boundary => {
         const mark = el('rect', { x: boundary.x, y: boundary.y, width: boundary.width, height: boundary.height, 'data-minimap-mark': 'boundary' });
         mark.setAttribute('fill', 'none');
-        mark.setAttribute('stroke', 'var(--text-dim)');
+        mark.setAttribute('stroke', 'var(--faint)');
         mark.setAttribute('stroke-width', '4');
         content.appendChild(mark);
       });
       (LAYOUT_DATA.nodes || []).forEach(node => {
         const mark = el('rect', { x: node.x, y: node.y, width: node.width, height: node.height, rx: 4, 'data-minimap-mark': 'node' });
-        mark.setAttribute('fill', 'var(--accent-blue)');
+        mark.setAttribute('fill', 'var(--accent)');
         mark.setAttribute('opacity', '0.72');
         content.appendChild(mark);
       });
@@ -5976,13 +6170,13 @@
       const toolbar = document.createElement('div');
       toolbar.className = 'workbench-scenario-toolbar';
       const previous = document.createElement('button');
-      previous.type = 'button'; previous.textContent = '←'; previous.setAttribute('aria-label', 'Previous scenario stage');
+      previous.type = 'button'; previous.innerHTML = iconMarkup('ui-prev'); previous.setAttribute('aria-label', 'Previous scenario stage');
       previous.addEventListener('click', () => stepScenario(-1));
       const play = document.createElement('button');
-      play.type = 'button'; play.textContent = '▶'; play.setAttribute('aria-label', 'Play scenario'); play.setAttribute('aria-pressed', 'false'); play.setAttribute('data-scenario-play', '');
+      play.type = 'button'; play.innerHTML = iconMarkup('ui-play'); play.setAttribute('aria-label', 'Play scenario'); play.setAttribute('aria-pressed', 'false'); play.setAttribute('data-scenario-play', '');
       play.addEventListener('click', toggleScenarioPlayback);
       const next = document.createElement('button');
-      next.type = 'button'; next.textContent = '→'; next.setAttribute('aria-label', 'Next scenario stage');
+      next.type = 'button'; next.innerHTML = iconMarkup('ui-next'); next.setAttribute('aria-label', 'Next scenario stage');
       next.addEventListener('click', () => stepScenario(1));
       const scrubber = document.createElement('input');
       scrubber.type = 'range'; scrubber.min = '0'; scrubber.value = '0'; scrubber.setAttribute('data-scenario-scrubber', ''); scrubber.setAttribute('aria-label', 'Scenario stage');
@@ -6074,7 +6268,7 @@
 
     function applyTheme() {
       document.body.setAttribute('data-theme', state.theme);
-      document.getElementById('theme-icon').textContent = state.theme === THEMES.DARK ? '🌙' : '☀️';
+      setIconLabel(document.getElementById('theme-icon'), state.theme === THEMES.DARK ? 'ui-moon' : 'ui-sun');
     }
 
     function setupEventListeners() {
@@ -6379,11 +6573,17 @@
           fill: 'transparent',
           'pointer-events': 'all'
         });
-        const chevron = el('text', { class: 'boundary-header', x: b.x + 18, y: b.y + 26 });
-        chevron.textContent = collapsed ? '▸' : '▾';
-        const text = el('text', { class: 'boundary-header', x: b.x + 36, y: b.y + 26 });
+        const chevron = el('path', {
+          class: 'boundary-chevron',
+          d: collapsed
+            ? `M ${b.x + 16} ${b.y + 16} l 5 5 l -5 5`
+            : `M ${b.x + 14} ${b.y + 18} l 5 5 l 5 -5`
+        });
+        const text = el('text', { class: 'boundary-header', x: b.x + 34, y: b.y + 26 });
         const memberCount = (LAYOUT_DATA.nodes || []).filter(n => n.boundary === b.id).length;
-        text.textContent = collapsed ? `${b.label || b.id} (${memberCount} hidden)` : (b.label || b.id);
+        const headerText = collapsed ? `${b.label || b.id} (${memberCount} hidden)` : (b.label || b.id);
+        text.textContent = fitText(headerText, `600 12px ${cssToken('--sans')}`, b.width - 46);
+        if (text.textContent !== headerText) withTooltip(text, headerText);
 
         header.appendChild(hitRect);
         header.appendChild(chevron);
@@ -6466,40 +6666,7 @@
         });
 
         g.appendChild(nodeShape(n));
-
-        const iconText = el('text', { x: 14, y: 30, 'font-size': '14', 'aria-hidden': 'true' });
-        iconText.textContent = getNodeIcon(n.type);
-
-        const titleText = el('text', { x: 36, y: 30, 'font-size': '15', 'font-weight': '700', fill: 'var(--text-main)' });
-        titleText.textContent = truncateString(n.label, 18);
-
-        const techText = el('text', { x: 14, y: 52, 'font-size': '10', 'letter-spacing': '0.4', fill: 'var(--text-muted)' });
-        techText.textContent = truncateString(n.technology || n.type, 26);
-
-        const badgesGroup = el('g', { transform: 'translate(14, 74)' });
-        const statusTxt = el('text', {
-          'font-size': '10',
-          'font-weight': '700',
-          fill: n.status === 'VERIFIED' ? 'var(--accent-green)' : 'var(--accent-amber)'
-        });
-        statusTxt.textContent = `[${n.status || 'VERIFIED'}]`;
-        badgesGroup.appendChild(statusTxt);
-
-        if (n.delta && n.delta !== DELTA.UNCHANGED) {
-          const deltaTxt = el('text', {
-            x: (String(n.status || 'VERIFIED').length + 2) * 6.2 + 8,
-            'font-size': '10',
-            'font-weight': '700',
-            fill: n.delta === DELTA.ADDED ? 'var(--accent-green)' : (n.delta === DELTA.CHANGED ? 'var(--accent-amber)' : 'var(--accent-rose)')
-          });
-          deltaTxt.textContent = `[${n.delta}]`;
-          badgesGroup.appendChild(deltaTxt);
-        }
-
-        g.appendChild(iconText);
-        g.appendChild(titleText);
-        g.appendChild(techText);
-        g.appendChild(badgesGroup);
+        renderNodeCard(g, n);
 
         const tooltipLines = [n.label, n.technology, n.description]
           .concat((n.details?.files || []).map(f => (typeof f === 'string' ? f : f.path)))
@@ -6538,26 +6705,85 @@
       if (state.animatingFlow) startFlowParticles();
     }
 
+    // One line icon per component kind; the kind is never carried by card color.
     function getNodeIcon(type) {
       switch (type) {
-        case 'actor': return '👤';
-        case 'frontend': return '💻';
-        case 'mobile': return '📱';
-        case 'api_gateway': return '🚪';
-        case 'database': return '🗄️';
-        case 'cache': return '⚡';
-        case 'queue':
-        case 'topic': return '📨';
-        case 'external': return '🌐';
-        case 'worker': return '⚙️';
-        case 'storage': return '📦';
-        default: return '🧩';
+        case 'actor': return 'kind-actor';
+        case 'frontend': return 'kind-frontend';
+        case 'mobile': return 'kind-mobile';
+        case 'api_gateway': return 'kind-api_gateway';
+        case 'database': return 'kind-database';
+        case 'cache': return 'kind-cache';
+        case 'queue': return 'kind-queue';
+        case 'topic': return 'kind-topic';
+        case 'external': return 'kind-external';
+        case 'worker': return 'kind-worker';
+        case 'cloud_function': return 'kind-cloud_function';
+        case 'storage': return 'kind-storage';
+        case 'service': return 'kind-service';
+        default: return 'kind-component';
       }
     }
 
-    function truncateString(str, max) {
-      if (!str) return '';
-      return str.length > max ? str.substring(0, max - 2) + '…' : str;
+    const DELTA_BADGES = {
+      [DELTA.ADDED]: ['Added', 'ok'],
+      [DELTA.CHANGED]: ['Changed', 'warn'],
+      [DELTA.REMOVED]: ['Removed', 'risk'],
+      [DELTA.MOVED]: ['Moved', 'neutral'],
+    };
+
+    // Card anatomy inside the layout's fixed box: icon tile, a name of up to two lines, technology in mono,
+    // at most one change badge, and a dashed ring when the component is not verified by evidence.
+    function renderNodeCard(g, n) {
+      const w = n.width;
+      const h = n.height;
+      const sans = cssToken('--sans');
+      const mono = cssToken('--mono');
+
+      g.appendChild(el('rect', { class: 'node-tile', x: 14, y: 18, width: 32, height: 32, rx: 8 }));
+      g.appendChild(el('use', { class: 'node-icon', href: `#${getNodeIcon(n.type)}`, x: 22, y: 26, width: 16, height: 16, 'aria-hidden': 'true' }));
+
+      const nameFont = `620 13.5px ${sans}`;
+      const nameLines = wrapText(n.label, nameFont, w - 56 - 14, 2);
+      const name = el('text', { class: 'node-name', x: 56, y: nameLines.length > 1 ? 30 : 39 });
+      nameLines.forEach((line, i) => {
+        const span = el('tspan', { x: 56, dy: i === 0 ? 0 : 17 });
+        span.textContent = line;
+        name.appendChild(span);
+      });
+      g.appendChild(name);
+
+      const badge = DELTA_BADGES[n.delta];
+      let badgeWidth = 0;
+      if (badge) {
+        const [label, tone] = badge;
+        badgeWidth = measureText(label, `600 10.5px ${sans}`) + 14;
+        const badgeGroup = el('g', { class: `node-badge ${tone}`, transform: `translate(${w - 14 - badgeWidth}, ${h - 32})` });
+        badgeGroup.appendChild(el('rect', { class: 'base', width: badgeWidth, height: 20, rx: 6 }));
+        badgeGroup.appendChild(el('rect', { class: 'tint', width: badgeWidth, height: 20, rx: 6 }));
+        const badgeText = el('text', { x: 7, y: 14 });
+        badgeText.textContent = label;
+        badgeGroup.appendChild(badgeText);
+        g.appendChild(badgeGroup);
+      }
+
+      const techFull = n.technology || n.type;
+      const tech = el('text', { class: 'node-tech', x: 14, y: h - 18 });
+      tech.textContent = fitText(techFull, `400 11px ${mono}`, w - 28 - (badgeWidth ? badgeWidth + 8 : 0));
+      g.appendChild(tech);
+
+      if ((n.status || 'VERIFIED') !== 'VERIFIED') {
+        const ring = el('circle', { class: 'node-exception', cx: w - 22, cy: 16, r: 4.5 });
+        withTooltip(ring, `${String(n.status).toLowerCase()}: not verified by evidence`);
+        g.appendChild(ring);
+      }
+    }
+
+    // A highlighted edge ends in an accent arrowhead; every other edge keeps its own.
+    function syncEdgeMarker(path) {
+      if (!path || path.classList.contains('ghost')) return;
+      const marker = path.classList.contains('highlighted') ? 'arrow-highlight' : (path.classList.contains('async') ? 'arrow-async' : 'arrow-sync');
+      path.setAttribute('marker-end', `url(#${marker})`);
     }
 
     // Single source of truth for what is hidden / dimmed
@@ -6649,6 +6875,7 @@
         const path = document.getElementById(`path-${e.id}`);
         if (path && !state.sequencePlaying && !state.scenarioActive && state.currentView !== VIEWS.SEQUENCE) {
           path.classList.toggle('highlighted', Boolean(chain) && chain.has(e.source) && chain.has(e.target));
+          syncEdgeMarker(path);
         }
       });
 
@@ -6682,19 +6909,19 @@
 
       renderDetailList('ins-files', node.details?.files, f => {
         const path = typeof f === 'string' ? f : f.path;
-        return `<div class="file-link">📄 ${escapeHtml(path)}</div>`;
+        return `<div class="file-link">${iconMarkup('ui-file')}<span class="voice-mono">${escapeHtml(path)}</span></div>`;
       }, 'No source files mapped');
 
       renderDetailList('ins-apis', node.details?.apis, api => `
         <div style="margin-bottom:6px;">
-          <span style="color: var(--accent-blue); font-weight:700;">${escapeHtml(api.method || 'GET')}</span>
+          <span style="color: var(--accent); font-weight:700;">${escapeHtml(api.method || 'GET')}</span>
           <code>${escapeHtml(api.path || '')}</code>
-          <div style="font-size:11px; color: var(--text-muted);">${escapeHtml(api.desc || '')}</div>
+          <div style="font-size:11px; color: var(--muted);">${escapeHtml(api.desc || '')}</div>
         </div>`, 'None specified');
 
       renderDetailList('ins-tables', node.details?.tables, t => {
         const name = typeof t === 'string' ? t : t.name;
-        return `<div>🗄️ ${escapeHtml(name)}</div>`;
+        return `<div class="detail-row">${iconMarkup('ui-table')}<span class="voice-mono">${escapeHtml(name)}</span></div>`;
       }, 'No direct tables');
 
       renderDetailList('ins-tasks', node.details?.tasks, t => `
@@ -6707,14 +6934,14 @@
         const r = normalizeFailureMode(entry);
         return `
         <div style="margin-bottom:8px;">
-          <strong>⚠️ ${escapeHtml(r.failure)}</strong>
-          ${r.impact ? `<div style="color:var(--text-muted); font-size:11px;">Impact: ${escapeHtml(r.impact)}</div>` : ''}
-          ${r.mitigation ? `<div style="color:var(--accent-green); font-size:11px;">Mitigation: ${escapeHtml(r.mitigation)}</div>` : ''}
+          <strong class="detail-row">${iconMarkup('ui-alert')}<span>${escapeHtml(r.failure)}</span></strong>
+          ${r.impact ? `<div style="color:var(--muted); font-size:11px;">Impact: ${escapeHtml(r.impact)}</div>` : ''}
+          ${r.mitigation ? `<div style="color:var(--ok); font-size:11px;">Mitigation: ${escapeHtml(r.mitigation)}</div>` : ''}
         </div>`;
       }, 'No critical risks registered');
 
       const highlightBtn = document.getElementById('ins-btn-highlight');
-      highlightBtn.textContent = state.highlightedChain === nodeId ? '✕ Clear Dependency Chain' : '🔗 Highlight Dependency Chain';
+      setIconLabel(highlightBtn, state.highlightedChain === nodeId ? 'ui-close' : 'ui-link', state.highlightedChain === nodeId ? 'Clear Dependency Chain' : 'Highlight Dependency Chain');
 
       inspector.setAttribute('data-open', 'true');
       inspector.setAttribute('data-inspector-kind', 'node');
@@ -6725,7 +6952,7 @@
       if (Array.isArray(items) && items.length > 0) {
         target.innerHTML = items.map(renderItem).join('');
       } else {
-        target.innerHTML = `<span style="color: var(--text-dim);">${escapeHtml(emptyMessage)}</span>`;
+        target.innerHTML = `<span style="color: var(--muted);">${escapeHtml(emptyMessage)}</span>`;
       }
     }
 
@@ -6746,7 +6973,7 @@
         return;
       }
       state.animatingFlow = !state.animatingFlow;
-      document.getElementById('anim-icon').textContent = state.animatingFlow ? '⏸' : '▶';
+      setIconLabel(document.getElementById('anim-icon'), state.animatingFlow ? 'ui-pause' : 'ui-play');
       if (state.animatingFlow) {
         startFlowParticles();
       } else {
@@ -6759,7 +6986,7 @@
     function startFlowParticles() {
       stopFlowParticles();
       state.animatingFlow = true;
-      document.getElementById('anim-icon').textContent = '⏸';
+      setIconLabel(document.getElementById('anim-icon'), 'ui-pause');
 
       const totalBounds = computeTotalVisualBounds();
       const visibleEdges = (LAYOUT_DATA.edges || []).filter(e => {
@@ -6781,7 +7008,7 @@
         const circle = el('circle', {
           r: '4',
           class: 'flow-particle',
-          fill: e.communication === 'async' ? 'var(--accent-purple)' : 'var(--accent-blue)'
+          fill: 'var(--accent)'
         });
         particlesLayer.appendChild(circle);
         return {
@@ -6872,6 +7099,7 @@
       document.querySelectorAll('.edge-path').forEach(p => {
         const isActive = activeEdges.has(p.id.replace('path-', ''));
         p.classList.toggle('highlighted', isActive);
+        syncEdgeMarker(p);
         p.classList.toggle('dimmed', !isActive);
       });
       drawGhostSteps(unmatched);
@@ -6880,7 +7108,7 @@
     function clearSpotlight() {
       ghostLayer.innerHTML = '';
       document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
-      document.querySelectorAll('.edge-path').forEach(p => p.classList.remove('highlighted', 'dimmed'));
+      document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('highlighted', 'dimmed'); syncEdgeMarker(p); });
       if (state.selectedNodeId) {
         const selected = document.getElementById(`node-${state.selectedNodeId}`);
         if (selected) selected.classList.add('selected');
@@ -6909,7 +7137,7 @@
 
     function toggleSequencePlay() {
       state.sequencePlaying = !state.sequencePlaying;
-      document.getElementById('seq-play').textContent = state.sequencePlaying ? '⏸ Pause' : '▶ Play';
+      setIconLabel(document.getElementById('seq-play'), state.sequencePlaying ? 'ui-pause' : 'ui-play', state.sequencePlaying ? 'Pause' : 'Play');
       if (state.sequencePlaying) {
         scheduleNextStep();
       } else {
@@ -6933,7 +7161,7 @@
       state.sequenceTimer = null;
       state.sequencePlaying = false;
       const playBtn = document.getElementById('seq-play');
-      if (playBtn) playBtn.textContent = '▶ Play';
+      if (playBtn) setIconLabel(playBtn, 'ui-play', 'Play');
     }
 
     function stopSequencePlayback() {
@@ -6946,21 +7174,21 @@
       const target = document.getElementById('er-tables-container');
       const er = ARCH_SPEC.views?.database_er;
       if (!er || !Array.isArray(er.tables) || er.tables.length === 0) {
-        target.innerHTML = '<div style="color: var(--text-dim);">No database ER specifications defined.</div>';
+        target.innerHTML = '<div style="color: var(--muted);">No database ER specifications defined.</div>';
         return;
       }
 
       target.innerHTML = er.tables.map(table => {
         const columns = (table.columns || []).map(col => {
-          const pkTag = col.pk ? '<span style="color:var(--accent-amber); font-weight:700; margin-right:4px;">[PK]</span>' : '';
-          const fkTag = col.fk ? `<span style="color:var(--accent-blue); font-weight:700; margin-right:4px;">[FK→${escapeHtml(col.fk)}]</span>` : '';
-          return `<div class="er-col-row"><div>${pkTag}${fkTag}<strong>${escapeHtml(col.name)}</strong></div><span style="color:var(--text-muted);">${escapeHtml(col.type)}</span></div>`;
+          const pkTag = col.pk ? '<span class="key-chip pk" title="Primary key">PK</span>' : '';
+          const fkTag = col.fk ? `<span class="key-chip fk" title="Foreign key to ${escapeHtml(col.fk)}">FK → ${escapeHtml(col.fk)}</span>` : '';
+          return `<div class="er-col-row"><div>${pkTag}${fkTag}<strong class="voice-mono">${escapeHtml(col.name)}</strong></div><span class="voice-mono" style="color:var(--muted);">${escapeHtml(col.type)}</span></div>`;
         }).join('');
         return `
           <div class="er-table-card">
             <div class="er-table-header">
-              <span>🗄️ ${escapeHtml(table.name)}</span>
-              <span style="font-size:10px; color:var(--text-dim);">${escapeHtml(table.delta || 'EXISTING')}</span>
+              <span class="detail-row">${iconMarkup('ui-table')}<span class="voice-mono">${escapeHtml(table.name)}</span></span>
+              <span style="font-size:10px; color:var(--muted);">${escapeHtml(table.delta || 'EXISTING')}</span>
             </div>
             ${columns}
           </div>`;
@@ -6972,7 +7200,7 @@
       const target = document.getElementById('plan-container');
       const plan = ARCH_SPEC.views?.implementation_plan;
       if (!plan || !Array.isArray(plan.phases) || plan.phases.length === 0) {
-        target.innerHTML = '<div style="color: var(--text-dim);">No implementation phases defined.</div>';
+        target.innerHTML = '<div style="color: var(--muted);">No implementation phases defined.</div>';
         return;
       }
 
@@ -6980,16 +7208,16 @@
         const tasks = (phase.tasks || []).map(t => `
           <div style="margin-bottom:12px;">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-              <div><strong>${escapeHtml(t.title)}</strong> <span style="font-size:11px; color:var(--text-dim);">(${escapeHtml(t.complexity || 'medium')} complexity)</span></div>
+              <div><strong>${escapeHtml(t.title)}</strong> <span style="font-size:11px; color:var(--muted);">(${escapeHtml(t.complexity || 'medium')} complexity)</span></div>
               <span class="badge-status" style="font-size:10px;">${escapeHtml(t.componentId || 'Core')}</span>
             </div>
-            ${t.files?.length ? `<div style="font-size:11px; color:var(--accent-blue); margin-top:4px;">Files: ${escapeHtml(t.files.join(', '))}</div>` : ''}
-            ${t.risks?.length ? `<div style="font-size:11px; color:var(--accent-rose); margin-top:2px;">⚠️ Risks: ${escapeHtml(t.risks.join(', '))}</div>` : ''}
+            ${t.files?.length ? `<div style="font-size:11px; color:var(--muted); margin-top:4px;">Files: <span class="voice-mono" style="color:var(--ink);">${escapeHtml(t.files.join(', '))}</span></div>` : ''}
+            ${t.risks?.length ? `<div class="detail-row" style="font-size:11px; color:var(--risk); margin-top:2px;">${iconMarkup('ui-alert')}<span>Risks: ${escapeHtml(t.risks.join(', '))}</span></div>` : ''}
           </div>`).join('');
         return `
           <div class="phase-card">
             <div class="phase-header">
-              <div><span style="color:var(--accent-blue); font-weight:700; margin-right:8px;">Phase ${idx + 1}:</span><strong>${escapeHtml(phase.name)}</strong></div>
+              <div><span style="color:var(--accent); font-weight:700; margin-right:8px;">Phase ${idx + 1}:</span><strong>${escapeHtml(phase.name)}</strong></div>
             </div>
             ${tasks}
           </div>`;
@@ -6999,14 +7227,15 @@
     function renderQualityGate() {
       const target = document.getElementById('gate-body');
       if (!Array.isArray(QUALITY_GATE) || QUALITY_GATE.length === 0) {
-        target.innerHTML = '<div style="color: var(--text-dim);">No quality gate data embedded.</div>';
+        target.innerHTML = '<div style="color: var(--muted);">No quality gate data embedded.</div>';
         return;
       }
       const warnCount = QUALITY_GATE.filter(g => g.status === 'WARN').length;
-      document.getElementById('btn-gate').textContent = warnCount === 0 ? '✅ Gate' : `⚠️ Gate (${warnCount})`;
+      setIconLabel(document.getElementById('btn-gate'), warnCount === 0 ? 'ui-check-circle' : 'ui-alert', warnCount === 0 ? 'Gate' : `Gate (${warnCount})`);
+      document.getElementById('btn-gate').dataset.gateState = warnCount === 0 ? 'pass' : 'warn';
       target.innerHTML = QUALITY_GATE.map(g => {
-        const icon = g.status === 'PASS' ? '✅' : (g.status === 'WARN' ? '⚠️' : '➖');
-        return `<div class="gate-row"><span>${icon}</span><div><strong>${g.id}. ${escapeHtml(g.name)}</strong><div style="color:var(--text-muted); font-size:11px;">${escapeHtml(g.detail)}</div></div></div>`;
+        const status = g.status === 'PASS' ? ['ui-check-circle', 'pass', 'Pass'] : (g.status === 'WARN' ? ['ui-alert', 'warn', 'Warning'] : ['ui-skip', 'skip', 'Skipped']);
+        return `<div class="gate-row" data-gate-status="${status[1]}"><span class="gate-icon" title="${status[2]}">${iconMarkup(status[0])}<span class="workbench-sr-only">${status[2]}</span></span><div><strong>${g.id}. ${escapeHtml(g.name)}</strong><div style="color:var(--muted); font-size:11px;">${escapeHtml(g.detail)}</div></div></div>`;
       }).join('');
     }
 
@@ -7456,17 +7685,15 @@
       const ghost = clone.querySelector('#ghost-layer');
       if (ghost) ghost.innerHTML = '';
 
+      // The exported file has no page around it, so it carries every design token resolved for the current theme.
       const computed = getComputedStyle(document.body);
-      const varNames = ['--bg-main', '--bg-panel', '--bg-elevated', '--border', '--text-main', '--text-muted', '--text-dim',
-        '--accent-blue', '--accent-purple', '--accent-green', '--accent-amber', '--accent-rose', '--edge-sync', '--edge-async',
-        '--border-node', '--badge-tint'];
-      const varBlock = varNames
+      const varBlock = DESIGN_TOKENS
         .map(name => `${name}: ${computed.getPropertyValue(name).trim()};`)
         .filter(decl => !decl.endsWith(': ;'))
         .join(' ');
 
       const style = document.createElementNS(SVG_NS, 'style');
-      style.textContent = `svg { ${varBlock} background: ${computed.getPropertyValue('--bg-main').trim() || '#0b1120'}; }\n${collectStyles()}`;
+      style.textContent = `svg { ${varBlock} background: var(--bg); }\n${collectStyles()}`;
       clone.insertBefore(style, clone.firstChild);
 
       return { markup: new XMLSerializer().serializeToString(clone), width, height };
@@ -7536,8 +7763,8 @@
       const text = document.getElementById('modal-content').textContent;
       const btn = document.getElementById('modal-copy');
       const done = () => {
-        btn.textContent = '✅ Copied';
-        window.setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
+        setIconLabel(btn, 'ui-check', 'Copied');
+        window.setTimeout(() => { setIconLabel(btn, 'ui-copy', 'Copy'); }, 1500);
       };
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(text).then(done).catch(() => { btn.textContent = 'Copy failed'; });

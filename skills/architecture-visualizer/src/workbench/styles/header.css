@@ -5,14 +5,14 @@ header {
   left: 0;
   right: 0;
   height: 56px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border-color);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
   z-index: 50;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: none;
 }
 
 .brand-section {
@@ -25,35 +25,35 @@ header {
 .filter-bar .badge-status { flex-shrink: 0; white-space: nowrap; }
 .badge-status {
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 9999px;
+  padding: 2px 7px;
+  border-radius: 6px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: var(--badge-tint);
-  border: 1px solid currentColor;
+  letter-spacing: 0.04em;
+  background: var(--surface-2);
+  border: 1px solid transparent;
 }
-.badge-status.PROPOSED { color: var(--accent-blue); }
-.badge-status.ACCEPTED { color: var(--accent-green); }
+.badge-status.PROPOSED { color: var(--accent); background: var(--accent-soft); }
+.badge-status.ACCEPTED { color: var(--ok); background: var(--ok-soft); }
 .badge-status.VERIFIED,
-.badge-status.ADDED { color: var(--accent-green); }
+.badge-status.ADDED { color: var(--ok); background: var(--ok-soft); }
 .badge-status.INFERRED,
 .badge-status.CHANGED,
 .badge-status.IN_REVIEW,
-.badge-status.MOVED { color: var(--accent-amber); }
+.badge-status.MOVED { color: var(--warn); background: var(--warn-soft); }
 .badge-status.ASSUMED,
-.badge-status.REMOVED { color: #fda4af; }
-[data-theme="light"] .badge-status.ASSUMED,
-[data-theme="light"] .badge-status.REMOVED { color: var(--accent-rose); }
+.badge-status.REMOVED { color: var(--risk); background: var(--risk-soft); }
 .badge-status.UNKNOWN,
 .badge-status.UNCHANGED,
-.badge-status.CURRENT { color: var(--text-muted); }
+.badge-status.CURRENT { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+
+.brand-mark { width: 26px; height: 26px; color: var(--ink); stroke-width: 1.2; }
 
 .tabs-section {
   display: flex;
   align-items: center;
-  background: var(--bg-canvas);
-  border: 1px solid var(--border-color);
+  background: var(--bg);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 3px;
   gap: 2px;
@@ -71,7 +71,7 @@ header {
 .tab-btn {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--muted);
   padding: 6px 10px;
   font-size: 12px;
   white-space: nowrap;
@@ -86,14 +86,14 @@ header {
 }
 
 .tab-btn:hover {
-  color: var(--text-main);
-  background: var(--bg-card-hover);
+  color: var(--ink);
+  background: var(--surface-2);
 }
 
 .tab-btn.active {
-  color: var(--text-main);
-  background: var(--bg-panel);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
 }
 
 .header-actions {
@@ -103,12 +103,12 @@ header {
 }
 
 .btn-icon {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
   height: 32px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -119,8 +119,15 @@ header {
   transition: all 0.15s;
 }
 
+/* Square buttons that hold only an icon; their name comes from aria-label. */
+.btn-icon.icon-only {
+  width: 32px;
+  padding: 0;
+  flex: none;
+}
+
 .btn-icon:hover {
-  color: var(--text-main);
-  background: var(--bg-card-hover);
-  border-color: var(--text-dim);
+  color: var(--ink);
+  background: var(--surface-2);
+  border-color: var(--faint);
 }

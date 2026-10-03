@@ -131,6 +131,14 @@ The workbench page lives in `src/workbench/`: `shell.html` holds the skeleton an
 `<script>` scope, so their order in `shell.html` is their execution order. A module may not include another,
 and every file under `styles/` and `scripts/` must be included exactly once; the compiler suite checks both.
 
+## Design tokens
+
+Every color in the workbench comes from `src/workbench/styles/tokens.css`, defined for dark on `:root` and again
+for `[data-theme="light"]`. Add a token there, list it in `DESIGN_TOKENS` in `scripts/state.js` so exports carry
+it, and extend the contrast test if it draws text or meaning. The compiler suite rejects color literals outside
+the token file, any `var(--…)` that no stylesheet defines, and emoji or bracketed status tags anywhere in the
+workbench. Interface text uses `--sans`, explanation `--serif`, and protocols, paths and technology `--mono`.
+
 ## Visual regression gates
 
 A single screenshot comparison is not a valid visual gate for the workbench: flow particles and CSS transitions

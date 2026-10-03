@@ -22,9 +22,8 @@ svg#arch-svg {
 /* SVG Grid Pattern */
 .grid-pattern {
   fill: none;
-  stroke: var(--grid-dot);
+  stroke: var(--grid);
   stroke-width: 1;
-  opacity: 0.6;
 }
 
 /* SVG Elements */
@@ -32,22 +31,32 @@ svg#arch-svg {
   transition: opacity 0.2s;
 }
 
+/* Boundaries are quiet tinted lanes: they group, they do not compete with the cards inside them. */
 .boundary-rect {
-  fill: var(--bg-card);
-  fill-opacity: 0.4;
-  stroke: var(--border-node);
-  stroke-width: 1.5;
-  stroke-dasharray: 4 4;
-  rx: 12px;
+  fill: var(--lane);
+  stroke: none;
+  rx: 14px;
   transition: all 0.2s ease;
 }
 
 .boundary-header {
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  fill: var(--text-muted);
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.boundary-count {
+  font-size: 11px;
+  font-weight: 500;
+  fill: var(--muted);
+}
+
+.boundary-chevron {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .node-group {
@@ -56,48 +65,87 @@ svg#arch-svg {
 }
 
 .node-rect {
-  fill: var(--bg-card);
-  stroke: var(--border-node);
-  stroke-width: 1.5;
-  rx: 10px;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));
-  transition: stroke 0.15s, stroke-width 0.15s, filter 0.15s;
+  fill: var(--surface);
+  stroke: var(--line);
+  stroke-width: 1;
+  rx: 12px;
+  transition: stroke 0.15s, stroke-width 0.15s;
 }
 
 .node-group:hover .node-rect {
-  stroke: var(--accent-blue);
-  stroke-width: 2;
-  filter: drop-shadow(0 8px 16px rgba(56, 189, 248, 0.2));
+  stroke: var(--faint);
 }
 
+/* Selected reads as ink, distinct from active (accent) and from change states (ok / warn / risk). */
 .node-group.selected .node-rect {
-  stroke: var(--accent-blue);
-  stroke-width: 2.5;
-  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.4));
+  stroke: var(--ink);
+  stroke-width: 2;
 }
 
 .node-group.dimmed {
   opacity: 0.2 !important;
 }
 
+.node-tile {
+  fill: var(--surface-2);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.node-icon {
+  color: var(--ink);
+}
+
+.node-name {
+  font-size: 13.5px;
+  font-weight: 620;
+  fill: var(--ink);
+}
+
+.node-tech {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--muted);
+}
+
+/* Anything not verified carries a dashed ring; verified is the quiet default. */
+.node-exception {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 2;
+}
+
+.node-badge rect.base { fill: var(--surface); }
+.node-badge rect.tint { stroke: none; }
+.node-badge text { font-size: 10.5px; font-weight: 600; }
+.node-badge.ok rect.tint { fill: var(--ok-soft); }
+.node-badge.ok text { fill: var(--ok); }
+.node-badge.warn rect.tint { fill: var(--warn-soft); }
+.node-badge.warn text { fill: var(--warn); }
+.node-badge.risk rect.tint { fill: var(--risk-soft); }
+.node-badge.risk text { fill: var(--risk); }
+.node-badge.neutral rect.tint { fill: var(--surface-2); stroke: var(--line); }
+.node-badge.neutral text { fill: var(--muted); }
+
 .edge-path {
   fill: none;
-  stroke: var(--edge-sync);
-  stroke-width: 1.75;
+  stroke: var(--edge);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
   transition: stroke 0.15s, stroke-width 0.15s, opacity 0.2s;
 }
 
 .edge-path.async {
-  stroke: var(--edge-async);
-  stroke-dasharray: 6 4;
+  stroke-dasharray: 5 4;
 }
 
 .edge-path.read {
-  stroke-dasharray: 3 3;
+  stroke-dasharray: 2 3;
 }
 
 .edge-path.async.read {
-  stroke-dasharray: 6 4;
+  stroke-dasharray: 5 4;
   stroke-width: 1.25;
 }
 
@@ -107,49 +155,52 @@ svg#arch-svg {
 }
 
 .edge-path.highlighted {
-  stroke-width: 3.5 !important;
-  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.8));
+  stroke: var(--accent);
+  stroke-width: 2.2 !important;
 }
 
 .edge-label-bg {
-  fill: var(--bg-panel);
-  rx: 4px;
-  stroke: var(--border-color);
-  stroke-width: 0.5;
+  fill: var(--surface);
+  rx: 5px;
+  stroke: var(--line);
+  stroke-width: 0.75;
 }
 
 .edge-label-leader {
-  stroke: var(--text-dim);
+  stroke: var(--edge);
   stroke-width: 1;
   stroke-dasharray: 2 3;
   pointer-events: none;
 }
 
 .edge-label-text {
+  font-family: var(--mono);
   font-size: 10px;
-  fill: var(--text-muted);
-  font-weight: 500;
+  fill: var(--muted);
+  font-weight: 400;
   text-anchor: middle;
   dominant-baseline: central;
 }
 
+.arrowhead { fill: var(--edge); }
+.arrowhead-active { fill: var(--accent); }
+
 /* Delta Badges */
 .delta-added .node-rect {
-  stroke: var(--accent-green) !important;
+  stroke: var(--ok) !important;
   stroke-width: 2px !important;
 }
 .delta-changed .node-rect {
-  stroke: var(--accent-amber) !important;
+  stroke: var(--warn) !important;
   stroke-width: 2px !important;
 }
 .delta-removed .node-rect {
-  stroke: var(--accent-rose) !important;
+  stroke: var(--risk) !important;
   stroke-dasharray: 4 3;
-  stroke-opacity: 0.75;
 }
+.delta-removed .node-name { text-decoration: line-through; }
 
 /* Flow Particles */
 .flow-particle {
-  fill: var(--accent-blue);
-  filter: drop-shadow(0 0 4px var(--accent-blue));
+  fill: var(--accent);
 }

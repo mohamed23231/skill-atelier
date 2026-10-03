@@ -52,6 +52,7 @@ function spotlightInteractions(interactions) {
   document.querySelectorAll('.edge-path').forEach(p => {
     const isActive = activeEdges.has(p.id.replace('path-', ''));
     p.classList.toggle('highlighted', isActive);
+    syncEdgeMarker(p);
     p.classList.toggle('dimmed', !isActive);
   });
   drawGhostSteps(unmatched);
@@ -60,7 +61,7 @@ function spotlightInteractions(interactions) {
 function clearSpotlight() {
   ghostLayer.innerHTML = '';
   document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
-  document.querySelectorAll('.edge-path').forEach(p => p.classList.remove('highlighted', 'dimmed'));
+  document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('highlighted', 'dimmed'); syncEdgeMarker(p); });
   if (state.selectedNodeId) {
     const selected = document.getElementById(`node-${state.selectedNodeId}`);
     if (selected) selected.classList.add('selected');
@@ -89,7 +90,7 @@ function stepSequence(dir) {
 
 function toggleSequencePlay() {
   state.sequencePlaying = !state.sequencePlaying;
-  document.getElementById('seq-play').textContent = state.sequencePlaying ? '⏸ Pause' : '▶ Play';
+  setIconLabel(document.getElementById('seq-play'), state.sequencePlaying ? 'ui-pause' : 'ui-play', state.sequencePlaying ? 'Pause' : 'Play');
   if (state.sequencePlaying) {
     scheduleNextStep();
   } else {
@@ -113,7 +114,7 @@ function stopSequenceTimer() {
   state.sequenceTimer = null;
   state.sequencePlaying = false;
   const playBtn = document.getElementById('seq-play');
-  if (playBtn) playBtn.textContent = '▶ Play';
+  if (playBtn) setIconLabel(playBtn, 'ui-play', 'Play');
 }
 
 function stopSequencePlayback() {

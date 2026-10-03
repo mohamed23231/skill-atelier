@@ -5,10 +5,10 @@
   bottom: 0;
   right: calc(-1 * min(430px, 102vw));
   width: min(420px, 100vw);
-  background: var(--bg-panel);
-  border-left: 1px solid var(--border-color);
+  background: var(--surface);
+  border-left: 1px solid var(--line);
   z-index: 60;
-  box-shadow: -8px 0 24px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -23,7 +23,7 @@
 
 .inspector-header {
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -43,20 +43,20 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-dim);
+  color: var(--muted);
   margin-bottom: 8px;
 }
 
 .detail-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   font-size: 13px;
 }
 
 .file-link {
-  color: var(--accent-blue);
+  color: var(--accent);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -77,18 +77,18 @@
   bottom: 20px;
   left: 16px;
   z-index: 40;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 11px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
   max-width: 280px;
   max-height: min(46vh, 320px);
   overflow-y: auto;
 }
 .legend-box:not([open]) { padding: 6px 12px; }
-.legend-summary { cursor: pointer; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+.legend-summary { cursor: pointer; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .legend-box[open] .legend-summary { margin-bottom: 6px; }
 
 .legend-row {
@@ -96,7 +96,7 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
-  color: var(--text-muted);
+  color: var(--muted);
 }
 .legend-row:last-child { margin-bottom: 0; }
 
@@ -115,7 +115,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-canvas);
+  background: var(--bg);
   z-index: 30;
   display: none;
   padding: 30px;
@@ -135,19 +135,19 @@
 }
 
 .er-table-card {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
 }
 
 .er-table-header {
-  background: var(--bg-card-hover);
+  background: var(--surface-2);
   padding: 10px 14px;
   font-weight: 700;
   font-size: 13px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -158,7 +158,7 @@
   justify-content: space-between;
   padding: 6px 14px;
   font-size: 12px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--line);
 }
 .er-col-row:last-child { border-bottom: none; }
 
@@ -171,11 +171,11 @@
 }
 
 .phase-card {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 10px;
   padding: 20px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
 }
 
 .phase-header {
@@ -183,6 +183,34 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 14px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--line);
   padding-bottom: 10px;
 }
+
+/* Legend swatches: the same encodings the canvas draws. */
+.legend-icon .icon { width: 14px; height: 14px; }
+.legend-swatch { width: 18px; height: 10px; flex: none; border-radius: 3px; border: 1.5px solid var(--edge); background: var(--surface); }
+.legend-swatch.line { height: 0; border-width: 1.5px 0 0; border-radius: 0; background: none; }
+.legend-swatch.line.dashed { border-top-style: dashed; }
+.legend-swatch.ok { border-color: var(--ok); background: var(--ok-soft); }
+.legend-swatch.warn { border-color: var(--warn); background: var(--warn-soft); }
+.legend-swatch.risk { border-color: var(--risk); border-style: dashed; background: var(--risk-soft); }
+.legend-swatch.exception { width: 10px; height: 10px; border-radius: 50%; border: 1.5px dashed var(--warn); background: none; margin: 0 4px; }
+
+/* Rows that pair an icon with text: file paths, tables, failure modes, quality gate checks. */
+.detail-row, .file-link { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.detail-row > span, .file-link > span { min-width: 0; overflow-wrap: anywhere; }
+.detail-row .icon, .file-link .icon { color: var(--muted); }
+.gate-icon { display: inline-flex; color: var(--ok); }
+.gate-row[data-gate-status="warn"] .gate-icon { color: var(--warn); }
+.gate-row[data-gate-status="skip"] .gate-icon { color: var(--muted); }
+#btn-gate[data-gate-state="pass"] .icon { color: var(--ok); }
+#btn-gate[data-gate-state="warn"] .icon { color: var(--warn); }
+
+/* Key chips in the data model: primary and foreign keys as tinted chips, not bracketed text. */
+.key-chip { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 4px; font-family: var(--mono); font-size: 10px; font-weight: 600; line-height: 16px; }
+.key-chip.pk { color: var(--warn); background: var(--warn-soft); }
+.key-chip.fk { color: var(--accent); background: var(--accent-soft); }
+
+/* The explanation voice: descriptions written for people. */
+#ins-description { font-family: var(--serif); font-size: 14px; line-height: 1.55; }

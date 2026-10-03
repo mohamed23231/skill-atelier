@@ -5,7 +5,7 @@ function toggleFlowAnimation() {
     return;
   }
   state.animatingFlow = !state.animatingFlow;
-  document.getElementById('anim-icon').textContent = state.animatingFlow ? '⏸' : '▶';
+  setIconLabel(document.getElementById('anim-icon'), state.animatingFlow ? 'ui-pause' : 'ui-play');
   if (state.animatingFlow) {
     startFlowParticles();
   } else {
@@ -18,7 +18,7 @@ let particleLastFrame = 0;
 function startFlowParticles() {
   stopFlowParticles();
   state.animatingFlow = true;
-  document.getElementById('anim-icon').textContent = '⏸';
+  setIconLabel(document.getElementById('anim-icon'), 'ui-pause');
 
   const totalBounds = computeTotalVisualBounds();
   const visibleEdges = (LAYOUT_DATA.edges || []).filter(e => {
@@ -40,7 +40,7 @@ function startFlowParticles() {
     const circle = el('circle', {
       r: '4',
       class: 'flow-particle',
-      fill: e.communication === 'async' ? 'var(--accent-purple)' : 'var(--accent-blue)'
+      fill: 'var(--accent)'
     });
     particlesLayer.appendChild(circle);
     return {

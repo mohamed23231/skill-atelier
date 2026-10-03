@@ -352,6 +352,39 @@ const cases = [
       });
     },
   ],
+  [
+    'the workbench uses one icon set: no emoji and no bracketed status tags anywhere in its sources',
+    () => {
+      const { html } = assembleWorkbench();
+      const emoji = html.match(/\p{Extended_Pictographic}/gu) || [];
+      assert.deepStrictEqual([...new Set(emoji)], [], 'emoji found in the workbench');
+      // A status or key written inside brackets, literally ("[ADDED]", "[FK→orders]") or built from a value ("[${n.delta}]").
+      assert.ok(!/\[(VERIFIED|INFERRED|ASSUMED|UNKNOWN|ADDED|CHANGED|REMOVED|MOVED|PK|FK)[\]→ ]/.test(html), 'bracketed status or key tag found');
+      assert.ok(!/\[\$\{n\.(status|delta)/.test(html), 'bracketed status tag built from a node value');
+    },
+  ],
+  [
+    'every color comes from a design token, and every token the workbench uses is defined',
+    () => {
+      const read = (rel) => fs.readFileSync(path.join(WORKBENCH_DIR, rel), 'utf8');
+      const { modules } = assembleWorkbench();
+      const tokensCss = read('styles/tokens.css');
+      const defined = new Set([...tokensCss.matchAll(/(--[a-z0-9-]+):/g)].map((m) => m[1]));
+      const sources = ['shell.html', ...modules].filter((rel) => rel !== 'styles/tokens.css');
+      sources.forEach((rel) => {
+        const text = read(rel);
+        const literals = (text.match(/#[0-9a-fA-F]{3,8}\b(?![\w-])|rgba?\(/g) || []).filter((m) => !/^#(i|ui|kind|arrow)/.test(m));
+        assert.deepStrictEqual(literals, [], `${rel} has a color literal; use a token`);
+        [...text.matchAll(/var\((--[a-z0-9-]+)/g)].forEach((m) => {
+          const local = new RegExp(`${m[1]}\\s*:`).test(text) || /--canvas-(left|right)|--overlay-clearance/.test(m[1]);
+          assert.ok(defined.has(m[1]) || local, `${rel} uses ${m[1]}, which no stylesheet defines`);
+        });
+      });
+      const stateJs = read('scripts/state.js');
+      const listed = [...stateJs.match(/DESIGN_TOKENS = \[([^\]]+)\]/)[1].matchAll(/'(--[a-z0-9-]+)'/g)].map((m) => m[1]);
+      assert.deepStrictEqual([...listed].sort(), [...defined].sort(), 'DESIGN_TOKENS must list every token so exports carry them');
+    },
+  ],
 ];
 
 module.exports = { name: 'Compiler & Exporter', cases };

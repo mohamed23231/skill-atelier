@@ -10,13 +10,13 @@ function renderMinimap() {
   (LAYOUT_DATA.boundaries || []).forEach(boundary => {
     const mark = el('rect', { x: boundary.x, y: boundary.y, width: boundary.width, height: boundary.height, 'data-minimap-mark': 'boundary' });
     mark.setAttribute('fill', 'none');
-    mark.setAttribute('stroke', 'var(--text-dim)');
+    mark.setAttribute('stroke', 'var(--faint)');
     mark.setAttribute('stroke-width', '4');
     content.appendChild(mark);
   });
   (LAYOUT_DATA.nodes || []).forEach(node => {
     const mark = el('rect', { x: node.x, y: node.y, width: node.width, height: node.height, rx: 4, 'data-minimap-mark': 'node' });
-    mark.setAttribute('fill', 'var(--accent-blue)');
+    mark.setAttribute('fill', 'var(--accent)');
     mark.setAttribute('opacity', '0.72');
     content.appendChild(mark);
   });

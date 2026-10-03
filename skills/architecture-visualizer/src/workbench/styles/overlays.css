@@ -7,17 +7,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--line);
   padding: 6px 12px;
   border-radius: 8px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
 }
 
 .search-input {
-  background: var(--bg-canvas);
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
   padding: 5px 10px;
   border-radius: 6px;
   font-size: 12px;
@@ -26,13 +26,13 @@
 }
 
 .search-input:focus {
-  border-color: var(--accent-blue);
+  border-color: var(--accent);
 }
 
 .filter-chip {
-  background: var(--bg-canvas);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--muted);
   padding: 4px 8px;
   font-size: 11px;
   border-radius: 6px;
@@ -40,13 +40,9 @@
 }
 
 .filter-chip.active {
-  background: var(--accent-blue);
-  color: #0f172a;
-  border-color: var(--accent-blue);
-}
-
-[data-theme="light"] .filter-chip.active {
-  color: #ffffff;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
 }
 
 /* Bottom Floating Controls: Zoom, Pan, Fit */
@@ -57,17 +53,17 @@
   z-index: 40;
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
 }
 
 .viewport-btn {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--muted);
   width: 36px;
   height: 36px;
   cursor: pointer;
@@ -75,7 +71,7 @@
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--line);
 }
 
 .viewport-btn:last-child {
@@ -83,8 +79,8 @@
 }
 
 .viewport-btn:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-main);
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
 /* Overlays centre on the canvas, not the window, so docked panels never push them under each other. */
@@ -106,11 +102,11 @@ body { --canvas-left: 0px; --canvas-right: 0px; --overlay-clearance: 8px; }
   display: none;
   align-items: center;
   gap: 12px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--line);
   padding: 8px 16px;
   border-radius: 9999px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
 }
 
 .sequence-controls.visible {
@@ -125,12 +121,12 @@ body { --canvas-left: 0px; --canvas-right: 0px; --overlay-clearance: 8px; }
   z-index: 40;
   display: none;
   align-items: center;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 3px;
   gap: 4px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
 }
 
 .delta-controls.visible {
@@ -143,22 +139,22 @@ body.presentation-mode #floating-bar {
 .workbench-hidden { display: none !important; }
 .workbench-sr-only { position: fixed; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .workbench-review-list { display: grid; gap: 6px; }
-.workbench-review-item, .workbench-scenario-control { width: 100%; padding: 7px 8px; color: var(--text-main); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; text-align: left; cursor: pointer; font: inherit; }
-.workbench-review-item[data-state="unresolved"], .workbench-review-item[data-state="warn"], .workbench-stage[data-stage-status="failed"], .workbench-stage[data-stage-status="blocked"] { border-left: 5px double var(--accent-amber); }
-.workbench-review-item[data-state="verified"], .workbench-stage[data-stage-status="completed"] { border-left: 5px solid var(--accent-green); }
-.workbench-review-field { padding: 9px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); overflow-wrap: anywhere; }
-.workbench-review-field strong { display: block; margin-bottom: 4px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+.workbench-review-item, .workbench-scenario-control { width: 100%; padding: 7px 8px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; text-align: left; cursor: pointer; font: inherit; }
+.workbench-review-item[data-state="unresolved"], .workbench-review-item[data-state="warn"], .workbench-stage[data-stage-status="failed"], .workbench-stage[data-stage-status="blocked"] { border-left: 5px double var(--warn); }
+.workbench-review-item[data-state="verified"], .workbench-stage[data-stage-status="completed"] { border-left: 5px solid var(--ok); }
+.workbench-review-field { padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow-wrap: anywhere; }
+.workbench-review-field strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; }
 .workbench-scenario-player { display: grid; gap: 8px; }
 .workbench-scenario-toolbar { display: grid; grid-template-columns: auto auto auto 1fr; gap: 5px; }
 .workbench-scenario-toolbar button { min-width: 32px; text-align: center; }
 .workbench-scenario-toolbar input { min-width: 0; }
-.workbench-stage { padding: 9px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); }
-.workbench-stage-group { display: grid; gap: 6px; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--border-color); }
+.workbench-stage { padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.workbench-stage-group { display: grid; gap: 6px; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--line); }
 
 .delta-btn {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--muted);
   padding: 5px 12px;
   font-size: 11px;
   font-weight: 600;
@@ -167,6 +163,6 @@ body.presentation-mode #floating-bar {
 }
 
 .delta-btn.active {
-  background: var(--bg-card-hover);
-  color: var(--text-main);
+  background: var(--surface-2);
+  color: var(--ink);
 }

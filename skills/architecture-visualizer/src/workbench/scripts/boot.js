@@ -77,7 +77,7 @@ function initTheme() {
 
 function applyTheme() {
   document.body.setAttribute('data-theme', state.theme);
-  document.getElementById('theme-icon').textContent = state.theme === THEMES.DARK ? '🌙' : '☀️';
+  setIconLabel(document.getElementById('theme-icon'), state.theme === THEMES.DARK ? 'ui-moon' : 'ui-sun');
 }
 
 function setupEventListeners() {

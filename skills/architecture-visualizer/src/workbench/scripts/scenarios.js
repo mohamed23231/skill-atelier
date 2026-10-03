@@ -137,13 +137,13 @@ function renderScenarioNavigator() {
   const toolbar = document.createElement('div');
   toolbar.className = 'workbench-scenario-toolbar';
   const previous = document.createElement('button');
-  previous.type = 'button'; previous.textContent = '←'; previous.setAttribute('aria-label', 'Previous scenario stage');
+  previous.type = 'button'; previous.innerHTML = iconMarkup('ui-prev'); previous.setAttribute('aria-label', 'Previous scenario stage');
   previous.addEventListener('click', () => stepScenario(-1));
   const play = document.createElement('button');
-  play.type = 'button'; play.textContent = '▶'; play.setAttribute('aria-label', 'Play scenario'); play.setAttribute('aria-pressed', 'false'); play.setAttribute('data-scenario-play', '');
+  play.type = 'button'; play.innerHTML = iconMarkup('ui-play'); play.setAttribute('aria-label', 'Play scenario'); play.setAttribute('aria-pressed', 'false'); play.setAttribute('data-scenario-play', '');
   play.addEventListener('click', toggleScenarioPlayback);
   const next = document.createElement('button');
-  next.type = 'button'; next.textContent = '→'; next.setAttribute('aria-label', 'Next scenario stage');
+  next.type = 'button'; next.innerHTML = iconMarkup('ui-next'); next.setAttribute('aria-label', 'Next scenario stage');
   next.addEventListener('click', () => stepScenario(1));
   const scrubber = document.createElement('input');
   scrubber.type = 'range'; scrubber.min = '0'; scrubber.value = '0'; scrubber.setAttribute('data-scenario-scrubber', ''); scrubber.setAttribute('aria-label', 'Scenario stage');

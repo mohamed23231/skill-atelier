@@ -49,6 +49,58 @@ function el(tag, attrs = {}) {
   return node;
 }
 
+// Text measuring for SVG labels, which never wrap on their own.
+let textMeasure = null;
+function cssToken(name) {
+  return getComputedStyle(document.body).getPropertyValue(name).trim();
+}
+function measureText(text, font) {
+  if (!textMeasure) textMeasure = document.createElement('canvas').getContext('2d');
+  textMeasure.font = font;
+  return textMeasure.measureText(text).width;
+}
+// Break text into at most maxLines lines of maxWidth; the last line ends with an ellipsis when text remains.
+function wrapText(text, font, maxWidth, maxLines) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (let i = 0; i < words.length; i++) {
+    const candidate = line ? `${line} ${words[i]}` : words[i];
+    if (measureText(candidate, font) <= maxWidth || !line) {
+      line = candidate;
+      continue;
+    }
+    if (lines.length === maxLines - 1) {
+      // No line left to break onto: the rest joins the last line, which is ellipsized below.
+      line = [line, ...words.slice(i)].join(' ');
+      break;
+    }
+    lines.push(line);
+    line = words[i];
+  }
+  if (line) lines.push(line);
+  const last = lines.length - 1;
+  if (last >= 0 && measureText(lines[last], font) > maxWidth) {
+    let cut = lines[last];
+    while (cut.length > 1 && measureText(`${cut}…`, font) > maxWidth) cut = cut.slice(0, -1).trimEnd();
+    lines[last] = `${cut}…`;
+  }
+  return lines;
+}
+function fitText(text, font, maxWidth) {
+  return wrapText(text, font, maxWidth, 1)[0] || '';
+}
+
+// Inline icon markup from the shared sprite; decorative, so it is hidden from assistive technology.
+function iconMarkup(id, className = 'icon') {
+  return `<svg class="${className}" viewBox="0 0 16 16" aria-hidden="true"><use href="#${id}"></use></svg>`;
+}
+
+// Replace a button's content with an icon and an optional text label.
+function setIconLabel(target, iconId, text) {
+  target.innerHTML = iconMarkup(iconId) + (text ? `<span>${escapeHtml(text)}</span>` : '');
+}
+
 function withTooltip(parent, text) {
   if (!text) return parent;
   const title = document.createElementNS(SVG_NS, 'title');

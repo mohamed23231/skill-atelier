@@ -59,11 +59,17 @@ function renderDiagram() {
       fill: 'transparent',
       'pointer-events': 'all'
     });
-    const chevron = el('text', { class: 'boundary-header', x: b.x + 18, y: b.y + 26 });
-    chevron.textContent = collapsed ? '▸' : '▾';
-    const text = el('text', { class: 'boundary-header', x: b.x + 36, y: b.y + 26 });
+    const chevron = el('path', {
+      class: 'boundary-chevron',
+      d: collapsed
+        ? `M ${b.x + 16} ${b.y + 16} l 5 5 l -5 5`
+        : `M ${b.x + 14} ${b.y + 18} l 5 5 l 5 -5`
+    });
+    const text = el('text', { class: 'boundary-header', x: b.x + 34, y: b.y + 26 });
     const memberCount = (LAYOUT_DATA.nodes || []).filter(n => n.boundary === b.id).length;
-    text.textContent = collapsed ? `${b.label || b.id} (${memberCount} hidden)` : (b.label || b.id);
+    const headerText = collapsed ? `${b.label || b.id} (${memberCount} hidden)` : (b.label || b.id);
+    text.textContent = fitText(headerText, `600 12px ${cssToken('--sans')}`, b.width - 46);
+    if (text.textContent !== headerText) withTooltip(text, headerText);
 
     header.appendChild(hitRect);
     header.appendChild(chevron);
@@ -146,40 +152,7 @@ function renderDiagram() {
     });
 
     g.appendChild(nodeShape(n));
-
-    const iconText = el('text', { x: 14, y: 30, 'font-size': '14', 'aria-hidden': 'true' });
-    iconText.textContent = getNodeIcon(n.type);
-
-    const titleText = el('text', { x: 36, y: 30, 'font-size': '15', 'font-weight': '700', fill: 'var(--text-main)' });
-    titleText.textContent = truncateString(n.label, 18);
-
-    const techText = el('text', { x: 14, y: 52, 'font-size': '10', 'letter-spacing': '0.4', fill: 'var(--text-muted)' });
-    techText.textContent = truncateString(n.technology || n.type, 26);
-
-    const badgesGroup = el('g', { transform: 'translate(14, 74)' });
-    const statusTxt = el('text', {
-      'font-size': '10',
-      'font-weight': '700',
-      fill: n.status === 'VERIFIED' ? 'var(--accent-green)' : 'var(--accent-amber)'
-    });
-    statusTxt.textContent = `[${n.status || 'VERIFIED'}]`;
-    badgesGroup.appendChild(statusTxt);
-
-    if (n.delta && n.delta !== DELTA.UNCHANGED) {
-      const deltaTxt = el('text', {
-        x: (String(n.status || 'VERIFIED').length + 2) * 6.2 + 8,
-        'font-size': '10',
-        'font-weight': '700',
-        fill: n.delta === DELTA.ADDED ? 'var(--accent-green)' : (n.delta === DELTA.CHANGED ? 'var(--accent-amber)' : 'var(--accent-rose)')
-      });
-      deltaTxt.textContent = `[${n.delta}]`;
-      badgesGroup.appendChild(deltaTxt);
-    }
-
-    g.appendChild(iconText);
-    g.appendChild(titleText);
-    g.appendChild(techText);
-    g.appendChild(badgesGroup);
+    renderNodeCard(g, n);
 
     const tooltipLines = [n.label, n.technology, n.description]
       .concat((n.details?.files || []).map(f => (typeof f === 'string' ? f : f.path)))
@@ -218,26 +191,85 @@ function toggleBoundary(boundaryId) {
   if (state.animatingFlow) startFlowParticles();
 }
 
+// One line icon per component kind; the kind is never carried by card color.
 function getNodeIcon(type) {
   switch (type) {
-    case 'actor': return '👤';
-    case 'frontend': return '💻';
-    case 'mobile': return '📱';
-    case 'api_gateway': return '🚪';
-    case 'database': return '🗄️';
-    case 'cache': return '⚡';
-    case 'queue':
-    case 'topic': return '📨';
-    case 'external': return '🌐';
-    case 'worker': return '⚙️';
-    case 'storage': return '📦';
-    default: return '🧩';
+    case 'actor': return 'kind-actor';
+    case 'frontend': return 'kind-frontend';
+    case 'mobile': return 'kind-mobile';
+    case 'api_gateway': return 'kind-api_gateway';
+    case 'database': return 'kind-database';
+    case 'cache': return 'kind-cache';
+    case 'queue': return 'kind-queue';
+    case 'topic': return 'kind-topic';
+    case 'external': return 'kind-external';
+    case 'worker': return 'kind-worker';
+    case 'cloud_function': return 'kind-cloud_function';
+    case 'storage': return 'kind-storage';
+    case 'service': return 'kind-service';
+    default: return 'kind-component';
   }
 }
 
-function truncateString(str, max) {
-  if (!str) return '';
-  return str.length > max ? str.substring(0, max - 2) + '…' : str;
+const DELTA_BADGES = {
+  [DELTA.ADDED]: ['Added', 'ok'],
+  [DELTA.CHANGED]: ['Changed', 'warn'],
+  [DELTA.REMOVED]: ['Removed', 'risk'],
+  [DELTA.MOVED]: ['Moved', 'neutral'],
+};
+
+// Card anatomy inside the layout's fixed box: icon tile, a name of up to two lines, technology in mono,
+// at most one change badge, and a dashed ring when the component is not verified by evidence.
+function renderNodeCard(g, n) {
+  const w = n.width;
+  const h = n.height;
+  const sans = cssToken('--sans');
+  const mono = cssToken('--mono');
+
+  g.appendChild(el('rect', { class: 'node-tile', x: 14, y: 18, width: 32, height: 32, rx: 8 }));
+  g.appendChild(el('use', { class: 'node-icon', href: `#${getNodeIcon(n.type)}`, x: 22, y: 26, width: 16, height: 16, 'aria-hidden': 'true' }));
+
+  const nameFont = `620 13.5px ${sans}`;
+  const nameLines = wrapText(n.label, nameFont, w - 56 - 14, 2);
+  const name = el('text', { class: 'node-name', x: 56, y: nameLines.length > 1 ? 30 : 39 });
+  nameLines.forEach((line, i) => {
+    const span = el('tspan', { x: 56, dy: i === 0 ? 0 : 17 });
+    span.textContent = line;
+    name.appendChild(span);
+  });
+  g.appendChild(name);
+
+  const badge = DELTA_BADGES[n.delta];
+  let badgeWidth = 0;
+  if (badge) {
+    const [label, tone] = badge;
+    badgeWidth = measureText(label, `600 10.5px ${sans}`) + 14;
+    const badgeGroup = el('g', { class: `node-badge ${tone}`, transform: `translate(${w - 14 - badgeWidth}, ${h - 32})` });
+    badgeGroup.appendChild(el('rect', { class: 'base', width: badgeWidth, height: 20, rx: 6 }));
+    badgeGroup.appendChild(el('rect', { class: 'tint', width: badgeWidth, height: 20, rx: 6 }));
+    const badgeText = el('text', { x: 7, y: 14 });
+    badgeText.textContent = label;
+    badgeGroup.appendChild(badgeText);
+    g.appendChild(badgeGroup);
+  }
+
+  const techFull = n.technology || n.type;
+  const tech = el('text', { class: 'node-tech', x: 14, y: h - 18 });
+  tech.textContent = fitText(techFull, `400 11px ${mono}`, w - 28 - (badgeWidth ? badgeWidth + 8 : 0));
+  g.appendChild(tech);
+
+  if ((n.status || 'VERIFIED') !== 'VERIFIED') {
+    const ring = el('circle', { class: 'node-exception', cx: w - 22, cy: 16, r: 4.5 });
+    withTooltip(ring, `${String(n.status).toLowerCase()}: not verified by evidence`);
+    g.appendChild(ring);
+  }
+}
+
+// A highlighted edge ends in an accent arrowhead; every other edge keeps its own.
+function syncEdgeMarker(path) {
+  if (!path || path.classList.contains('ghost')) return;
+  const marker = path.classList.contains('highlighted') ? 'arrow-highlight' : (path.classList.contains('async') ? 'arrow-async' : 'arrow-sync');
+  path.setAttribute('marker-end', `url(#${marker})`);
 }
 
 // Single source of truth for what is hidden / dimmed
@@ -329,6 +361,7 @@ function applyVisibility() {
     const path = document.getElementById(`path-${e.id}`);
     if (path && !state.sequencePlaying && !state.scenarioActive && state.currentView !== VIEWS.SEQUENCE) {
       path.classList.toggle('highlighted', Boolean(chain) && chain.has(e.source) && chain.has(e.target));
+      syncEdgeMarker(path);
     }
   });
 
