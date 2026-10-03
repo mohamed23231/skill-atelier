@@ -2153,6 +2153,30 @@ test('route and limits config is validated field by field', () => {
  * Quota and budget: steer away from workers that cannot take the job
  * ------------------------------------------------------------------ */
 
+test('quota: agy\'s "Individual quota reached" / RESOURCE_EXHAUSTED counts as out of quota', () => {
+  const ledger = require('../scripts/lib/ledger.js');
+  assert.ok(ledger.matchesQuota('error: Individual quota reached. Please upgrade your subscription. Resets in 2h29m28s.'));
+  assert.ok(ledger.matchesQuota('AGY_ERROR: {"status":"RESOURCE_EXHAUSTED","error_code":429}'));
+  assert.ok(!ledger.matchesQuota('Error: database is locked'));
+});
+
+test('opencode gets a private data dir per workspace, stable across attempts, with auth linked in', () => {
+  const adapter = require('../scripts/adapters/opencode.js');
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'df-xdg-'));
+  fs.mkdirSync(path.join(shared, 'opencode'));
+  fs.writeFileSync(path.join(shared, 'opencode', 'auth.json'), '{}');
+  const env = { XDG_DATA_HOME: shared };
+  const a1 = adapter.isolate({ cwd: '/tmp/worktree-a', env });
+  const a2 = adapter.isolate({ cwd: '/tmp/worktree-a', env });
+  const b = adapter.isolate({ cwd: '/tmp/worktree-b', env });
+  assert.strictEqual(a1.XDG_DATA_HOME, a2.XDG_DATA_HOME, 'a fix attempt must reuse the same data dir so --session resumes');
+  assert.notStrictEqual(a1.XDG_DATA_HOME, b.XDG_DATA_HOME, 'two worktrees must not share an opencode database');
+  assert.notStrictEqual(a1.XDG_DATA_HOME, shared, 'the user\'s own opencode database is never used by a worker');
+  const link = path.join(a1.XDG_DATA_HOME, 'opencode', 'auth.json');
+  assert.strictEqual(fs.realpathSync(link), fs.realpathSync(path.join(shared, 'opencode', 'auth.json')), 'auth is linked, not copied');
+  assert.strictEqual(adapter.isolate({ env }), null, 'no workspace, no isolation');
+});
+
 test('quota: a worker whose output says it is out of quota is marked, and routes skip it', () => {
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
   writeConfig(repo, { workers: { claude: { cli: H.STUB }, codex: { cli: H.STUB } }, routes: { mechanical: [{ backend: 'claude' }, { backend: 'codex' }] } });

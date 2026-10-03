@@ -5,6 +5,16 @@ All notable changes to the `delegate-fleet` skill.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this skill
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Parallel OpenCode workers.** OpenCode keeps its sessions in one SQLite database, so two runs at once failed with "database is locked" and `maxConcurrent` had to be 1. An adapter can now return environment overrides from `isolate({ cwd, env })`; OpenCode's gives each workspace its own `XDG_DATA_HOME` (stable across fix attempts, so `--session` still resumes) with the user's `auth.json` linked in, and never touches the user's own database.
+
+### Fixed
+
+- **agy's quota errors were reported as plain process failures.** "Individual quota reached" and `RESOURCE_EXHAUSTED` now mark agy out of quota, so routes skip it until it resets instead of failing every dispatch.
+
 ## [2.4.0] - 2026-09-26
 
 ### Fixed

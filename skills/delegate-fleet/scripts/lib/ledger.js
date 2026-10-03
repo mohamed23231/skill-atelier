@@ -34,6 +34,8 @@ const QUOTA_PATTERNS = [
   /out of credits/i,
   /credit balance is too low/i,
   /you'?ve (hit|reached) your (usage )?limit/i,
+  /individual quota reached/i,
+  /RESOURCE_EXHAUSTED/,
 ];
 
 function quotaPath(root) { return path.join(root, STATE_DIR, QUOTA_FILE); }

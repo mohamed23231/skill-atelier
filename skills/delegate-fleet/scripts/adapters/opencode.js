@@ -1,4 +1,8 @@
 'use strict';
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 /**
  * OpenCode (`opencode run`).
  * Note: OpenCode has no --read-only flag. Read-only is the built-in `plan`
@@ -43,6 +47,25 @@ module.exports = {
     if (req.effort) args.push('--variant', req.effort);
     if (req.session) args.push('--session', req.session);
     return { args };
+  },
+  // OpenCode keeps sessions in one SQLite database under XDG_DATA_HOME, so two runs at once fail
+  // with "database is locked". Each workspace gets its own data dir (stable across fix attempts, so
+  // --session still resumes) with the user's auth files linked in.
+  isolate({ cwd, env = process.env } = {}) {
+    if (!cwd) return null;
+    const shared = path.join(env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'opencode');
+    const key = crypto.createHash('sha1').update(path.resolve(cwd)).digest('hex').slice(0, 16);
+    const root = path.join(os.tmpdir(), 'delegate-fleet-opencode', key);
+    const data = path.join(root, 'opencode');
+    fs.mkdirSync(data, { recursive: true });
+    for (const name of ['auth.json', 'mcp-auth.json']) {
+      const target = path.join(shared, name);
+      const link = path.join(data, name);
+      if (fs.existsSync(target) && !fs.existsSync(link)) {
+        try { fs.symlinkSync(target, link); } catch { /* a concurrent run linked it first */ }
+      }
+    }
+    return { XDG_DATA_HOME: root };
   },
   // `opencode models` prints one provider/model id per line.
   listModels: {
