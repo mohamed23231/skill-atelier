@@ -81,16 +81,30 @@ function applyTheme() {
   setIconLabel(document.getElementById('theme-icon'), state.theme === THEMES.DARK ? 'ui-moon' : 'ui-sun');
 }
 
+function toggleTheme() {
+  actions.setTheme(state.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK);
+  applyTheme();
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
+  } catch (err) {
+    /* storage unavailable (private mode) - theme still applies for this session */
+  }
+}
+
+function fitFromButton() {
+  actions.setCamera({ userMoved: false });
+  fitToScreen();
+}
+
+function toggleGatePanel() {
+  document.getElementById('gate-panel').classList.toggle('open');
+}
+
 function setupEventListeners() {
-  document.getElementById('btn-theme').addEventListener('click', () => {
-    actions.setTheme(state.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK);
-    applyTheme();
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
-    } catch (err) {
-      /* storage unavailable (private mode) - theme still applies for this session */
-    }
-  });
+  const btnPalette = document.getElementById('btn-palette');
+  if (btnPalette) btnPalette.addEventListener('click', () => togglePalette(btnPalette));
+
+  document.getElementById('btn-theme').addEventListener('click', toggleTheme);
 
   // Tabs bar: vertical mouse wheel scrolls the horizontal tab strip
   const tabsSection = document.querySelector('.tabs-section');
@@ -139,10 +153,7 @@ function setupEventListeners() {
 
   document.getElementById('btn-zoom-in').addEventListener('click', () => zoomBy(1.2));
   document.getElementById('btn-zoom-out').addEventListener('click', () => zoomBy(0.8));
-  document.getElementById('btn-fit').addEventListener('click', () => {
-    actions.setCamera({ userMoved: false });
-    fitToScreen();
-  });
+  document.getElementById('btn-fit').addEventListener('click', fitFromButton);
   document.getElementById('btn-reset').addEventListener('click', resetView);
 
   let resizeTimer = null;
@@ -226,9 +237,7 @@ function setupEventListeners() {
     });
   });
 
-  document.getElementById('btn-gate').addEventListener('click', () => {
-    document.getElementById('gate-panel').classList.toggle('open');
-  });
+  document.getElementById('btn-gate').addEventListener('click', toggleGatePanel);
   document.getElementById('gate-close').addEventListener('click', () => {
     document.getElementById('gate-panel').classList.remove('open');
   });
@@ -245,6 +254,12 @@ function setupEventListeners() {
 }
 
 function handleKeyDown(e) {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
+    e.preventDefault();
+    togglePalette(document.activeElement);
+    return;
+  }
+
   const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
   if (typing) {
     if (e.key === 'Escape' && activeDrawer) {

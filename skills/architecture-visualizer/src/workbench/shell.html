@@ -20,6 +20,9 @@
     <!-- include: styles/workbench.css -->
 
     <!-- include: styles/responsive.css -->
+
+    <!-- include: styles/palette.css -->
+
   </style>
 </head>
 <body data-theme="dark">
@@ -56,6 +59,7 @@
         <symbol id="ui-check" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></g></symbol>
         <symbol id="ui-keyboard" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.1M6.5 6.5h.1M9 6.5h.1M11.5 6.5h.1M5 9.5h6"/></g></symbol>
         <symbol id="ui-collapse" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4 5.5 8l4 4M13 4 9 8l4 4"/></g></symbol>
+        <symbol id="ui-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3.3 3.3"/></symbol>
       </defs>
   </svg>
 
@@ -85,6 +89,7 @@
 
     <!-- Header Actions -->
     <div class="header-actions">
+      <button id="btn-palette" class="btn-icon" aria-keyshortcuts="Control+K Meta+K" aria-label="Search and commands"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-search"></use></svg><span>Search</span><kbd>Ctrl K</kbd></button>
       <button class="btn-icon icon-only workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-menu"></use></svg></button>
       <button class="btn-icon icon-only workbench-mobile-toggle" data-action="inspector-toggle" aria-label="Open inspector"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-info"></use></svg></button>
       <button id="btn-focus-neighbors" class="btn-icon" aria-pressed="false" title="Focus selected component and direct neighbors">Focus</button>
@@ -355,6 +360,8 @@
 
     <!-- include: scripts/minimap.js -->
 
+    <!-- include: scripts/trust.js -->
+
     <!-- include: scripts/url.js -->
 
     <!-- include: scripts/view-state.js -->
@@ -383,8 +390,16 @@
 
     <!-- include: scripts/exports.js -->
 
+    <!-- include: scripts/palette.js -->
+
     window.addEventListener('DOMContentLoaded', init);
   </script>
+  <div id="palette-scrim" class="palette-scrim" data-open="false" hidden>
+    <div id="palette-dialog" class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input type="text" id="palette-input" class="palette-input" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" placeholder="Search commands, views, components..." spellcheck="false" autocomplete="off" />
+      <div id="palette-list" class="palette-list" role="listbox"></div>
+    </div>
+  </div>
   <div id="workbench-status" class="workbench-sr-only" role="status" aria-live="polite"></div>
 </body>
 </html>

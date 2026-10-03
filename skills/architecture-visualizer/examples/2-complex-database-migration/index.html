@@ -107,11 +107,18 @@
       box-shadow: none;
     }
 
+    /* The title block takes the space that is left and ellipsizes; the controls never get pushed off. */
     .brand-section {
       display: flex;
       align-items: center;
       gap: 12px;
+      min-width: 0;
+      flex: 1 1 auto;
     }
+    .brand-section > div { min-width: 0; }
+    .brand-section > .brand-mark { flex: none; }
+    #doc-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .header-actions { flex: none; }
 
     .badge-status[hidden] { display: none; }
     .filter-bar .badge-status { flex-shrink: 0; white-space: nowrap; }
@@ -1077,7 +1084,7 @@
     @media (max-width: 767px) {
       header { overflow: hidden; }
       .tabs-section { display: none; }
-      .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme) { display: none; }
+      .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme):not(#btn-palette) { display: none; }
       .filter-bar { top: 64px; left: 8px; right: 8px; overflow-x: auto; }
       .search-input { min-width: 140px; width: 140px; }
       .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
@@ -1088,6 +1095,150 @@
     @media (prefers-reduced-motion: reduce) {
       * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
     }
+
+    /* Command Palette Overlay */
+    .palette-scrim {
+      position: fixed;
+      inset: 0;
+      background: var(--scrim);
+      display: none;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 12vh 16px 16px;
+      z-index: 300;
+      box-sizing: border-box;
+    }
+
+    .palette-scrim.open,
+    .palette-scrim[data-open="true"] {
+      display: flex;
+    }
+
+    .palette {
+      width: min(620px, 100%);
+      max-width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    .palette-input {
+      width: 100%;
+      box-sizing: border-box;
+      background: transparent;
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.4;
+      border: none;
+      border-bottom: 1px solid var(--line);
+      padding: 15px 16px;
+      outline: none;
+    }
+
+    .palette-input::placeholder {
+      color: var(--muted);
+    }
+
+    .palette-list {
+      max-height: 50vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      box-sizing: border-box;
+    }
+
+    .palette-row {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      color: var(--ink);
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    .palette-row:hover,
+    .palette-row.active,
+    .palette-row[aria-selected="true"] {
+      background: var(--accent-soft);
+    }
+
+    .palette-row-icon {
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .palette-row-icon .icon {
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+    }
+
+    .palette-row[aria-selected="true"] .palette-row-icon .icon,
+    .palette-row.active .palette-row-icon .icon {
+      color: var(--ink);
+    }
+
+    .palette-row-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .palette-row-hint {
+      color: var(--faint);
+      font-size: 11.5px;
+      white-space: nowrap;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .palette-empty {
+      padding: 12px 10px;
+      color: var(--muted);
+      font-size: 13.5px;
+      text-align: center;
+      box-sizing: border-box;
+    }
+
+    #btn-palette kbd {
+      font-family: var(--mono);
+      font-size: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 1px 4px;
+      color: var(--muted);
+      margin-left: 2px;
+    }
+
+    /* Narrower headers keep the palette reachable as an icon-only button. */
+    @media (max-width: 1099px) {
+      #btn-palette { width: 32px; padding: 0; justify-content: center; flex: none; }
+      #btn-palette > span, #btn-palette kbd { display: none; }
+      /* These commands live in the palette; the narrower header keeps only what has no other home. */
+      #btn-presentation, #btn-fullscreen, #btn-animate, #btn-focus-neighbors, #btn-focus-affected { display: none; }
+    }
+
   </style>
 </head>
 <body data-theme="dark">
@@ -1124,6 +1275,7 @@
         <symbol id="ui-check" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></g></symbol>
         <symbol id="ui-keyboard" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.1M6.5 6.5h.1M9 6.5h.1M11.5 6.5h.1M5 9.5h6"/></g></symbol>
         <symbol id="ui-collapse" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4 5.5 8l4 4M13 4 9 8l4 4"/></g></symbol>
+        <symbol id="ui-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3.3 3.3"/></symbol>
       </defs>
   </svg>
 
@@ -1153,6 +1305,7 @@
 
     <!-- Header Actions -->
     <div class="header-actions">
+      <button id="btn-palette" class="btn-icon" aria-keyshortcuts="Control+K Meta+K" aria-label="Search and commands"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-search"></use></svg><span>Search</span><kbd>Ctrl K</kbd></button>
       <button class="btn-icon icon-only workbench-mobile-toggle" data-action="navigator-toggle" aria-label="Open navigator"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-menu"></use></svg></button>
       <button class="btn-icon icon-only workbench-mobile-toggle" data-action="inspector-toggle" aria-label="Open inspector"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-info"></use></svg></button>
       <button id="btn-focus-neighbors" class="btn-icon" aria-pressed="false" title="Focus selected component and direct neighbors">Focus</button>
@@ -5742,6 +5895,201 @@
       focusModelPoint(x, y);
     }
 
+    // Pure, DOM-free trust model for the architecture workbench. It reads the embedded ARCH_SPEC and
+    // the quality gate and reports per-component evidence state plus the summary behind the trust strip.
+    // Nothing here touches the document, so the same code runs under Node in the tests.
+
+    function trustArray(value) {
+      return Array.isArray(value) ? value : [];
+    }
+
+    function trustObject(value) {
+      return value && typeof value === 'object' ? value : {};
+    }
+
+    // A locator is either the authored string or a stable key derived from its object shape.
+    function trustLocatorKey(locator) {
+      if (typeof locator === 'string') return locator;
+      const source = trustObject(locator);
+      if (source.method && source.path) return `${source.method} ${source.path}`;
+      if (source.path) return source.path;
+      if (source.document) return source.document;
+      if (source.table) return source.table;
+      if (source.name) return source.name;
+      if (source.assertion) return source.assertion;
+      if (source.command) return source.command;
+      return JSON.stringify(locator);
+    }
+
+    // Worst evidence state first: a claim is only as strong as its weakest record.
+    function trustEvidenceState(spec, node, records) {
+      const verifications = records.map((record) => record.verification);
+      const illustrative = trustObject(trustObject(spec).meta).grounding === 'illustrative';
+      if (verifications.indexOf('unresolved') !== -1) return { state: 'missing', label: 'Missing' };
+      if (verifications.indexOf('stale') !== -1) return { state: 'stale', label: 'Stale' };
+      if (verifications.indexOf('compatibility') !== -1) {
+        return illustrative
+          ? { state: 'declared', label: 'Declared' }
+          : { state: 'declared-unchecked', label: 'Declared, not checked' };
+      }
+      const asserted = records.find((record) => record.verification === 'asserted' || record.type === 'assertion');
+      if (asserted) return { state: 'asserted', label: `Asserted by ${asserted.author || 'a reviewer'}` };
+      if (records.length > 0 && verifications.every((value) => value === 'verified')) {
+        return { state: 'verified', label: 'Verified' };
+      }
+      if (records.length === 0) {
+        if (node.delta === 'ADDED') return { state: 'planned', label: 'Planned' };
+        if (node.status === 'INFERRED') return { state: 'unknown', label: 'Inferred' };
+        if (node.status === 'ASSUMED') return { state: 'unknown', label: 'Assumed' };
+      }
+      return { state: 'unknown', label: 'Unknown' };
+    }
+
+    function nodeEvidence(spec, nodeId) {
+      const source = trustObject(spec);
+      const node = trustArray(source.nodes).find((entry) => entry && entry.id === nodeId) || {};
+      const evidenceIds = trustArray(node.evidenceIds);
+      const records = trustArray(source.evidence).filter(
+        (record) => record && ((nodeId != null && record.nodeId === nodeId) || evidenceIds.indexOf(record.id) !== -1)
+      );
+      const locators = [];
+      const keys = new Set();
+      records.forEach((record) => {
+        const key = `${record.type}\u0000${trustLocatorKey(record.locator)}`;
+        if (keys.has(key)) return;
+        keys.add(key);
+        locators.push(record);
+      });
+      const state = trustEvidenceState(source, node, records);
+      return { records, locators, state: state.state, label: state.label };
+    }
+
+    function trustEntry(state, label, detail, chapter) {
+      return { state, label, detail, chapter };
+    }
+
+    function trustGroundingEntry(spec) {
+      const source = trustObject(spec);
+      const meta = trustObject(source.meta);
+      if (meta.grounding === 'illustrative') {
+        return trustEntry('neutral', 'Illustrative', 'A design sketch: file paths are examples and were not checked.', 'evidence');
+      }
+      if (!meta.groundedAt) {
+        return trustEntry('unchecked', 'Not grounded', 'The spec claims repository grounding but records no commit.', 'evidence');
+      }
+      const sha7 = String(meta.groundedAt).slice(0, 7);
+      const stale = trustArray(source.evidence).filter((record) => record && record.verification === 'stale').length;
+      if (stale > 0) {
+        return trustEntry('warn', `${stale} stale since ${sha7}`, `${stale} evidence record(s) no longer match the grounded commit.`, 'evidence');
+      }
+      return trustEntry('ok', `Grounded at ${sha7}`, `Evidence was checked against commit ${sha7}.`, 'evidence');
+    }
+
+    function trustEvidenceEntry(spec) {
+      const nodes = trustArray(trustObject(spec).nodes);
+      // An actor is a person or a client outside the system: nothing in a repository can back it.
+      const existing = nodes.filter((node) => node && node.delta !== 'ADDED' && node.type !== 'actor');
+      const planned = nodes.filter((node) => node && node.delta === 'ADDED').length;
+      let lacking = 0;
+      let unbacked = 0;
+      let verified = 0;
+      existing.forEach((node) => {
+        const evidence = nodeEvidence(spec, node.id);
+        // Lacking means a claim with nothing behind it: a record that did not resolve, a VERIFIED status
+        // without records, or evidence ids that point at nothing. An inferred node that never claimed
+        // evidence is counted as without evidence, neither hidden nor raised as a warning.
+        const claimed = node.status === 'VERIFIED' || trustArray(node.evidenceIds).length > 0;
+        if (evidence.state === 'missing' || (evidence.records.length === 0 && claimed)) lacking += 1;
+        else if (evidence.records.length === 0) unbacked += 1;
+        else if (evidence.state === 'verified') verified += 1;
+      });
+      const total = existing.length;
+      const backed = total - lacking - unbacked;
+      const suffix = `${unbacked > 0 ? ` · ${unbacked} without evidence` : ''}${planned > 0 ? ` · ${planned} planned` : ''}`;
+      if (lacking > 0) {
+        return trustEntry('warn', `${lacking} of ${total} existing lack evidence${suffix}`, `${lacking} of ${total} existing components claim evidence that is not there.`, 'evidence');
+      }
+      if (total > 0 && verified === total) {
+        return trustEntry('ok', `${total}/${total} existing verified${suffix}`, 'Every existing component cites verified evidence.', 'evidence');
+      }
+      return trustEntry('unchecked', `${backed}/${total} existing backed${suffix}`, 'Existing components cite evidence that was declared, not verified.', 'evidence');
+    }
+
+    function trustRulesEntry(spec) {
+      const source = trustObject(spec);
+      const policies = trustArray(source.policies);
+      const findings = trustArray(source.findings).concat(trustArray(trustObject(source.review).policyFindings));
+      const known = new Set();
+      policies.forEach((policy) => {
+        if (policy && policy.id != null) known.add(policy.id);
+      });
+      const violated = new Set();
+      findings.forEach((finding) => {
+        if (finding && finding.policyId != null && known.has(finding.policyId)) violated.add(finding.policyId);
+      });
+      const total = policies.length;
+      if (total === 0) {
+        return trustEntry('neutral', 'No rules', 'The specification declares no policies.', 'review');
+      }
+      if (violated.size === 0) {
+        return trustEntry('ok', `${total}/${total} rules pass`, 'Every declared policy passed.', 'review');
+      }
+      const count = violated.size;
+      return trustEntry('risk', `${count} violation${count === 1 ? '' : 's'} of ${total}`, `${count} of ${total} policies were violated by findings.`, 'review');
+    }
+
+    function trustOpenItemsEntry(spec) {
+      const source = trustObject(spec);
+      const review = trustObject(source.review);
+      const meta = trustObject(source.meta);
+      const questions = Array.isArray(review.unresolvedQuestions) ? review.unresolvedQuestions : trustArray(meta.unresolvedQuestions);
+      const assumptions = Array.isArray(review.assumptions) ? review.assumptions : trustArray(meta.assumptions);
+      const q = questions.length;
+      const a = assumptions.length;
+      if (q > 0) {
+        let label = `${q} open question${q === 1 ? '' : 's'}`;
+        if (a > 0) label += ` · ${a} assumption${a === 1 ? '' : 's'}`;
+        return trustEntry('warn', label, `${q} question(s) and ${a} assumption(s) remain open.`, 'review');
+      }
+      if (a > 0) {
+        return trustEntry('neutral', `${a} assumption${a === 1 ? '' : 's'}`, `${a} assumption(s) were declared without verification.`, 'review');
+      }
+      return trustEntry('ok', 'No open items', 'No unresolved questions or assumptions.', 'review');
+    }
+
+    function trustGateEntry(gate) {
+      const entries = trustArray(gate);
+      if (entries.length === 0) {
+        return trustEntry('unchecked', 'Gate not run', '', 'review');
+      }
+      const counts = { PASS: 0, WARN: 0, FAIL: 0, SKIP: 0 };
+      entries.forEach((entry) => {
+        if (entry && counts[entry.status] !== undefined) counts[entry.status] += 1;
+      });
+      let state = 'ok';
+      if (counts.FAIL > 0) state = 'risk';
+      else if (counts.WARN > 0) state = 'warn';
+      let label = `${counts.PASS} of ${entries.length} pass`;
+      if (counts.SKIP > 0) label += ` · ${counts.SKIP} skipped`;
+      if (counts.WARN > 0) label += ` · ${counts.WARN} warning${counts.WARN === 1 ? '' : 's'}`;
+      if (counts.FAIL > 0) label += ` · ${counts.FAIL} failed`;
+      const detail = entries
+        .filter((entry) => entry && (entry.status === 'SKIP' || entry.status === 'WARN' || entry.status === 'FAIL'))
+        .map((entry) => `${entry.name}: ${entry.detail}`)
+        .join(' ');
+      return trustEntry(state, label, detail, 'review');
+    }
+
+    function trustSummary(spec, gate) {
+      return {
+        grounding: trustGroundingEntry(spec),
+        evidence: trustEvidenceEntry(spec),
+        rules: trustRulesEntry(spec),
+        openItems: trustOpenItemsEntry(spec),
+        gate: trustGateEntry(gate),
+      };
+    }
+
     // Pure, DOM-free codec for the workbench URL hash. Nothing here touches the document: callers pass
     // plain values in and get plain values out, so the same functions run under Node in the tests.
     const URL_CODEC_DEFAULT_VIEW = 'architecture';
@@ -6493,16 +6841,30 @@
       setIconLabel(document.getElementById('theme-icon'), state.theme === THEMES.DARK ? 'ui-moon' : 'ui-sun');
     }
 
+    function toggleTheme() {
+      actions.setTheme(state.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK);
+      applyTheme();
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
+      } catch (err) {
+        /* storage unavailable (private mode) - theme still applies for this session */
+      }
+    }
+
+    function fitFromButton() {
+      actions.setCamera({ userMoved: false });
+      fitToScreen();
+    }
+
+    function toggleGatePanel() {
+      document.getElementById('gate-panel').classList.toggle('open');
+    }
+
     function setupEventListeners() {
-      document.getElementById('btn-theme').addEventListener('click', () => {
-        actions.setTheme(state.theme === THEMES.DARK ? THEMES.LIGHT : THEMES.DARK);
-        applyTheme();
-        try {
-          window.localStorage.setItem(THEME_STORAGE_KEY, state.theme);
-        } catch (err) {
-          /* storage unavailable (private mode) - theme still applies for this session */
-        }
-      });
+      const btnPalette = document.getElementById('btn-palette');
+      if (btnPalette) btnPalette.addEventListener('click', () => togglePalette(btnPalette));
+
+      document.getElementById('btn-theme').addEventListener('click', toggleTheme);
 
       // Tabs bar: vertical mouse wheel scrolls the horizontal tab strip
       const tabsSection = document.querySelector('.tabs-section');
@@ -6551,10 +6913,7 @@
 
       document.getElementById('btn-zoom-in').addEventListener('click', () => zoomBy(1.2));
       document.getElementById('btn-zoom-out').addEventListener('click', () => zoomBy(0.8));
-      document.getElementById('btn-fit').addEventListener('click', () => {
-        actions.setCamera({ userMoved: false });
-        fitToScreen();
-      });
+      document.getElementById('btn-fit').addEventListener('click', fitFromButton);
       document.getElementById('btn-reset').addEventListener('click', resetView);
 
       let resizeTimer = null;
@@ -6638,9 +6997,7 @@
         });
       });
 
-      document.getElementById('btn-gate').addEventListener('click', () => {
-        document.getElementById('gate-panel').classList.toggle('open');
-      });
+      document.getElementById('btn-gate').addEventListener('click', toggleGatePanel);
       document.getElementById('gate-close').addEventListener('click', () => {
         document.getElementById('gate-panel').classList.remove('open');
       });
@@ -6657,6 +7014,12 @@
     }
 
     function handleKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
+        e.preventDefault();
+        togglePalette(document.activeElement);
+        return;
+      }
+
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
       if (typing) {
         if (e.key === 'Escape' && activeDrawer) {
@@ -8003,8 +8366,547 @@
       }
     }
 
+    // Command Palette
+    const PALETTE_GROUPS = ['Commands', 'Views', 'Components', 'Connections', 'Scenario stages', 'Export'];
+
+    let paletteOpener = null;
+    let paletteCurrentItems = [];
+    let paletteActiveIndex = 0;
+    let paletteIsOpen = false;
+
+    function paletteBuildAllItems() {
+      const items = [];
+
+      // 1. Commands
+      const commands = [
+        {
+          id: 'cmd-fit',
+          group: 'Commands',
+          label: 'Fit diagram',
+          hint: 'F',
+          icon: 'ui-fit',
+          run: () => fitFromButton()
+        },
+        {
+          id: 'cmd-reset',
+          group: 'Commands',
+          label: 'Reset view',
+          hint: '0',
+          icon: 'ui-reset',
+          run: () => resetView()
+        },
+        {
+          id: 'cmd-presentation',
+          group: 'Commands',
+          label: 'Presentation mode',
+          hint: 'Command',
+          icon: 'ui-play',
+          run: () => setPresentation(!state.presentation)
+        },
+        {
+          id: 'cmd-fullscreen',
+          group: 'Commands',
+          label: 'Fullscreen',
+          hint: 'Command',
+          icon: 'ui-collapse',
+          run: () => toggleFullscreen()
+        },
+        {
+          id: 'cmd-animate',
+          group: 'Commands',
+          label: 'Animate data flow',
+          hint: 'A',
+          icon: 'ui-play',
+          run: () => toggleFlowAnimation()
+        },
+        {
+          id: 'cmd-theme',
+          group: 'Commands',
+          label: 'Switch theme',
+          hint: 'Command',
+          icon: state.theme === THEMES.DARK ? 'ui-sun' : 'ui-moon',
+          run: () => toggleTheme()
+        },
+        {
+          id: 'cmd-gate',
+          group: 'Commands',
+          label: 'Quality gate',
+          hint: 'Command',
+          icon: 'ui-check-circle',
+          run: () => toggleGatePanel()
+        },
+        {
+          id: 'cmd-copy-link',
+          group: 'Commands',
+          label: 'Copy link',
+          hint: 'Command',
+          icon: 'ui-copy',
+          run: () => {
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(location.href)
+                .then(() => announceStatus('Link copied.'))
+                .catch(() => announceStatus('Copy failed; the link is in the address bar.'));
+            } else {
+              announceStatus('Copy failed; the link is in the address bar.');
+            }
+          }
+        }
+      ];
+
+      if (state.selectedNodeId) {
+        commands.push(
+          {
+            id: 'cmd-focus-neighbors',
+            group: 'Commands',
+            label: 'Show neighbours',
+            hint: 'Focus',
+            icon: 'ui-link',
+            run: () => setFocusMode(FOCUS_MODES.NEIGHBORS)
+          },
+          {
+            id: 'cmd-focus-affected',
+            group: 'Commands',
+            label: 'Show blast radius',
+            hint: 'Impact',
+            icon: 'ui-alert',
+            run: () => setFocusMode(FOCUS_MODES.AFFECTED)
+          }
+        );
+      }
+      items.push(...commands);
+
+      // 2. Views
+      const views = [
+        {
+          id: 'view-architecture',
+          group: 'Views',
+          label: 'Architecture',
+          hint: 'View',
+          icon: 'ui-architecture',
+          run: () => switchView(VIEWS.ARCHITECTURE)
+        },
+        {
+          id: 'view-before_after',
+          group: 'Views',
+          label: 'Before vs After',
+          hint: 'Delta · View',
+          icon: 'ui-delta',
+          run: () => switchView(VIEWS.BEFORE_AFTER)
+        },
+        {
+          id: 'view-data_flow',
+          group: 'Views',
+          label: 'Data Flow',
+          hint: 'View',
+          icon: 'ui-flow',
+          run: () => switchView(VIEWS.DATA_FLOW)
+        },
+        {
+          id: 'view-sequence',
+          group: 'Views',
+          label: 'Sequence Flow',
+          hint: 'Sequence · View',
+          icon: 'ui-sequence',
+          run: () => switchView(VIEWS.SEQUENCE)
+        },
+        {
+          id: 'view-database_er',
+          group: 'Views',
+          label: 'Database ER',
+          hint: 'Data Model · View',
+          icon: 'ui-data',
+          run: () => switchView(VIEWS.DATABASE_ER)
+        },
+        {
+          id: 'view-implementation_plan',
+          group: 'Views',
+          label: 'Implementation Plan',
+          hint: 'Plan · View',
+          icon: 'ui-plan',
+          run: () => switchView(VIEWS.IMPLEMENTATION_PLAN)
+        }
+      ];
+      items.push(...views);
+
+      // 3. Components
+      (LAYOUT_DATA.nodes || []).forEach(node => {
+        items.push({
+          id: `node-${node.id}`,
+          modelId: node.id,
+          group: 'Components',
+          label: node.label || node.id,
+          hint: node.technology || node.type || 'Component',
+          icon: getNodeIcon(node.type || node),
+          run: () => openInspectorForNode(node.id)
+        });
+      });
+
+      // 4. Connections
+      (LAYOUT_DATA.edges || []).forEach(edge => {
+        const sourceNode = nodeById.get(edge.source);
+        const targetNode = nodeById.get(edge.target);
+        const sourceLabel = sourceNode?.label || edge.source;
+        const targetLabel = targetNode?.label || edge.target;
+        const edgeLabel = edge.label || edge.packetLabel || '';
+        const label = `${sourceLabel} → ${targetLabel}${edgeLabel ? ` · ${edgeLabel}` : ''}`;
+        const hint = edge.communication || edge.pathType || 'Connection';
+        items.push({
+          id: `edge-${edge.id}`,
+          modelId: edge.id,
+          group: 'Connections',
+          label,
+          hint,
+          icon: 'ui-link',
+          run: () => openInspectorForEdge(edge.id)
+        });
+      });
+
+      // 5. Scenario stages
+      (ARCH_SPEC.scenarios || []).forEach(scenario => {
+        const stages = flattenScenarioStages(scenario.stages);
+        stages.forEach((stage, i) => {
+          const stageTitle = stage.name || stage.label || stage.id || `Stage ${i + 1}`;
+          items.push({
+            id: `stage-${scenario.id}-${stage.id || i}`,
+            group: 'Scenario stages',
+            label: stageTitle,
+            hint: scenario.name || scenario.id,
+            keywords: stage.id || '',
+            icon: 'ui-sequence',
+            run: () => {
+              selectScenario(scenario.id);
+              actions.setScenarioStage(i);
+              renderScenarioStage();
+            }
+          });
+        });
+      });
+
+      // 6. Export
+      const exports = [
+        {
+          id: 'export-html',
+          group: 'Export',
+          label: 'Export Standalone HTML',
+          hint: 'Export',
+          icon: 'ui-export',
+          run: () => runExport('html')
+        },
+        {
+          id: 'export-svg',
+          group: 'Export',
+          label: 'Export SVG vector',
+          hint: 'Export',
+          icon: 'ui-export',
+          run: () => runExport('svg')
+        },
+        {
+          id: 'export-png',
+          group: 'Export',
+          label: 'Export PNG image',
+          hint: 'Export',
+          icon: 'ui-export',
+          run: () => runExport('png')
+        },
+        {
+          id: 'export-markdown',
+          group: 'Export',
+          label: 'Export Markdown report',
+          hint: 'Export',
+          icon: 'ui-export',
+          run: () => runExport('markdown')
+        },
+        {
+          id: 'export-mermaid',
+          group: 'Export',
+          label: 'Export Mermaid source',
+          hint: 'Export',
+          icon: 'ui-export',
+          run: () => runExport('mermaid')
+        }
+      ];
+      items.push(...exports);
+
+      return items;
+    }
+
+    function paletteFilter(rawQuery) {
+      const allItems = paletteBuildAllItems();
+      const q = (rawQuery || '').trim().toLowerCase();
+
+      if (!q) {
+        const allowed = new Set(['Commands', 'Views', 'Components']);
+        paletteCurrentItems = allItems.filter(item => allowed.has(item.group)).slice(0, 50);
+      } else {
+        const tokens = q.split(/\s+/).filter(Boolean);
+        const matched = [];
+
+        for (const item of allItems) {
+          const haystack = `${item.label} ${item.hint || ''} ${item.group} ${item.id} ${item.modelId || ''} ${item.keywords || ''}`.toLowerCase();
+          if (!tokens.every(token => haystack.includes(token))) continue;
+
+          const lowerLabel = item.label.toLowerCase();
+          let tier = 2;
+          if (lowerLabel.startsWith(q)) {
+            tier = 0;
+          } else if (lowerLabel.includes(q)) {
+            tier = 1;
+          }
+          const groupIdx = PALETTE_GROUPS.indexOf(item.group);
+          matched.push({ item, tier, groupIdx });
+        }
+
+        matched.sort((a, b) => {
+          if (a.tier !== b.tier) return a.tier - b.tier;
+          if (a.groupIdx !== b.groupIdx) return a.groupIdx - b.groupIdx;
+          return 0;
+        });
+
+        paletteCurrentItems = matched.map(m => m.item).slice(0, 50);
+      }
+
+      paletteActiveIndex = 0;
+      paletteRenderList();
+    }
+
+    function paletteRenderList() {
+      const list = document.getElementById('palette-list');
+      const input = document.getElementById('palette-input');
+      if (!list || !input) return;
+
+      list.replaceChildren();
+
+      if (paletteCurrentItems.length === 0) {
+        paletteActiveIndex = -1;
+        input.removeAttribute('aria-activedescendant');
+        const emptyRow = document.createElement('div');
+        emptyRow.className = 'palette-empty';
+        emptyRow.textContent = 'No matches';
+        list.appendChild(emptyRow);
+        return;
+      }
+
+      if (paletteActiveIndex < 0 || paletteActiveIndex >= paletteCurrentItems.length) {
+        paletteActiveIndex = 0;
+      }
+
+      input.setAttribute('aria-activedescendant', `palette-opt-${paletteActiveIndex}`);
+
+      paletteCurrentItems.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.id = `palette-opt-${index}`;
+        row.className = `palette-row${index === paletteActiveIndex ? ' active' : ''}`;
+        row.setAttribute('role', 'option');
+        row.setAttribute('aria-selected', index === paletteActiveIndex ? 'true' : 'false');
+        if (item.modelId) {
+          row.setAttribute('data-model-id', item.modelId);
+          row.setAttribute('data-model-kind', item.group === 'Components' ? 'node' : 'edge');
+        }
+        row.setAttribute('data-index', String(index));
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'palette-row-icon';
+        iconSpan.innerHTML = iconMarkup(item.icon);
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'palette-row-label';
+        labelSpan.textContent = item.label;
+
+        const hintSpan = document.createElement('span');
+        hintSpan.className = 'palette-row-hint';
+        hintSpan.textContent = item.hint || '';
+
+        row.appendChild(iconSpan);
+        row.appendChild(labelSpan);
+        row.appendChild(hintSpan);
+
+        row.addEventListener('click', () => {
+          paletteRunItem(item);
+        });
+
+        row.addEventListener('mouseenter', () => {
+          paletteSetActive(index);
+        });
+
+        list.appendChild(row);
+      });
+    }
+
+    function paletteSetActive(index) {
+      if (paletteCurrentItems.length === 0) return;
+      paletteActiveIndex = Math.max(0, Math.min(index, paletteCurrentItems.length - 1));
+      const input = document.getElementById('palette-input');
+      if (input) {
+        input.setAttribute('aria-activedescendant', `palette-opt-${paletteActiveIndex}`);
+      }
+      const rows = document.querySelectorAll('#palette-list .palette-row');
+      rows.forEach((row, i) => {
+        const isAct = i === paletteActiveIndex;
+        row.setAttribute('aria-selected', isAct ? 'true' : 'false');
+        row.classList.toggle('active', isAct);
+        if (isAct) {
+          row.scrollIntoView({ block: 'nearest' });
+        }
+      });
+    }
+
+    function paletteMoveActive(delta) {
+      if (paletteCurrentItems.length === 0) return;
+      const count = paletteCurrentItems.length;
+      const newIndex = (paletteActiveIndex + delta + count) % count;
+      paletteSetActive(newIndex);
+    }
+
+    function paletteRunActive() {
+      if (paletteCurrentItems.length === 0 || paletteActiveIndex < 0 || paletteActiveIndex >= paletteCurrentItems.length) {
+        return;
+      }
+      paletteRunItem(paletteCurrentItems[paletteActiveIndex]);
+    }
+
+    function paletteRunItem(item) {
+      const returnTarget = paletteOpener;
+      closePalette(false);
+      item.run();
+      if (!document.activeElement || document.activeElement === document.body || document.getElementById('palette-dialog')?.contains(document.activeElement)) {
+        if (returnTarget && typeof returnTarget.focus === 'function') {
+          returnTarget.focus();
+        }
+      }
+    }
+
+    function openPalette(opener) {
+      const scrim = document.getElementById('palette-scrim');
+      const input = document.getElementById('palette-input');
+      if (!scrim || !input) return;
+
+      paletteOpener = (opener && opener !== input) ? opener : document.activeElement;
+      paletteIsOpen = true;
+
+      scrim.removeAttribute('hidden');
+      scrim.setAttribute('data-open', 'true');
+      scrim.classList.add('open');
+
+      input.value = '';
+      paletteFilter('');
+
+      input.focus();
+      input.select();
+    }
+
+    function closePalette(restoreFocus = true) {
+      const scrim = document.getElementById('palette-scrim');
+      if (!scrim) return;
+
+      paletteIsOpen = false;
+      scrim.setAttribute('hidden', '');
+      scrim.setAttribute('data-open', 'false');
+      scrim.classList.remove('open');
+
+      const target = paletteOpener;
+      if (restoreFocus && target && typeof target.focus === 'function') {
+        target.focus();
+      }
+    }
+
+    function togglePalette(opener) {
+      if (paletteIsOpen) {
+        closePalette(true);
+      } else {
+        openPalette(opener);
+      }
+    }
+
+    function paletteHandleKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
+        e.preventDefault();
+        e.stopPropagation();
+        closePalette(true);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closePalette(true);
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        paletteMoveActive(1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        paletteMoveActive(-1);
+        return;
+      }
+      if (e.key === 'Home') {
+        e.preventDefault();
+        paletteSetActive(0);
+        return;
+      }
+      if (e.key === 'End') {
+        e.preventDefault();
+        paletteSetActive(paletteCurrentItems.length - 1);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        paletteRunActive();
+        return;
+      }
+    }
+
+    function paletteInit() {
+      if (typeof document === 'undefined' || typeof document.querySelector !== 'function' || typeof document.getElementById !== 'function') {
+        return;
+      }
+      const kbd = document.querySelector('#btn-palette kbd');
+      if (kbd) {
+        const isMac = Boolean(typeof navigator !== 'undefined' && (navigator.platform || '').includes('Mac'));
+        kbd.textContent = isMac ? '⌘K' : 'Ctrl K';
+      }
+      const scrim = document.getElementById('palette-scrim');
+      const dialog = document.getElementById('palette-dialog');
+      const input = document.getElementById('palette-input');
+
+      if (scrim) {
+        scrim.addEventListener('click', e => {
+          if (e.target === scrim) {
+            closePalette(true);
+          }
+        });
+      }
+      if (dialog) {
+        dialog.addEventListener('keydown', paletteHandleKeyDown);
+      }
+      if (input) {
+        input.addEventListener('input', () => {
+          paletteFilter(input.value);
+        });
+      }
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      if (typeof document !== 'undefined' && document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', paletteInit);
+      } else {
+        paletteInit();
+      }
+    }
+
     window.addEventListener('DOMContentLoaded', init);
   </script>
+  <div id="palette-scrim" class="palette-scrim" data-open="false" hidden>
+    <div id="palette-dialog" class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input type="text" id="palette-input" class="palette-input" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" placeholder="Search commands, views, components..." spellcheck="false" autocomplete="off" />
+      <div id="palette-list" class="palette-list" role="listbox"></div>
+    </div>
+  </div>
   <div id="workbench-status" class="workbench-sr-only" role="status" aria-live="polite"></div>
 </body>
 </html>

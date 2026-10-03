@@ -15,11 +15,18 @@ header {
   box-shadow: none;
 }
 
+/* The title block takes the space that is left and ellipsizes; the controls never get pushed off. */
 .brand-section {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
+.brand-section > div { min-width: 0; }
+.brand-section > .brand-mark { flex: none; }
+#doc-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-actions { flex: none; }
 
 .badge-status[hidden] { display: none; }
 .filter-bar .badge-status { flex-shrink: 0; white-space: nowrap; }

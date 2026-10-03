@@ -5,6 +5,7 @@ const suites = [
   require('./layout.test.js'),
   require('./compiler.test.js'),
   require('./url.test.js'),
+  require('./trust.test.js'),
   require('./cli.test.js'),
   require('./scaffold.test.js'),
   require('./rendered.test.js')

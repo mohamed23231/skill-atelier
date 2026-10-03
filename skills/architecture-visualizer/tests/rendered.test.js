@@ -1603,6 +1603,288 @@ const cases = [
     },
   ],
 
+  [
+    '1c: palette Ctrl+K opens and selects component and connection',
+    () => {
+      const CTRL_K = key('k', { code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2 });
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          __record('transformBefore', __transform());
+          return __observed();
+        })()`),
+        CTRL_K,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(100);
+          var scrim = __q('#palette-scrim');
+          var input = __q('#palette-input');
+          __record('paletteOpen', scrim ? scrim.getAttribute('data-open') : null);
+          __record('inputFocused', document.activeElement === input);
+          __input(input, 'API Service');
+          await __sleep(100);
+          var firstRow = __q('#palette-opt-0');
+          __record('firstRowModelId', firstRow ? firstRow.getAttribute('data-model-id') : null);
+          return __observed();
+        })()`),
+        ENTER(),
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(200);
+          var scrim = __q('#palette-scrim');
+          var node = __q('#node-api');
+          var inspector = __region('inspector');
+          __record('paletteClosedAfterNode', scrim ? scrim.getAttribute('data-open') : null);
+          __record('nodeSelected', node ? node.getAttribute('data-selected') : null);
+          __record('inspectorOpenNode', __open('inspector'));
+          __record('inspectorKindNode', inspector ? inspector.getAttribute('data-inspector-kind') : null);
+          __record('transformAfterNode', __transform());
+          return __observed();
+        })()`),
+        CTRL_K,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(100);
+          var input = __q('#palette-input');
+          __input(input, 'SQL Write');
+          await __sleep(100);
+          var firstRow = __q('#palette-opt-0');
+          __record('edgeRowModelId', firstRow ? firstRow.getAttribute('data-model-id') : null);
+          return __observed();
+        })()`),
+        ENTER(),
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(200);
+          var scrim = __q('#palette-scrim');
+          var edge = __q('#path-e1');
+          var inspector = __region('inspector');
+          __record('paletteClosedAfterEdge', scrim ? scrim.getAttribute('data-open') : null);
+          __record('edgeSelected', edge ? edge.getAttribute('data-selected') : null);
+          __record('inspectorOpenEdge', __open('inspector'));
+          __record('inspectorKindEdge', inspector ? inspector.getAttribute('data-inspector-kind') : null);
+          __record('transformAfterEdge', __transform());
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.paletteOpen, 'true', 'Ctrl+K should open the palette');
+      assert.strictEqual(obs.inputFocused, true, 'Palette input should be focused on open');
+      assert.strictEqual(obs.firstRowModelId, 'api', 'Typing "API Service" should put api component first');
+      assert.strictEqual(obs.nodeSelected, 'true', 'Enter should mark #node-api data-selected="true"');
+      assert.strictEqual(obs.inspectorOpenNode, 'true', 'Selecting node should open inspector');
+      assert.strictEqual(obs.inspectorKindNode, 'node', 'Inspector should be in node state');
+      assert.notStrictEqual(obs.transformAfterNode, obs.transformBefore, 'Camera transform should change on node selection');
+      assert.strictEqual(obs.paletteClosedAfterNode, 'false', 'Palette should close after running node item');
+
+      assert.strictEqual(obs.edgeRowModelId, 'e1', 'Typing "SQL Write" should put e1 connection first');
+      assert.strictEqual(obs.edgeSelected, 'true', 'Enter should mark #path-e1 data-selected="true"');
+      assert.strictEqual(obs.inspectorOpenEdge, 'true', 'Selecting edge should open inspector');
+      assert.strictEqual(obs.inspectorKindEdge, 'edge', 'Inspector should be in edge state');
+      assert.notStrictEqual(obs.transformAfterEdge, obs.transformAfterNode, 'Camera transform should change on edge selection');
+      assert.strictEqual(obs.paletteClosedAfterEdge, 'false', 'Palette should close after running edge item');
+    },
+  ],
+
+  [
+    '1c: palette ArrowDown moves aria-activedescendant and aria-selected to the second row',
+    () => {
+      const CTRL_K = key('k', { code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2 });
+      const ARROW_DOWN = key('ArrowDown', { code: 'ArrowDown', windowsVirtualKeyCode: 40 });
+      const steps = [
+        CTRL_K,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(100);
+          window.__obs = {};
+          var input = __q('#palette-input');
+          var row0 = __q('#palette-opt-0');
+          var row1 = __q('#palette-opt-1');
+          __record('initialDescendant', input ? input.getAttribute('aria-activedescendant') : null);
+          __record('initialRow0Selected', row0 ? row0.getAttribute('aria-selected') : null);
+          __record('initialRow1Selected', row1 ? row1.getAttribute('aria-selected') : null);
+          return __observed();
+        })()`),
+        ARROW_DOWN,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(80);
+          var input = __q('#palette-input');
+          var row0 = __q('#palette-opt-0');
+          var row1 = __q('#palette-opt-1');
+          __record('afterDescendant', input ? input.getAttribute('aria-activedescendant') : null);
+          __record('afterRow0Selected', row0 ? row0.getAttribute('aria-selected') : null);
+          __record('afterRow1Selected', row1 ? row1.getAttribute('aria-selected') : null);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.initialDescendant, 'palette-opt-0', 'Initial aria-activedescendant should be first row');
+      assert.strictEqual(obs.initialRow0Selected, 'true', 'First row should be selected initially');
+      assert.strictEqual(obs.initialRow1Selected, 'false', 'Second row should not be selected initially');
+      assert.strictEqual(obs.afterDescendant, 'palette-opt-1', 'ArrowDown should move aria-activedescendant to second row');
+      assert.strictEqual(obs.afterRow0Selected, 'false', 'First row should no longer be selected after ArrowDown');
+      assert.strictEqual(obs.afterRow1Selected, 'true', 'Second row should be selected after ArrowDown');
+    },
+  ],
+
+  [
+    '1c: palette presentation and mermaid commands run from search',
+    () => {
+      const CTRL_K = key('k', { code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2 });
+      const steps = [
+        CTRL_K,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(100);
+          window.__obs = {};
+          var input = __q('#palette-input');
+          __input(input, 'presentation');
+          await __sleep(100);
+          return __observed();
+        })()`),
+        ENTER(),
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(150);
+          __record('presentation', document.body.getAttribute('data-presentation'));
+          var scrim = __q('#palette-scrim');
+          __record('paletteClosedAfterPres', scrim ? scrim.getAttribute('data-open') : null);
+          return __observed();
+        })()`),
+        CTRL_K,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(100);
+          var input = __q('#palette-input');
+          __input(input, 'mermaid');
+          await __sleep(100);
+          return __observed();
+        })()`),
+        ENTER(),
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(150);
+          var modal = __q('#modal');
+          var scrim = __q('#palette-scrim');
+          __record('modalOpen', modal ? modal.classList.contains('open') : false);
+          __record('paletteClosedAfterMermaid', scrim ? scrim.getAttribute('data-open') : null);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.presentation, 'true', 'presentation + Enter should set body[data-presentation="true"]');
+      assert.strictEqual(obs.paletteClosedAfterPres, 'false', 'Palette should close after presentation command');
+      assert.strictEqual(obs.modalOpen, true, 'mermaid + Enter should open the Mermaid modal');
+      assert.strictEqual(obs.paletteClosedAfterMermaid, 'false', 'Palette should close after mermaid command');
+    },
+  ],
+
+  [
+    '1c: palette Escape closes, restores button focus and preserves selection',
+    () => {
+      const steps = [
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          window.__obs = {};
+          openInspectorForNode('api');
+          await __sleep(120);
+          var node = __q('#node-api');
+          __record('initiallySelected', node ? node.getAttribute('data-selected') : null);
+          var btn = __q('#btn-palette');
+          __click(btn);
+          await __sleep(100);
+          var scrim = __q('#palette-scrim');
+          __record('paletteOpen', scrim ? scrim.getAttribute('data-open') : null);
+          return __observed();
+        })()`),
+        ESCAPE(),
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(120);
+          var scrim = __q('#palette-scrim');
+          var node = __q('#node-api');
+          var btn = __q('#btn-palette');
+          __record('paletteOpenAfterEscape', scrim ? scrim.getAttribute('data-open') : null);
+          __record('focusRestoredToBtn', document.activeElement === btn);
+          __record('nodeStillSelected', node ? node.getAttribute('data-selected') : null);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.initiallySelected, 'true', 'Node should be selected before opening palette');
+      assert.strictEqual(obs.paletteOpen, 'true', 'Clicking #btn-palette should open palette');
+      assert.strictEqual(obs.paletteOpenAfterEscape, 'false', 'Escape should close palette');
+      assert.strictEqual(obs.focusRestoredToBtn, true, 'Focus should return to #btn-palette after Escape');
+      assert.strictEqual(obs.nodeStillSelected, 'true', 'Existing selection should remain selected');
+    },
+  ],
+
+  [
+    '1c: palette fits inside viewport and prevents horizontal scroll at 320x800',
+    () => {
+      const CTRL_K = key('k', { code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2 });
+      const steps = [
+        CTRL_K,
+        ev(`(async function () {
+          ${PAGE_HELPERS}
+          await __sleep(120);
+          window.__obs = {};
+          var scrim = __q('#palette-scrim');
+          var palette = __q('#palette-dialog') || __q('.palette');
+          var r = palette ? palette.getBoundingClientRect() : null;
+          __record('paletteOpen', scrim ? scrim.getAttribute('data-open') : null);
+          __record('rect', r ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height } : null);
+          __record('innerWidth', window.innerWidth);
+          __record('innerHeight', window.innerHeight);
+          __record('scrollWidth', document.documentElement.scrollWidth);
+          return __observed();
+        })()`),
+      ];
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 320, height: 800, mobile: false, steps }]);
+      const obs = lastEvalValue(results[0]);
+      assert.strictEqual(obs.paletteOpen, 'true', 'Palette should open at 320x800');
+      assert.strictEqual(obs.innerWidth, 320, 'innerWidth should be 320');
+      assert.ok(obs.scrollWidth <= obs.innerWidth, `document.documentElement.scrollWidth (${obs.scrollWidth}) must not be greater than innerWidth (${obs.innerWidth})`);
+      assert.ok(obs.rect, 'Palette rect must exist');
+      assert.ok(obs.rect.left >= 0, `Palette left (${obs.rect.left}) must be >= 0`);
+      assert.ok(obs.rect.right <= obs.innerWidth, `Palette right (${obs.rect.right}) must be <= innerWidth (${obs.innerWidth})`);
+      assert.ok(obs.rect.top >= 0, `Palette top (${obs.rect.top}) must be >= 0`);
+      assert.ok(obs.rect.bottom <= obs.innerHeight, `Palette bottom (${obs.rect.bottom}) must be <= innerHeight (${obs.innerHeight})`);
+    },
+  ],
+
+
+  [
+    '1c: from phone to desktop the header keeps every visible control on screen, the palette reachable and the title ellipsized',
+    () => {
+      const PROBE = ev(`JSON.stringify((function () {
+        // The view tabs scroll inside their own bar (covered by the tabs-bar test), so they are clipped there, not by the page.
+        const controls = [...document.querySelectorAll('header button')].filter((b) => !b.closest('.tabs-section') && getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().width > 0);
+        const mark = document.querySelector('.brand-mark').getBoundingClientRect();
+        const palette = document.getElementById('btn-palette').getBoundingClientRect();
+        return {
+          scroll: document.documentElement.scrollWidth - innerWidth,
+          offscreen: controls.filter((b) => { const r = b.getBoundingClientRect(); return r.left < 0 || r.right > innerWidth + 0.5; }).map((b) => b.id || b.getAttribute('aria-label')),
+          palette: palette.width > 0 && palette.left >= mark.right,
+          markWidth: mark.width,
+        };
+      })())`);
+      [320, 390, 768, 900, 1024, 1280, 1440].forEach((width) => {
+        const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width, height: 844, steps: [PROBE] }]);
+        const probe = JSON.parse(lastEvalValue(phase));
+        assert.strictEqual(probe.scroll, 0, `${width}: the page scrolls sideways`);
+        assert.deepStrictEqual(probe.offscreen, [], `${width}: header controls pushed off screen`);
+        assert.ok(probe.palette, `${width}: the palette button is hidden or overlaps the brand mark`);
+        assert.ok(probe.markWidth >= 14, `${width}: the brand mark was squeezed`);
+      });
+    },
+  ],
 ];
 
 module.exports = { name: 'Rendered DOM Verification', cases };
