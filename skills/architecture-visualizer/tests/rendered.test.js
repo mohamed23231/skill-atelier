@@ -1380,6 +1380,18 @@ const cases = [
     assert.deepStrictEqual(JSON.parse(values[1]), [true, 'stage_relay_outbox_event']);
     assert.strictEqual(values[3], 'stage_publish_order_created');
   }],
+  ['viewer: a running walkthrough ends from its End button, an empty-canvas click, or choosing a card, and nothing stays lit', () => {
+    const LIT = `JSON.stringify({ active: walkIsActive(), lit: document.querySelectorAll('.node-group.walk-active, .node-group.out-of-focus, .edge-path.highlighted').length, sheet: document.getElementById('component-sheet').hidden })`;
+    const START = ev(`(startWalkthrough(ARCH_SPEC.scenarios[0].id), walkNext(), walkNext(), 0)`);
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      START, mouse({ action: 'click', selector: '.walk-end', fx: 0.5, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${LIT}), 300))`),
+      START, mouse({ action: 'jitter-click', selector: '#canvas-container', fx: 0.02, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${LIT}), 300))`),
+      START, mouse({ action: 'click', selector: '#node-warehouse_service', fx: 0.5, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${LIT}), 400))`)] }]);
+    const [endButton, emptyCanvas, card] = phase.filter(step => step && step.kind === 'eval' && step.value !== 0).map(step => JSON.parse(step.value));
+    assert.deepStrictEqual(endButton, { active: false, lit: 0, sheet: true });
+    assert.deepStrictEqual(emptyCanvas, { active: false, lit: 0, sheet: true });
+    assert.deepStrictEqual({ active: card.active, sheet: card.sheet }, { active: false, sheet: false }, 'choosing a card leaves the walkthrough and opens the card');
+  }],
   ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({
       rail: document.querySelector('[data-region="rail"]').getAttribute('data-open'),
@@ -2270,7 +2282,8 @@ const cases = [
   [
     '1d: a version 2 camera frames the same world region on a different screen',
     () => {
-      const WORLD = ev('JSON.stringify(canvasCameraWorld())');
+      // Sample once the track and rail have settled; a linked camera re-applies on each resize.
+      const WORLD = ev('new Promise(r => setTimeout(() => r(JSON.stringify(canvasCameraWorld())), 300))');
       [[1440, 900], [1024, 768]].forEach(([width, height]) => {
         const [phase] = runPhases(fixtures.VALID_SPEC, [{ width, height, steps: [WORLD] }], undefined, { hash: 'v=2&cam=600,400,1200' });
         const world = JSON.parse(lastEvalValue(phase));

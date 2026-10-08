@@ -426,6 +426,7 @@ function buildWalkButton(className, icon, label, handler) {
   button.type = 'button';
   button.className = className;
   button.setAttribute('aria-label', label);
+  button.title = label;
   button.innerHTML = iconMarkup(icon);
   button.addEventListener('click', handler);
   return button;
@@ -504,6 +505,10 @@ function renderWalkTrack() {
   length.textContent = `${walkAllStepsTotal(scenario)} steps`;
   length.hidden = active;
   controls.append(count, length);
+  if (active) {
+    const end = buildWalkButton('btn-icon walk-end', 'ui-close', 'End walkthrough', () => endWalkthrough());
+    controls.appendChild(end);
+  }
 
   const beads = document.createElement('div');
   beads.className = 'walk-beads';

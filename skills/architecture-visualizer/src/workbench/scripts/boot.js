@@ -201,8 +201,11 @@ function setupEventListeners() {
 
   document.addEventListener('click', () => document.getElementById('export-menu').classList.remove('open'));
   document.addEventListener('keydown', handleKeyDown);
+  // Clicking empty canvas clears everything: the selection and a running walkthrough.
   svg.addEventListener('click', () => {
-    if (!state.dragMoved) closeInspector();
+    if (state.dragMoved) return;
+    closeInspector();
+    if (walkIsActive()) endWalkthrough();
   });
   svg.addEventListener('mouseover', event => {
     const group = event.target.closest?.('.node-group');

@@ -87,7 +87,14 @@ function focusModelPoint(x, y) {
   updateTransform();
 }
 
+// Choosing a component or connection on the canvas leaves a running walkthrough, as in the
+// prototype: the reader has moved on to something else.
+function leaveWalkthroughForSelection() {
+  if (typeof walkIsActive === 'function' && walkIsActive() && !restoringViewState) endWalkthrough();
+}
+
 function openInspectorForNode(nodeId) {
+  leaveWalkthroughForSelection();
   showNodeInspector();
   actions.selectEdge(null);
   document.querySelectorAll('[data-selected="true"]').forEach(item => item.removeAttribute('data-selected'));
@@ -106,6 +113,7 @@ function openInspectorForNode(nodeId) {
 }
 
 function openInspectorForEdge(edgeId) {
+  leaveWalkthroughForSelection();
   showNodeInspector();
   const edge = edgeById.get(edgeId);
   if (!edge) return;

@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A walkthrough can always be left**: the track has an End button while it runs, clicking empty canvas ends it, and choosing a card or connection leaves it for that item, as in the prototype; nothing stays lit afterwards.
 - **A click is a click**: any pointer movement while the button was down counted as a drag, so ordinary clicks on cards and on empty canvas were ignored (and could nudge a card). A press now becomes a pan or drag only after 4px (8px for a finger); touch adds two-finger pinch zoom. Escape and Back clear a selection completely, as clicking empty canvas and the close button do.
 - **Walkthrough cards are clickable**: every step, decision and outcome card in the Walkthrough chapter goes to that point of the story on click, Enter or Space.
 - **Clicking a card does what it says**: a click (or Enter on a focused card) only marked the card selected and filled a hidden sheet; it now opens the component sheet, frames the neighbourhood and spotlights it. Connections can be clicked too, through a wide invisible hit line or their label, and open the connection's sheet. A rendered test clicks with a real mouse.
