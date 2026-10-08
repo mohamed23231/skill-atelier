@@ -1276,6 +1276,69 @@ const cases = [
     assert.strictEqual(m.view, 'data_flow');
     assert.ok(/Data flow/i.test(m.status), m.status);
   }],
+  ['share: a keyboard-only reader walks every step of example 3 from the first to the outcome end', () => {
+    const J = () => key('j', { code: 'KeyJ', windowsVirtualKeyCode: 74 });
+    const steps = [ev(`(document.activeElement && document.activeElement.blur && document.activeElement.blur(), window.__visited = [], 0)`), J(),
+      ev(`(window.__visited.push(state.walkCursor), walkEntries().length)`)];
+    for (let i = 0; i < 16; i++) steps.push(J(), ev(`(window.__visited.push(state.walkCursor), 0)`));
+    steps.push(ev(`JSON.stringify({ visited: [...new Set(window.__visited)], path: walkEntries().map(e => e.id), active: walkIsActive() })`));
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps }]);
+    const m = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(m.active, true);
+    assert.ok(m.path.length >= 8, `path has ${m.path.length} entries`);
+    assert.deepStrictEqual(m.visited, m.path, 'J did not visit every entry of the default path in order');
+  }],
+  ['share: example 3 makes no network request and logs no error through every lens, step and outcome', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(async function () {
+      const problems = [];
+      const origError = console.error;
+      console.error = (...args) => { problems.push('console.error: ' + args.join(' ')); origError.apply(console, args); };
+      window.addEventListener('unhandledrejection', e => problems.push('unhandled rejection: ' + String(e.reason)));
+      const pause = ms => new Promise(r => setTimeout(r, ms));
+      const scenario = (ARCH_SPEC.scenarios || [])[0];
+      startWalkthrough(scenario.id);
+      const decisions = walkEntries().filter(e => e.kind === 'decision');
+      const outcomes = decisions.length ? (decisions[0].outcomes || decisions[0].branches || [0, 1]).length : 1;
+      let visited = 0;
+      for (let choice = 0; choice < Math.max(1, outcomes); choice++) {
+        startWalkthrough(scenario.id, decisions.length ? { [decisions[0].id]: choice } : {});
+        for (const entry of walkEntries()) { walkTo(entry.id); visited++; await pause(5); }
+      }
+      for (const lens of ['structure', 'evidence', 'change', 'risk']) { selectLens(lens); await pause(20); }
+      toggleTheme(); await pause(20); toggleTheme();
+      ['overview', 'walkthrough', 'changes', 'review', 'evidence'].forEach(id => openChapter(id));
+      await pause(100);
+      console.error = origError;
+      const resources = performance.getEntriesByType('resource').map(r => r.name);
+      return JSON.stringify({ problems: problems.concat((window.__errors || []).map(e => 'error: ' + e.msg)), resources, visited });
+    })()`)] }]);
+    const m = JSON.parse(lastEvalValue(phase));
+    assert.ok(m.visited >= 10, `visited only ${m.visited} entries`);
+    assert.deepStrictEqual(m.problems, []);
+    assert.deepStrictEqual(m.resources, [], 'the page fetched something; it must be fully self-contained');
+  }],
+  ['share: a copied link opens in a fresh browser on the same lens, walkthrough step, outcome and camera', () => {
+    const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
+    const SNAP = `({ lens: state.lens, cursor: state.walkCursor, choices: state.walkChoices, chapter: document.querySelector('.rail-tab[aria-selected="true"]')?.dataset.chapter || null, world: canvasCameraWorld() })`;
+    const [written] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [ev(`(function () {
+      const scenario = ARCH_SPEC.scenarios[0];
+      const decision = (startWalkthrough(scenario.id), walkEntries().find(e => e.kind === 'decision'));
+      chooseOutcome(decision.id, 1);
+      const entries = walkEntries();
+      walkTo(entries[entries.length - 2].id);
+      selectLens('risk');
+      zoomAround(state.zoom * 1.25, 500, 300);
+      updateUrlState();
+      return JSON.stringify({ hash: location.hash, snap: ${SNAP} });
+    })()`)] }]);
+    const before = JSON.parse(lastEvalValue(written));
+    const [restored] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [ev(`JSON.stringify(${SNAP})`)] }], undefined, { hash: before.hash.slice(1) });
+    const after = JSON.parse(lastEvalValue(restored));
+    const { world: wb, ...restBefore } = before.snap;
+    const { world: wa, ...restAfter } = after;
+    assert.deepStrictEqual(restAfter, restBefore, before.hash);
+    ['x', 'y', 'w'].forEach(axis => assert.ok(Math.abs(wa[axis] - wb[axis]) <= 0.1, `camera ${axis}: ${wb[axis]} -> ${wa[axis]}`));
+  }],
   ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({
       rail: document.querySelector('[data-region="rail"]').getAttribute('data-open'),

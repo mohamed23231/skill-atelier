@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Shareability is tested**: example 3 makes no network request and logs no error through every lens, every walkthrough step of every outcome, both themes and every chapter; a keyboard-only reader walks the whole default path with J; and a copied link opens in a fresh browser on the same lens, step, outcome and camera.
 - **A keyboard shortcut sheet**: `?` (or "Keyboard shortcuts" in the palette) lists every shortcut the workbench handles, grouped by navigation, walkthrough, lenses and view; Escape closes it and returns focus.
 - **Performance is measured**: a 60-component, 90-connection fixture with a 20-stage scenario boots in about 110ms, and a walkthrough step or a lens change takes a median of about 34ms (two animation frames included), both checked against a 100ms limit.
 - **Every scenario step reads as a sentence**: stages and interactions without an authored `narrative` get a generated one at build time ("Outbox Relay Worker sends Publish OrderCreated to Apache Kafka Event Bus. Payload: orderId=9901."), marked `narrativeGenerated` so the page and report can say so; authored narratives are never changed. The Markdown report gains a Scenarios section that tells each scenario as numbered steps, with outcomes nested under decisions and generated sentences marked. Scenarios with no authored narrative produce a validation notice (not a warning, so `--strict` builds are unaffected).
@@ -19,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The walkthrough engine** (`scripts/walkthrough.js`): a scenario plus the reader's outcome choices becomes one path of numbered steps, decisions and outcome ends, with nested branches, parallel stages, a default outcome (`default: true`, else the first) and per-path step numbers; each entry says which components and connections it puts in focus, numbered markers for parallel hops, and ghost links for hops with no modelled connection.
 - **A command palette (⌘K / Ctrl+K)**: one keyboard-first place to jump to any component, connection, view or scenario stage, and to run every workbench command (fit, reset, presentation, fullscreen, animate, theme, quality gate, copy link, show neighbours, show blast radius) and every export. Arrow keys, Home/End, Enter and Escape work as in any combobox; Escape returns focus to where it was and leaves the selection alone. It is the new home of the navigator's search, and the header Search button opens it at every width.
 - **A trust model** (`scripts/trust.js`): per-component evidence state (Verified, Declared, Declared but not checked, Missing, Stale, Asserted, Planned, Inferred/Assumed/Unknown, the worst record deciding) and the summary behind the coming trust strip: grounding, evidence ("6/6 existing backed · 4 planned"), rule results, open items and the gate line ("13 of 14 pass · 1 skipped"). Every number comes from the validator's embedded output. A component lacks evidence only when it claims some that is not there; actors are not counted, since nothing in a repository can back them; and an empty model reads as unchecked, never as verified.
+
+### Fixed
+
+- **A link copied during a walkthrough keeps the sender's camera**: the camera was left out of the link whenever a walkthrough was active, so the reader opened on the step's default framing instead of what the sender was looking at.
+- **No floating Data Flow banner**: the "Data Flow view: …" pill ran under the lens key; the pressed "Data flow only" toggle and the status announcement already say it.
 
 ### Changed
 

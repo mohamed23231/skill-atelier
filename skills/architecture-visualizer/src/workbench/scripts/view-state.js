@@ -203,7 +203,8 @@ function viewSnapshot() {
     });
     if (Object.keys(outcomes).length) snapshot.outcomes = outcomes;
   }
-  if (state.userMovedView && !snapshot.scenario) snapshot.camera = canvasCameraWorld();
+  // The camera the sender sees travels with the link, during a walkthrough too.
+  if (state.userMovedView) snapshot.camera = canvasCameraWorld();
   return snapshot;
 }
 
