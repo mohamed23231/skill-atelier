@@ -27,7 +27,7 @@ function init() {
   if (ARCH_SPEC.meta) {
     document.getElementById('doc-title').textContent = ARCH_SPEC.meta.title || 'Architecture Visualization';
     const subtitleEl = document.getElementById('doc-subtitle');
-    subtitleEl.textContent = `${(ARCH_SPEC.nodes || []).length} components${ARCH_SPEC.meta.date ? ` · ${workbenchDate(ARCH_SPEC.meta.date)}` : ''}`;
+    subtitleEl.textContent = `${plural((ARCH_SPEC.nodes || []).length, 'component')}${ARCH_SPEC.meta.date ? ` · ${workbenchDate(ARCH_SPEC.meta.date)}` : ''}`;
     subtitleEl.setAttribute('title', subtitleEl.textContent);
     const statusBadge = document.getElementById('doc-status');
     statusBadge.textContent = ARCH_SPEC.meta.status || 'PROPOSED';

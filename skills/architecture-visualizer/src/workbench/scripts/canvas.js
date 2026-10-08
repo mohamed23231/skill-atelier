@@ -240,14 +240,13 @@ function renderNodeLensDetails(g, n, badge, marker) {
   const sans = cssToken('--sans');
   const mono = cssToken('--mono');
 
-  let badgeWidth = 0;
   if (badge) {
     const { text: label, tone } = badge;
-    badgeWidth = measureText(label, `600 10.5px ${sans}`) + 14;
-    const badgeGroup = el('g', { class: `node-badge ${tone}`, transform: `translate(${w - 12 - badgeWidth}, ${h - 26})` });
-    badgeGroup.appendChild(el('rect', { class: 'base', width: badgeWidth, height: 20, rx: 6 }));
-    badgeGroup.appendChild(el('rect', { class: 'tint', width: badgeWidth, height: 20, rx: 6 }));
-    const badgeText = el('text', { x: 7, y: 14 });
+    const badgeWidth = measureText(label, `600 10.5px ${sans}`) + 14;
+    const badgeGroup = el('g', { class: `node-badge ${tone}`, transform: `translate(${w - 12 - badgeWidth}, -8)` });
+    badgeGroup.appendChild(el('rect', { class: 'base', width: badgeWidth, height: 16, rx: 6 }));
+    badgeGroup.appendChild(el('rect', { class: 'tint', width: badgeWidth, height: 16, rx: 6 }));
+    const badgeText = el('text', { x: 7, y: 12 });
     badgeText.textContent = label;
     badgeGroup.appendChild(badgeText);
     g.appendChild(badgeGroup);
@@ -255,7 +254,7 @@ function renderNodeLensDetails(g, n, badge, marker) {
 
   const techFull = n.technology || n.type;
   const tech = el('text', { class: 'node-tech', x: 12, y: h - 12 });
-  tech.textContent = fitText(techFull, `400 10.5px ${mono}`, w - 24 - (badgeWidth ? badgeWidth + 8 : 0));
+  tech.textContent = fitText(techFull, `400 10.5px ${mono}`, w - 24);
   g.appendChild(tech);
 
   if (marker === 'exception-ring') {

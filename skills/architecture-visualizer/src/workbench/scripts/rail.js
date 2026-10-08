@@ -285,7 +285,7 @@ function renderOverviewChapter() {
       const aside = document.createElement('span');
       aside.className = 'overview-path-count';
       const decision = main.find(entry => entry.kind === 'decision');
-      aside.textContent = `${walkthroughTotal(main)} steps, then ${decision?.branches.length || 0} outcomes`;
+      aside.textContent = plural(walkthroughTotal(main), 'step') + (decision ? `, then ${plural(decision.branches.length, 'outcome')}` : '');
       heading.appendChild(aside);
       main.forEach(entry => {
         const item = document.createElement('li');
@@ -357,6 +357,72 @@ const CHANGE_DELTAS = [
   ['MOVED', 'Moved'],
 ];
 
+function chapterIntro(panel, eyebrow, headline, context) {
+  let title = panel.querySelector('h2');
+  let label = panel.querySelector('.chapter-eyebrow');
+  if (!label) {
+    label = document.createElement('p');
+    label.className = 'chapter-eyebrow';
+    title.before(label);
+  }
+  label.textContent = eyebrow;
+  title.textContent = headline;
+  let prose = panel.querySelector('.chapter-context');
+  if (!prose) {
+    prose = document.createElement('p');
+    prose.className = 'chapter-context';
+    title.after(prose);
+  }
+  prose.textContent = context;
+}
+
+function chapterHeading(title, count) {
+  const heading = document.createElement('h3');
+  heading.textContent = title;
+  const aside = document.createElement('span');
+  aside.className = 'chapter-aside';
+  aside.textContent = String(count);
+  heading.appendChild(aside);
+  return heading;
+}
+
+function chapterRow(marker, title, note, aside, tone, onClick) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'sheet-list-row chapter-row';
+  row.dataset.tone = tone;
+  const mark = document.createElement('span');
+  mark.className = 'sheet-list-marker';
+  mark.textContent = marker;
+  const text = document.createElement('span');
+  text.className = 'sheet-list-text';
+  const name = document.createElement('span');
+  name.className = 'sheet-list-title';
+  name.textContent = title;
+  const description = document.createElement('span');
+  description.className = 'sheet-list-note';
+  description.textContent = note;
+  text.append(name, description);
+  const right = document.createElement('span');
+  right.className = 'chapter-aside';
+  right.textContent = aside;
+  row.append(mark, text, right);
+  row.addEventListener('click', onClick);
+  return row;
+}
+
+function collapseChapterContent(target, title) {
+  if (target.parentElement.tagName === 'DETAILS') return;
+  const heading = target.previousElementSibling;
+  const fold = document.createElement('details');
+  fold.className = 'chapter-fold';
+  const summary = document.createElement('summary');
+  summary.textContent = title;
+  target.before(fold);
+  fold.append(summary, target);
+  if (heading?.tagName === 'H3') heading.remove();
+}
+
 function renderChangesChapter() {
   const deltas = document.getElementById('changes-deltas');
   if (!deltas) return;
@@ -369,46 +435,52 @@ function renderChangesChapter() {
       .filter(node => node.delta && node.delta !== 'UNCHANGED')
       .map(node => ({ id: node.id, label: node.label, delta: node.delta }));
 
+  const added = changed.filter(entry => entry.delta === 'ADDED');
+  const modified = changed.filter(entry => entry.delta === 'CHANGED');
+  const newEdges = (ARCH_SPEC.edges || []).filter(edge => edge.delta === 'ADDED');
+  const counts = [[added.length, 'added'], [modified.length, 'changed'], [newEdges.length, 'new connections']];
+  const nameOf = id => nodesById.get(id)?.label || id;
+  const phrases = [];
+  if (added.length) phrases.push(`adds ${added.map(entry => nameOf(entry.id)).join(', ')}`);
+  if (modified.length) phrases.push(`changes ${modified.map(entry => nameOf(entry.id)).join(', ')}`);
+  chapterIntro(deltas.closest('.rail-panel'), 'CHANGES', counts.filter(([count]) => count).map(([count, label]) => `${count} ${label}`).join(', ') || 'No changes',
+    phrases.length ? `The proposal ${phrases.join(' and ')}.` : newEdges.length ? `The proposal adds ${plural(newEdges.length, 'connection')} between existing components.` : 'No component additions or changes are recorded.');
   deltas.replaceChildren();
   CHANGE_DELTAS.forEach(([delta, label]) => {
     const components = changed.filter(entry => entry.delta === delta);
-    if (components.length === 0) return;
+    if (!components.length) return;
     const group = document.createElement('section');
     group.className = 'change-group';
-    group.setAttribute('data-change-delta', delta);
-    const heading = document.createElement('h3');
-    heading.textContent = label;
-    group.appendChild(heading);
+    group.dataset.changeDelta = delta;
+    group.appendChild(chapterHeading(label, components.length));
     components.forEach(entry => {
       const node = nodesById.get(entry.id) || entry;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'change-component';
-      button.setAttribute('data-change-component', entry.id);
-      const icon = document.createElement('span');
-      icon.className = 'change-icon';
-      icon.innerHTML = iconMarkup(getNodeIcon(node.type));
-      const name = document.createElement('span');
-      name.className = 'change-name';
-      name.textContent = entry.label || node.label || entry.id;
-      const tech = document.createElement('span');
-      tech.className = 'change-tech';
-      tech.textContent = node.technology || node.type || '';
-      button.append(icon, name, tech);
-      button.addEventListener('click', () => openInspectorForNode(entry.id));
+      const links = (ARCH_SPEC.edges || []).filter(edge => edge.source === entry.id || edge.target === entry.id).length;
+      const button = chapterRow(delta === 'ADDED' ? '+' : delta === 'REMOVED' ? '−' : '~', entry.label || node.label || entry.id,
+        node.description || '', `${links} link${links === 1 ? "" : "s"}`, delta === 'ADDED' ? 'ok' : delta === 'REMOVED' ? 'risk' : 'warn', () => openInspectorForNode(entry.id));
+      button.classList.add('change-component');
+      button.dataset.changeComponent = entry.id;
       group.appendChild(button);
     });
     deltas.appendChild(group);
   });
-  if (!deltas.childElementCount) {
-    const empty = document.createElement('div');
-    empty.className = 'rail-muted';
-    empty.textContent = 'No changed components.';
-    deltas.appendChild(empty);
+  if (newEdges.length) {
+    deltas.appendChild(chapterHeading('New connections', newEdges.length));
+    newEdges.forEach(edge => {
+      const row = chapterRow('+', edge.label || edge.id, `${nameOf(edge.source)} → ${nameOf(edge.target)}`, edge.communication || '', 'ok', () => {
+        frameModelNodes([edge.source, edge.target], [edge.id]);
+        const group = document.getElementById(`edge-${edge.id}`);
+        group?.classList.add('chapter-edge-focus');
+        window.setTimeout(() => group?.classList.remove('chapter-edge-focus'), 1800);
+      });
+      row.dataset.changeEdge = edge.id;
+      deltas.appendChild(row);
+    });
   }
 
   const blastTarget = document.getElementById('changes-blast');
   if (blastTarget) {
+    collapseChapterContent(blastTarget, 'Blast radius');
     blastTarget.replaceChildren();
     const blast = Array.isArray(review.blastRadius) ? review.blastRadius : [];
     if (blast.length === 0) {
@@ -446,6 +518,7 @@ function renderChangesChapter() {
 
   const traceTarget = document.getElementById('changes-traceability');
   if (traceTarget) {
+    collapseChapterContent(traceTarget, 'Traceability');
     traceTarget.replaceChildren();
     const trace = review.traceability;
     if (!trace || typeof trace !== 'object') {
@@ -481,76 +554,104 @@ function renderChangesChapter() {
 }
 
 function renderReviewChapter() {
-  const gateLine = document.getElementById('gate-line');
-  if (gateLine && typeof trustSummary === 'function') {
-    const summary = trustSummary(ARCH_SPEC, QUALITY_GATE);
-    gateLine.textContent = summary.gate.label;
-  }
+  const panel = document.getElementById('chapter-review');
+  if (!panel) return;
+  const policies = ARCH_SPEC.policies || [];
+  const findings = (ARCH_SPEC.findings || []).concat(ARCH_SPEC.review?.policyFindings || []);
+  const violatedIds = new Set(findings.filter(finding => finding?.policyId).map(finding => finding.policyId));
+  const failing = policies.filter(policy => violatedIds.has(policy.id)).length;
+  const failures = (ARCH_SPEC.nodes || []).flatMap(node => (node.details?.failureModes || []).map(failure => ({ node, failure })));
+  chapterIntro(panel, 'REVIEW', (failing ? `${failing} of ${plural(policies.length, 'rule')} violated` : 'All rules pass') +
+    (failures.length ? `, ${failures.length} known failure modes` : ''),
+    'Rules are drawn on the canvas: required paths in green, forbidden ones as red dashed lines that must stay absent.');
+  const rules = document.getElementById('section-rules');
+  rules.querySelector('h3').replaceWith(chapterHeading('Architecture rules', `${policies.length - failing} of ${policies.length} pass`));
+  const target = document.getElementById('review-rules');
+  target.replaceChildren();
+  const nameOf = id => (ARCH_SPEC.nodes || []).find(node => node.id === id)?.label || id;
+  policies.forEach(policy => {
+    const violated = violatedIds.has(policy.id);
+    const kind = { required_dependency: 'Required path', forbidden_dependency: 'Forbidden path', required_evidence: 'Evidence rule' }[policy.kind] || policy.kind;
+    const row = chapterRow(violated ? '!' : '✓', policy.description || policy.id,
+      `${kind}${policy.from ? ` · ${nameOf(policy.from)} → ${nameOf(policy.to)}` : ''}`, violated ? 'Violated' : 'Pass', violated ? 'risk' : 'ok', () => {
+        selectLens('risk');
+        frameModelNodes([policy.from, policy.to].filter(Boolean));
+      });
+    row.dataset.policyId = policy.id;
+    target.appendChild(row);
+  });
+  if (!policies.length) target.textContent = 'No rules defined.';
+  const failureSection = document.getElementById('section-findings');
+  failureSection.querySelector('h3').textContent = 'Failure modes';
+  const failureTarget = failureSection.querySelector('[data-navigator-section], [data-failure-list]');
+  failureTarget.removeAttribute('data-navigator-section');
+  failureTarget.setAttribute('data-failure-list', '');
+  failureTarget.replaceChildren();
+  failures.forEach(({ node, failure }) => {
+    const row = chapterRow('!', failure.failure, `${node.label || node.id} · ${failure.impact || 'Impact not recorded'}. Mitigation: ${failure.mitigation || 'Not recorded'}.`, '', 'warn', () => openInspectorForNode(node.id));
+    row.dataset.failureNode = node.id;
+    failureTarget.appendChild(row);
+  });
+  if (!failures.length) failureTarget.textContent = 'None recorded.';
 
-  // Rules
-  const rulesTarget = document.getElementById('review-rules');
-  if (rulesTarget) {
-    const policies = ARCH_SPEC.policies || [];
-    if (!policies.length) {
-      rulesTarget.innerHTML = '<div style="color: var(--muted); font-size: 12px;">No rules defined.</div>';
-    } else {
-      const findings = (ARCH_SPEC.findings || []).concat(ARCH_SPEC.review?.policyFindings || []);
-      const violatedIds = new Set(findings.filter(f => f && f.policyId).map(f => f.policyId));
-      rulesTarget.innerHTML = policies.map(policy => {
-        const isViolated = violatedIds.has(policy.id);
-        const statusText = isViolated ? 'Violated' : 'Pass';
-        const statusClass = isViolated ? 'violated' : 'pass';
-        return `<div class="rule-row"><span class="rule-status ${statusClass}">${statusText}</span><span class="rule-desc">${escapeHtml(policy.description || policy.id)}</span></div>`;
-      }).join('');
-    }
+  const decisions = document.getElementById('review-decisions');
+  decisions.replaceChildren();
+  (ARCH_SPEC.meta?.decisions || []).forEach(decision => {
+    const fold = document.createElement('details');
+    fold.className = 'chapter-fold';
+    const summary = document.createElement('summary');
+    summary.textContent = `${decision.id || ''} ${decision.title || ''}`.trim();
+    const body = document.createElement('div');
+    body.className = 'chapter-fold-body';
+    ['Context', 'Decision', 'Consequences'].forEach(label => appendReviewField(body, label, decision[label.toLowerCase()]));
+    fold.append(summary, body);
+    decisions.appendChild(fold);
+  });
+  if (!decisions.childElementCount) decisions.textContent = 'None recorded.';
+  ['assumptions', 'questions'].forEach(kind => {
+    const section = document.getElementById(`section-${kind}`);
+    if (kind === 'assumptions') section.querySelector('h3').id = 'assumptions';
+    const target = document.getElementById(`review-${kind}`);
+    const key = kind === 'questions' ? 'unresolvedQuestions' : 'assumptions';
+    const entries = ARCH_SPEC.review?.[key] ?? ARCH_SPEC.meta?.[key] ?? [];
+    target.replaceChildren();
+    const list = document.createElement('ul');
+    list.className = 'sheet-bullets';
+    entries.forEach(entry => {
+      const item = document.createElement('li');
+      item.textContent = typeof entry === 'string' ? entry : entry.text || entry.description || entry.question || reviewValue(entry);
+      list.appendChild(item);
+    });
+    if (entries.length) target.appendChild(list);
+    else { target.classList.add('rail-muted'); target.textContent = 'None recorded.'; }
+  });
+  const gateSection = document.getElementById('section-gate');
+  let gate = document.getElementById('gate');
+  if (!gate) {
+    gate = document.createElement('details');
+    gate.id = 'gate';
+    gate.className = 'chapter-fold';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Quality gate';
+    const count = document.createElement('span');
+    count.className = 'chapter-aside';
+    count.textContent = `${QUALITY_GATE.filter(check => check.status === 'PASS').length} pass · ${QUALITY_GATE.filter(check => check.status === 'SKIP').length} skipped`;
+    summary.appendChild(count);
+    gateSection.querySelector('h3').remove();
+    gateSection.querySelector('#gate-line').hidden = true;
+    gate.append(summary, gateSection);
+    // Trust controls open Review without scrolling to a section. Reveal the gate
+    // after their chapter action, including controls recreated by a trust render.
+    document.addEventListener('click', event => {
+      if (event.target.closest('.trust-pill[data-trust="rules"], .ov-trust-row[data-trust-key="rules"]')) {
+        gateSection.scrollIntoView({ block: 'nearest' });
+      }
+    });
   }
-
-  // Assumptions
-  const assumptionsTarget = document.getElementById('review-assumptions');
-  if (assumptionsTarget) {
-    const rawAssumptions = ARCH_SPEC.review?.assumptions ?? ARCH_SPEC.meta?.assumptions;
-    const assumptions = Array.isArray(rawAssumptions) ? rawAssumptions : [];
-    if (!assumptions.length) {
-      assumptionsTarget.innerHTML = '<div style="color: var(--muted); font-size: 12px;">No assumptions recorded.</div>';
-    } else {
-      assumptionsTarget.innerHTML = assumptions.map(a => {
-        const text = typeof a === 'string' ? a : (a.text || a.description || (typeof reviewValue === 'function' ? reviewValue(a) : String(a)));
-        return `<div class="detail-card" style="margin-bottom: 6px; font-size: 12px;">${escapeHtml(text)}</div>`;
-      }).join('');
-    }
-  }
-
-  // Open questions
-  const questionsTarget = document.getElementById('review-questions');
-  if (questionsTarget) {
-    const rawQuestions = ARCH_SPEC.review?.unresolvedQuestions ?? ARCH_SPEC.meta?.unresolvedQuestions;
-    const questions = Array.isArray(rawQuestions) ? rawQuestions : [];
-    if (!questions.length) {
-      questionsTarget.innerHTML = '<div style="color: var(--muted); font-size: 12px;">No open questions recorded.</div>';
-    } else {
-      questionsTarget.innerHTML = questions.map(q => {
-        const text = typeof q === 'string' ? q : (q.text || q.description || q.question || (typeof reviewValue === 'function' ? reviewValue(q) : String(q)));
-        return `<div class="detail-card" style="margin-bottom: 6px; font-size: 12px;">${escapeHtml(text)}</div>`;
-      }).join('');
-    }
-  }
-
-  // Decisions
-  const decisionsTarget = document.getElementById('review-decisions');
-  if (decisionsTarget) {
-    const decisions = Array.isArray(ARCH_SPEC.meta?.decisions) ? ARCH_SPEC.meta.decisions : [];
-    if (!decisions.length) {
-      decisionsTarget.innerHTML = '<div style="color: var(--muted); font-size: 12px;">No decisions recorded.</div>';
-    } else {
-      decisionsTarget.innerHTML = decisions.map(d => {
-        return `<div class="detail-card" style="margin-bottom: 6px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <strong>${escapeHtml(d.title || '')}</strong>
-            ${d.status ? `<span class="badge-status ${escapeHtml(d.status)}">${escapeHtml(d.status)}</span>` : ''}
-          </div>
-          <div style="font-size: 12px; color: var(--muted);">${escapeHtml(d.decision || '')}</div>
-        </div>`;
-      }).join('');
-    }
-  }
+  panel.append(rules, failureSection, document.getElementById('section-decisions'), document.getElementById('section-assumptions'), document.getElementById('section-questions'), gate);
+  // Existing trust and palette actions scroll this section; reveal its fold before scrolling.
+  gateSection.scrollIntoView = options => {
+    gate.open = true;
+    gate.scrollIntoView(options);
+  };
 }

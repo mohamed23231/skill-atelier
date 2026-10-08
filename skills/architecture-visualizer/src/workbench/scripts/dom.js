@@ -108,3 +108,8 @@ function withTooltip(parent, text) {
   parent.appendChild(title);
   return parent;
 }
+
+// "1 step", "2 steps": every count the page prints goes through this, so any model reads correctly.
+function plural(count, word, many) {
+  return `${count} ${count === 1 ? word : many || `${word}s`}`;
+}

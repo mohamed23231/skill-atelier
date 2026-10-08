@@ -1621,19 +1621,26 @@ const cases = [
     },
   ],
   [
-    '1e: lens canvas preserves scenario opacity through every lens and Structure toggles Data Flow',
+    '1e: lens canvas composes scenario opacity through every lens and Structure toggles Data Flow',
     () => {
       const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(async function () {
         startWalkthrough('scenario_fulfillment_saga_dlq'); walkTo('stage_publish_order_created');
         // Focus changes fade over 0.3s; sample after they settle.
         await new Promise(resolve => setTimeout(resolve, 450));
-        const snapshot = () => [...document.querySelectorAll('.node-group, .edge-path:not(.ghost)')].map(item => [item.id, getComputedStyle(item).opacity]);
+        const snapshot = () => [...document.querySelectorAll('.node-group, .edge-path:not(.ghost)')].map(item => ({
+          id: item.id, opacity: Number(getComputedStyle(item).opacity),
+          spotlight: ['dimmed', 'out-of-focus', 'context-dim'].filter(name => item.classList.contains(name)),
+          parentSpotlight: ['dimmed', 'out-of-focus', 'context-dim'].filter(name => item.parentNode.classList.contains(name)),
+          context: (item.classList.contains('edge-path') ? item.parentNode : item).hasAttribute('data-lens-context'),
+          unchanged: item.classList.contains('node-group') && !['ADDED', 'CHANGED', 'REMOVED'].includes(ARCH_SPEC.nodes.find(node => 'node-' + node.id === item.id)?.delta),
+          effectiveOpacity: Number(getComputedStyle(item).opacity) * (item.classList.contains('edge-path') ? Number(getComputedStyle(item.parentNode).opacity) : 1),
+        }));
         const before = snapshot();
         const visits = [];
         for (const lens of LENSES) {
           selectLens(lens);
           await new Promise(resolve => setTimeout(resolve, 450));
-          visits.push(snapshot());
+          visits.push({lens, marks: snapshot()});
         }
         deactivateScenario();
         selectLens('structure');
@@ -1643,7 +1650,23 @@ const cases = [
         toggle().click();
         return JSON.stringify({before, visits, flow, architecture: [state.currentView, toggle().getAttribute('aria-pressed')]});
       })()`)] }])[0]));
-      obs.visits.forEach(snapshot => assert.deepStrictEqual(snapshot, obs.before));
+      obs.visits.forEach(({lens, marks}) => {
+        marks.forEach((mark, index) => {
+          const before = obs.before[index];
+          assert.strictEqual(mark.id, before.id);
+          assert.deepStrictEqual(mark.spotlight, before.spotlight, lens + ': preserves scenario spotlight');
+          assert.deepStrictEqual(mark.parentSpotlight, before.parentSpotlight, lens + ': preserves connection spotlight');
+          if (lens === 'change' || lens === 'risk') {
+            const expected = mark.id.startsWith('node-') && (before.opacity < 1 || (lens === 'change' && mark.unchanged)) ? 0.35 : 1;
+            assert.strictEqual(mark.opacity, expected, lens + ': ' + mark.id);
+            const effective = before.effectiveOpacity < 1 || mark.context ? 0.35 : 1;
+            assert.strictEqual(mark.effectiveOpacity, effective, lens + ': avoids multiplying spotlight and lens fades');
+          } else {
+            assert.strictEqual(mark.opacity, before.opacity, lens + ': restores scenario opacity');
+            assert.strictEqual(mark.effectiveOpacity, before.effectiveOpacity);
+          }
+        });
+      });
       assert.deepStrictEqual(obs.flow, ['data_flow', 'true']);
       assert.deepStrictEqual(obs.architecture, ['architecture', 'false']);
     },
@@ -1655,7 +1678,7 @@ const cases = [
       spec.policies = [{ id: 'forbidden-test', kind: 'forbidden_dependency', from: spec.nodes[1].id, to: spec.nodes[0].id }];
       const policy = spec.policies[0];
       assert.ok(!spec.edges.some(edge => edge.source === policy.from && edge.target === policy.to), 'the forbidden dependency must be absent');
-      const obs = JSON.parse(lastEvalValue(runPhases(spec, [{ width: 1440, height: 900, steps: [ev(`selectLens('risk'); const ghosts = [...document.querySelectorAll('#ghost-layer .policy-ghost')].map(group => [group.querySelector('text').textContent, group.querySelector('line').dataset.lensStroke, getComputedStyle(group.querySelector('line')).strokeDasharray]); selectLens('structure'); JSON.stringify([ghosts, document.querySelectorAll('#ghost-layer .policy-ghost').length])`)] }])[0]));
+      const obs = JSON.parse(lastEvalValue(runPhases(spec, [{ width: 1440, height: 900, steps: [ev(`selectLens('risk'); const ghosts = [...document.querySelectorAll('#ghost-layer .policy-ghost')].map(group => [group.querySelector('text').textContent, group.querySelector('.policy-ghost-line').dataset.lensStroke, getComputedStyle(group.querySelector('.policy-ghost-line')).strokeDasharray]); selectLens('structure'); JSON.stringify([ghosts, document.querySelectorAll('#ghost-layer .policy-ghost').length])`)] }])[0]));
       assert.deepStrictEqual(obs, [[['Forbidden · absent', 'risk', '2px, 4px']], 0]);
     },
   ],
@@ -1664,8 +1687,8 @@ const cases = [
     'p3: risk lens required_dependency draws a Required · missing ghost',
     () => {
       const spec = riskFixture({ nodes: [riskNode('a'), riskNode('b')], policies: [{ id: 'pol_req', kind: 'required_dependency', from: 'a', to: 'b' }] });
-      const obs = riskRender(spec, `selectLens('risk'); JSON.stringify([...document.querySelectorAll('#ghost-layer .policy-ghost')].map(group => [group.querySelector('text').textContent, group.querySelector('line').dataset.lensStroke]))`);
-      assert.deepStrictEqual(obs, [['Required · missing', 'warn']]);
+      const obs = riskRender(spec, `selectLens('risk'); JSON.stringify([...document.querySelectorAll('#ghost-layer .policy-ghost')].map(group => [group.querySelector('text').textContent, group.querySelector('.policy-ghost-line').dataset.lensStroke]))`);
+      assert.deepStrictEqual(obs, [['Required · missing', 'risk']]);
     },
   ],
 
@@ -3070,7 +3093,7 @@ const cases = [
   ],
 
   [
-    '1c: chapters Evidence lists every locator of a component without a cap',
+    '1c: chapters Evidence lists up to four locators of a component',
     () => {
       const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
       const steps = [
@@ -3082,7 +3105,7 @@ const cases = [
           var evidence = nodeEvidence(ARCH_SPEC, 'saga_orchestrator');
           var row = __q('[data-evidence-node="saga_orchestrator"]');
           __record('locatorCount', row ? row.querySelectorAll('.evidence-locator').length : -1);
-          __record('expectedLocators', evidence.locators.length);
+          __record('expectedLocators', Math.min(4, evidence.locators.length));
           __record('chipState', row && row.querySelector('.evidence-chip') ? row.querySelector('.evidence-chip').getAttribute('data-evidence-state') : null);
           __record('expectedState', evidence.state);
           __record('firstLocatorText', row && row.querySelector('.evidence-locator') ? row.querySelector('.evidence-locator').textContent : null);
@@ -3092,7 +3115,7 @@ const cases = [
       const results = runPhases(SAGA, [{ width: 1440, height: 900, mobile: false, steps }]);
       const obs = lastEvalValue(results[0]);
       assert.ok(obs.expectedLocators >= 1, 'saga_orchestrator should have at least one locator');
-      assert.strictEqual(obs.locatorCount, obs.expectedLocators, 'Evidence must render every locator of saga_orchestrator');
+      assert.strictEqual(obs.locatorCount, obs.expectedLocators, 'Evidence must render up to four locators of saga_orchestrator');
       assert.strictEqual(obs.chipState, obs.expectedState, 'evidence state chip must match nodeEvidence');
       assert.ok(obs.firstLocatorText && obs.firstLocatorText.length > 0, 'locator buttons should carry their text');
     },
@@ -3486,5 +3509,186 @@ cases.push(['swimlane example labels render in full and retain desktop fit', () 
     obs.labels.forEach(label => assert.strictEqual(label.actual, label.expected, `${name}/${label.id}`));
   }
 }]);
+
+cases.push(['p8: chapters Changes, Review and Evidence connect model rows to the canvas', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(async function () {
+    openChapter('changes');
+    const changesTitle = document.querySelector('#chapter-changes h2').textContent;
+    const added = document.querySelector('[data-change-delta="ADDED"] button');
+    added.click();
+    const addedOpened = state.selectedNodeId === added.dataset.changeComponent && document.querySelector('[data-region="rail"]').getAttribute('data-sheet') === 'node';
+    hideSheetKeepSelection();
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    const connection = document.querySelector('[data-change-edge]');
+    connection.click();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const edge = ARCH_SPEC.edges.find(edge => edge.id === connection.dataset.changeEdge);
+    const canvas = svg.getBoundingClientRect();
+    const endsVisible = [edge.source, edge.target].every(id => {
+      const card = document.getElementById('node-' + id).getBoundingClientRect();
+      return card.left >= canvas.left && card.right <= canvas.right && card.top >= canvas.top && card.bottom <= canvas.bottom;
+    });
+    const edgeEmphasised = document.getElementById('edge-' + edge.id).classList.contains('chapter-edge-focus');
+    openChapter('review');
+    const reviewTitle = document.querySelector('#chapter-review h2').textContent;
+    const firstSection = document.querySelector('#chapter-review section').id;
+    const rules = [...document.querySelectorAll('#review-rules button[data-policy-id]')];
+    selectLens('structure');
+    rules[0].click();
+    const riskSelected = state.lens === 'risk';
+    const gateClosed = document.querySelector('details#gate').open === false;
+    document.querySelector('.trust-pill[data-trust="rules"]').click();
+    const gateOpened = document.querySelector('details#gate').open;
+    document.querySelector('details#gate').open = false;
+    toggleGatePanel();
+    const paletteGateOpened = document.querySelector('details#gate').open;
+    openChapter('evidence');
+    const evidenceRows = [...document.querySelectorAll('button[data-evidence-node]')];
+    const evidenceLabels = evidenceRows.every(row => row.querySelector('.evidence-chip').textContent === nodeEvidence(ARCH_SPEC, row.dataset.evidenceNode).label);
+    const locatorCap = evidenceRows.every(row => row.querySelectorAll('.evidence-locator').length <= 4);
+    evidenceRows[0].click();
+    const evidenceOpened = state.selectedNodeId === evidenceRows[0].dataset.evidenceNode && document.querySelector('[data-region="rail"]').getAttribute('data-sheet') === 'node';
+    return JSON.stringify({ changesTitle, addedOpened, endsVisible, edgeEmphasised, reviewTitle, firstSection, ruleCount: rules.length, policies: ARCH_SPEC.policies.length,
+      riskSelected, gateClosed, gateOpened, paletteGateOpened, evidenceCount: evidenceRows.length, nodes: LAYOUT_DATA.nodes.length, evidenceLabels, locatorCap, evidenceOpened });
+  })()`)] }])[0]));
+  assert.strictEqual(obs.changesTitle, '4 added, 2 changed, 2 new connections');
+  assert.ok(obs.addedOpened, 'Added rows open the component sheet');
+  assert.ok(obs.endsVisible, 'New connections frame both cards within the canvas');
+  assert.ok(obs.edgeEmphasised, 'New connections briefly emphasise their edge');
+  assert.strictEqual(obs.reviewTitle, 'All rules pass, 2 known failure modes');
+  assert.strictEqual(obs.firstSection, 'section-rules');
+  assert.strictEqual(obs.ruleCount, obs.policies);
+  assert.ok(obs.riskSelected);
+  assert.ok(obs.gateClosed);
+  assert.ok(obs.gateOpened, 'Rules trust pill reveals the collapsed gate');
+  assert.ok(obs.paletteGateOpened, 'Quality gate palette action reveals the collapsed gate');
+  assert.strictEqual(obs.evidenceCount, obs.nodes);
+  assert.ok(obs.evidenceLabels);
+  assert.ok(obs.locatorCap);
+  assert.ok(obs.evidenceOpened);
+}]);
+
+cases.push(['p8: chapters render all examples without overflow at 320, 768, 1024 and 1440', () => {
+  for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
+    const results = runPhases('examples/' + name + '/architecture.json', [320, 768, 1024, 1440].map(width => ({ width, height: 900, steps: [ev(`JSON.stringify(['changes', 'review', 'evidence'].map(chapter => {
+      openChapter(chapter);
+      const panel = document.getElementById('chapter-' + chapter);
+      return { intro: !!panel.querySelector('.chapter-eyebrow') && !!panel.querySelector('.chapter-context'), overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > innerWidth };
+    }))`)] })));
+    results.forEach(result => JSON.parse(lastEvalValue(result)).forEach(chapter => {
+      assert.ok(chapter.intro, name + ': chapter has its introduction');
+      assert.strictEqual(chapter.overflow, false, name + ': chapter fits the page');
+    }));
+  }
+}]);
+
+cases.push(['p8: lens fit measures badge ink and policy ghosts while supporting geometry-only callers', () => {
+  const vm = require('node:vm');
+  const context = vm.createContext({
+    LAYOUT_DATA: { nodes: [{ id: 'card', x: 100, y: 100, width: 220, height: 72 }], edges: [] },
+    state: { collapsedBoundaries: new Set() }, ArchVizGeometry: geometry,
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/fit.js'), 'utf8'), context);
+  const bounds = () => JSON.parse(JSON.stringify(context.computeTotalVisualBounds()));
+  assert.deepStrictEqual(bounds(), { minX: 100, minY: 100, maxX: 320, maxY: 172, width: 220, height: 72 });
+  context.document = { querySelector: selector => {
+    assert.strictEqual(selector, '#node-card .node-badge');
+    return { getBBox: () => ({ x: -2, y: -1, width: 100, height: 18 }),
+      transform: { baseVal: { consolidate: () => ({ matrix: { e: 108, f: -8 } }) } } };
+  } };
+  assert.deepStrictEqual(bounds(), { minX: 100, minY: 91, maxX: 320, maxY: 172, width: 220, height: 81 });
+  context.ghostLayer = { querySelectorAll: selector => {
+    assert.strictEqual(selector, '.policy-ghost');
+    return [{ getBBox: () => ({ x: 400, y: 50, width: 100, height: 30 }) }];
+  } };
+  assert.deepStrictEqual(bounds(), { minX: 100, minY: 50, maxX: 500, maxY: 172, width: 400, height: 122 });
+}]);
+
+cases.push(['p8: lenses keep card tags above text and recede only context on example 3', () => {
+  const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+    const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    selectLens('structure');
+    const original = [...document.querySelectorAll('.node-tech')].map(text => text.textContent);
+    const visits = ['change', 'risk', 'evidence', 'structure', 'change'].map(lens => {
+      selectLens(lens);
+      // Finish opacity transitions before inspecting the lens alone.
+      document.querySelectorAll('.node-group, .edge-group').forEach(group => group.style.transition = 'none');
+      return { lens, tech: [...document.querySelectorAll('.node-tech')].map(text => text.textContent),
+        badges: [...document.querySelectorAll('.node-badge')].map(badge => {
+          const card = badge.parentNode;
+          const box = badge.getBoundingClientRect(), rect = card.querySelector('.node-rect').getBoundingClientRect();
+          return { overlaps: ['.node-name', '.node-tech'].some(selector => overlaps(box, card.querySelector(selector).getBoundingClientRect())),
+            above: box.top < rect.top && box.bottom > rect.top };
+        }),
+        nodes: LAYOUT_DATA.nodes.map(node => [node.delta || 'UNCHANGED', Number(getComputedStyle(document.getElementById('node-' + node.id)).opacity)]),
+        edges: LAYOUT_DATA.edges.map(edge => [edge.delta || 'UNCHANGED', document.getElementById('path-' + edge.id).dataset.lensStroke,
+          Number(getComputedStyle(document.getElementById('edge-' + edge.id)).opacity)]),
+        ghostCount: document.querySelectorAll('.policy-ghost').length,
+      };
+    });
+    return JSON.stringify({ original, visits });
+  })()`)] }]);
+  const obs = JSON.parse(lastEvalValue(results[0]));
+  obs.visits.forEach(visit => {
+    assert.deepStrictEqual(visit.tech, obs.original, visit.lens + ': badges must not narrow technology');
+    visit.badges.forEach(badge => { assert(!badge.overlaps, visit.lens + ': badge overlaps text'); assert(badge.above); });
+    if (visit.lens === 'change') {
+      visit.nodes.forEach(([delta, opacity]) => assert.strictEqual(opacity, delta === 'UNCHANGED' ? 0.35 : 1));
+      visit.edges.forEach(([delta, stroke, opacity]) => {
+        if (delta === 'UNCHANGED') assert(opacity < 0.6);
+        if (delta === 'ADDED') assert.strictEqual(stroke, 'ok');
+      });
+    }
+    if (visit.lens === 'structure') {
+      visit.nodes.forEach(([, opacity]) => assert.strictEqual(opacity, 1));
+      visit.edges.forEach(([, stroke, opacity]) => { assert.strictEqual(stroke, 'edge'); assert.strictEqual(opacity, 1); });
+      assert.strictEqual(visit.ghostCount, 0);
+    }
+  });
+}]);
+
+cases.push(['p8: lenses route Risk ghosts orthogonally around cards with separate labels', () => {
+  const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+    selectLens('risk');
+    const cards = LAYOUT_DATA.nodes.map(node => ({ id: node.id, x: node.x, y: node.y, width: node.width, height: node.height }));
+    const ghosts = [...document.querySelectorAll('.policy-ghost')].map(group => {
+      const numbers = group.querySelector('.policy-ghost-line').getAttribute('d').match(/-?[0-9.]+/g).map(Number);
+      const policy = ARCH_SPEC.policies.find(policy => policy.id === group.dataset.policyId);
+      return { from: policy.from, to: policy.to, points: numbers.reduce((out, n, i) => { if (i % 2 === 0) out.push({ x: n, y: numbers[i + 1] }); return out; }, []) };
+    });
+    const labels = [...document.querySelectorAll('.edge-label-bg, .node-badge')].map(label => {
+      const r = label.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, ghost: !!label.closest('.policy-ghost') };
+    });
+    return JSON.stringify({ cards, ghosts, labels });
+  })()`)] }]);
+  const obs = JSON.parse(lastEvalValue(results[0]));
+  assert(obs.ghosts.length > 0);
+  obs.ghosts.forEach(ghost => ghost.points.slice(1).forEach((b, i) => {
+    const a = ghost.points[i];
+    assert(a.x === b.x || a.y === b.y, 'ghost segment must be orthogonal');
+    obs.cards.filter(card => card.id !== ghost.from && card.id !== ghost.to).forEach(card => {
+      const crosses = a.x === b.x
+        ? a.x > card.x && a.x < card.x + card.width && Math.max(a.y, b.y) > card.y && Math.min(a.y, b.y) < card.y + card.height
+        : a.y > card.y && a.y < card.y + card.height && Math.max(a.x, b.x) > card.x && Math.min(a.x, b.x) < card.x + card.width;
+      assert(!crosses, 'ghost crosses ' + card.id);
+    });
+  }));
+  obs.labels.forEach((a, i) => obs.labels.slice(i + 1).forEach(b => {
+    if (a.ghost || b.ghost) assert(!(a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top), 'policy label overlaps another label');
+  }));
+}]);
+
+cases.push(['p8: lenses and top-edge tags keep the page inside every viewport', () => {
+  const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [320, 768, 1024, 1440].map(width => ({ width, height: 900, steps: [ev(`JSON.stringify(['change', 'risk', 'evidence', 'structure'].map(lens => {
+    selectLens(lens); fitToScreen();
+    const canvas = document.getElementById('arch-svg').getBoundingClientRect();
+    return { lens, overflow: document.documentElement.scrollWidth > innerWidth,
+      clipped: [...document.querySelectorAll('.node-group:not(.hidden) .node-badge')].some(badge => {
+        const box = badge.getBoundingClientRect(); return box.top < canvas.top || box.left < canvas.left || box.right > canvas.right || box.bottom > canvas.bottom;
+      }) };
+  }))`)] })));
+  results.forEach(result => JSON.parse(lastEvalValue(result)).forEach(visit => { assert(!visit.overflow, visit.lens); assert(!visit.clipped, visit.lens); }));
+}]);
+
 
 module.exports = { name: 'Rendered DOM Verification', cases };

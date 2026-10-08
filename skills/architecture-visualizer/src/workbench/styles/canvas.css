@@ -96,7 +96,7 @@ svg#arch-svg {
 .node-group[data-lens-fill="surface-2"] .node-rect { fill: var(--surface-2); }
 .node-group[data-lens-muted] .node-name { fill: var(--muted); }
 .node-group[data-lens-strike] .node-name { text-decoration: line-through; }
-.policy-ghost-line { stroke-width: 1.4; stroke-dasharray: 2 4; }
+.policy-ghost-line { fill: none; stroke-width: 1.4; stroke-dasharray: 2 4; }
 .policy-ghost { pointer-events: none; }
 
 /* Risk marks drawn on top of an edge or a card: an against-flow chevron, a cycle number, a missing-evidence ring. */
@@ -269,3 +269,19 @@ svg#arch-svg {
 .node-group.context-dim, .edge-group.context-dim { opacity: 0.18; transition: opacity 0.25s ease; }
 .edge-group.context-focus .edge-path { stroke: var(--ink); stroke-width: 1.8; }
 @media (prefers-reduced-motion: reduce) { .node-group.context-dim, .edge-group.context-dim { transition: none; } }
+
+/* Recession is applied once to the whole mark, including its label. Spotlight
+   classes share that opacity so overlapping focuses never multiply the fade. */
+:is(.node-group, .edge-group)[data-lens-context],
+:is(.node-group, .edge-group)[data-canvas-lens="change"]:is(.dimmed, .out-of-focus, .context-dim, :has(.edge-path.dimmed)),
+:is(.node-group, .edge-group)[data-canvas-lens="risk"]:is(.dimmed, .out-of-focus, .context-dim, :has(.edge-path.dimmed)) {
+  opacity: 0.35 !important;
+}
+.edge-group:is([data-canvas-lens="change"], [data-canvas-lens="risk"]) :is(.edge-path, .edge-label text) {
+  opacity: 1 !important;
+}
+.node-group:is([data-canvas-lens="change"], [data-canvas-lens="risk"])[data-lens-stroke]:not([data-lens-stroke="line"]) .node-rect {
+  stroke-width: 2;
+}
+.policy-ghost .edge-label-bg { stroke: var(--risk); }
+.policy-ghost .edge-label-text { fill: var(--risk); }

@@ -65,53 +65,35 @@ function renderReviewNavigator() {
   findings.forEach(item => findingTarget.appendChild(makeReviewButton('finding', item, item.id || item.message || 'Finding', item.severity)));
 }
 
-// The Evidence chapter: one row per component in canvas order, each listing every locator behind it.
+// The Evidence chapter pairs each component with its trust state and up to four locators.
 function renderEvidenceChapter() {
   const target = document.getElementById('evidence-list');
   if (!target) return;
+  const grounding = trustSummary(ARCH_SPEC, QUALITY_GATE).grounding;
+  chapterIntro(target.closest('.rail-panel'), 'EVIDENCE', 'What each component is backed by',
+    ARCH_SPEC.meta?.grounding === 'illustrative' ? 'This example is illustrative. Locators are declared in the spec and were not verified against a repository.' : grounding.detail);
   target.replaceChildren();
   (LAYOUT_DATA.nodes || []).forEach(node => {
     const evidence = nodeEvidence(ARCH_SPEC, node.id);
-    const row = document.createElement('div');
-    row.className = 'evidence-row';
-    row.setAttribute('data-evidence-node', node.id);
-
-    const head = document.createElement('div');
-    head.className = 'evidence-head';
-    const icon = document.createElement('span');
-    icon.className = 'evidence-icon';
-    icon.innerHTML = iconMarkup(getNodeIcon(node.type));
-    const name = document.createElement('button');
-    name.type = 'button';
-    name.className = 'evidence-name';
-    name.setAttribute('data-evidence-node-label', node.id);
-    name.textContent = node.label || node.id;
-    name.addEventListener('click', () => openInspectorForNode(node.id));
-    const chip = document.createElement('span');
-    chip.className = 'evidence-chip';
-    chip.setAttribute('data-evidence-state', evidence.state);
+    const row = chapterRow('', node.label || node.id, '', '', 'neutral', () => openInspectorForNode(node.id));
+    row.classList.add('evidence-row');
+    row.dataset.evidenceNode = node.id;
+    row.querySelector('.sheet-list-marker').innerHTML = iconMarkup(getNodeIcon(node.type));
+    const name = row.querySelector('.sheet-list-title');
+    name.dataset.evidenceNodeLabel = node.id;
+    const chip = row.querySelector('.chapter-aside');
+    chip.classList.add('evidence-chip');
+    chip.dataset.evidenceState = evidence.state;
     chip.textContent = evidence.label;
-    head.append(icon, name, chip);
-
-    const locators = document.createElement('div');
-    locators.className = 'evidence-locators';
-    if (evidence.locators.length === 0) {
-      const empty = document.createElement('span');
-      empty.className = 'evidence-empty';
-      empty.textContent = 'No evidence records';
-      locators.appendChild(empty);
-    } else {
-      evidence.locators.forEach(record => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'evidence-locator';
-        button.textContent = trustLocatorKey(record.locator);
-        button.addEventListener('click', () => openReviewInspector('evidence', record));
-        locators.appendChild(button);
-      });
-    }
-
-    row.append(head, locators);
+    const locators = row.querySelector('.sheet-list-note');
+    locators.classList.add('evidence-locators');
+    evidence.locators.slice(0, 4).forEach(record => {
+      const line = document.createElement('span');
+      line.className = 'evidence-locator';
+      line.textContent = `${record.type}  ${trustLocatorKey(record.locator)}`;
+      locators.appendChild(line);
+    });
+    if (!evidence.locators.length) locators.textContent = 'No evidence records';
     target.appendChild(row);
   });
 }

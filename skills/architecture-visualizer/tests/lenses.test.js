@@ -852,4 +852,21 @@ fs.readdirSync(EXAMPLE_DIR)
     ]);
   });
 
+cases.push(['p8: lens badge text and tokens survive repeated lens switches', () => {
+  const spec = { nodes: [
+    { ...service('added'), delta: 'ADDED', failureModes: [{ name: 'Unavailable' }] },
+    { ...service('changed'), delta: 'CHANGED' },
+    { ...service('removed'), delta: 'REMOVED' },
+    service('unchanged'),
+  ], edges: [{ id: 'new', source: 'added', target: 'changed', delta: 'ADDED' }] };
+  const before = encode('change', spec);
+  assert.strictEqual(before.nodes.added.badge.text, 'Added');
+  assert.strictEqual(before.nodes.changed.badge.text, 'Changed');
+  assert.strictEqual(before.nodes.removed.badge.text, 'Removed');
+  assert.strictEqual(before.nodes.unchanged.badge, null);
+  assert.strictEqual(before.edges.new.stroke, 'ok');
+  ['risk', 'evidence', 'structure', 'change'].forEach(lens => assertNoOpacity(encode(lens, spec), lens));
+  assert.deepStrictEqual(encode('change', spec), before);
+}]);
+
 module.exports = { name: 'Lens engine', cases };

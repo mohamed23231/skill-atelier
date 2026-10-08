@@ -1,3 +1,20 @@
+// Geometry-only callers have no DOM; live fitting also includes the pill's ink bounds.
+function canvasNodeVisualBounds(node) {
+  const badge = typeof document === 'undefined' ? null : document.querySelector(`#node-${node.id} .node-badge`);
+  if (!badge) return { x: node.x, y: node.y, width: node.width, height: node.height };
+  const box = badge.getBBox();
+  const translation = badge.transform.baseVal.consolidate().matrix;
+  const left = Math.min(0, box.x + translation.e);
+  const top = Math.min(0, box.y + translation.f);
+  const right = Math.max(node.width, box.x + translation.e + box.width);
+  const bottom = Math.max(node.height, box.y + translation.f + box.height);
+  return { x: node.x + left, y: node.y + top, width: right - left, height: bottom - top };
+}
+
+function canvasPolicyGhosts(selector) {
+  return typeof ghostLayer === 'undefined' ? [] : [...ghostLayer.querySelectorAll(selector)];
+}
+
 function computeTotalVisualBounds() {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const tierBottom = new Map();
@@ -22,10 +39,11 @@ function computeTotalVisualBounds() {
   });
 
   (LAYOUT_DATA.nodes || []).forEach(n => {
-    minX = Math.min(minX, n.x);
-    minY = Math.min(minY, n.y);
-    maxX = Math.max(maxX, n.x + n.width);
-    maxY = Math.max(maxY, n.y + n.height);
+    const box = canvasNodeVisualBounds(n);
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxX = Math.max(maxX, box.x + box.width);
+    maxY = Math.max(maxY, box.y + box.height);
   });
 
   (LAYOUT_DATA.edges || []).forEach(e => {
@@ -40,6 +58,14 @@ function computeTotalVisualBounds() {
       maxX = Math.max(maxX, e.points.x1, e.points.x2);
       maxY = Math.max(maxY, e.points.y1, e.points.y2);
     }
+  });
+
+  canvasPolicyGhosts('.policy-ghost').forEach(group => {
+    const box = group.getBBox();
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxX = Math.max(maxX, box.x + box.width);
+    maxY = Math.max(maxY, box.y + box.height);
   });
 
   if (!isFinite(minX) || !isFinite(minY)) {
@@ -92,7 +118,12 @@ function fitToScreen() {
   // Lane titles sit in the gutter at each boundary's top-left; they must stay readable too.
   const titles = (LAYOUT_DATA.boundaries || []).map(boundary => ({ x: boundary.x, y: boundary.y,
     width: Math.min(160, boundary.width), height: Math.min(52, boundary.height) }));
-  const marks = nodes.concat(titles, (LAYOUT_DATA.edges || []).filter(edge => edge.labelBounds)
+  const cardsWithTags = nodes.map(canvasNodeVisualBounds);
+  const policyTags = canvasPolicyGhosts('.policy-ghost .edge-label-bg').map(label => {
+    const box = label.getBBox();
+    return { x: box.x, y: box.y, width: box.width, height: box.height };
+  });
+  const marks = cardsWithTags.concat(titles, policyTags, (LAYOUT_DATA.edges || []).filter(edge => edge.labelBounds)
     .map(edge => ({ x: edge.labelBounds.left, y: edge.labelBounds.top,
       width: edge.labelBounds.width, height: edge.labelBounds.height })));
   const initialZoom = Math.min((rect.width - 32) / Math.max(1, bounds.width),

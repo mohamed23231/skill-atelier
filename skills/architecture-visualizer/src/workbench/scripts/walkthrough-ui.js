@@ -507,7 +507,7 @@ function renderWalkTrack() {
   count.textContent = active ? `Step ${stepNumber} of ${total}` : 'Start';
   const length = document.createElement('span');
   length.className = 'walk-length';
-  length.textContent = `${walkAllStepsTotal(scenario)} steps`;
+  length.textContent = plural(walkAllStepsTotal(scenario), 'step');
   length.hidden = active;
   controls.append(count, length);
   if (active) {
