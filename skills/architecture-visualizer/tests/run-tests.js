@@ -13,6 +13,7 @@ const suites = [
   require('./cli.test.js'),
   require('./scaffold.test.js'),
   require('./freshness.test.js'),
+  require('./generated.test.js'),
   require('./rendered.test.js')
 ];
 

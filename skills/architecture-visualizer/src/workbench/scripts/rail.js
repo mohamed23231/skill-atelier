@@ -330,23 +330,37 @@ function renderOverviewChapter() {
     }
   }
 
+  // What this proposal changes, then what is still open: rows a reader can follow into the chapters.
   const changes = document.getElementById('overview-changes');
   if (changes) {
-    changes.replaceChildren();
-    const counts = { ADDED: 0, CHANGED: 0, REMOVED: 0, MOVED: 0 };
-    (ARCH_SPEC.nodes || []).forEach(node => {
-      if (counts[node.delta] !== undefined) counts[node.delta] += 1;
-    });
-    const summary = document.createElement('span');
-    summary.className = 'rail-muted';
-    summary.textContent = `Added ${counts.ADDED} · Changed ${counts.CHANGED} · Removed ${counts.REMOVED} · Moved ${counts.MOVED}`;
-    const open = document.createElement('button');
-    open.type = 'button';
-    open.className = 'btn-icon';
-    open.setAttribute('data-overview-open-changes', '');
-    open.textContent = 'Open Changes';
-    open.addEventListener('click', () => openChapter('changes'));
-    changes.append(summary, open);
+    const names = list => list.length <= 4 ? list.join(', ') : `${list.slice(0, 4).join(', ')} and ${list.length - 4} more`;
+    const byDelta = delta => (ARCH_SPEC.nodes || []).filter(node => node.delta === delta).map(node => node.label || node.id);
+    const rows = [['ADDED', '+', 'added'], ['CHANGED', '~', 'changed'], ['MODIFIED', '~', 'changed'], ['REMOVED', '\u2212', 'removed'], ['MOVED', '\u2194', 'moved']]
+      .map(([delta, marker, verb]) => [marker, byDelta(delta), verb])
+      .filter(([, list]) => list.length)
+      .map(([marker, list, verb]) => sheetListItem(marker, `${plural(list.length, 'component')} ${verb}`, names(list), () => openChapter('changes')));
+    const list = document.createElement('ul');
+    list.className = 'sheet-list';
+    list.append(...rows);
+    changes.replaceChildren(rows.length ? list : Object.assign(document.createElement('p'), { className: 'rail-muted', textContent: 'This model describes the system as it is; nothing changes.' }));
+  }
+  const open = document.getElementById('overview-open');
+  if (open) {
+    const meta = ARCH_SPEC.meta || {};
+    const assumptions = ARCH_SPEC.review?.assumptions || meta.assumptions || [];
+    const decisions = meta.decisions || [];
+    const questions = ARCH_SPEC.review?.unresolvedQuestions || meta.unresolvedQuestions || [];
+    const toReview = anchor => () => {
+      openChapter('review');
+      window.requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ block: 'start' }));
+    };
+    const list = document.createElement('ul');
+    list.className = 'sheet-list';
+    if (assumptions.length) list.appendChild(sheetListItem('?', plural(assumptions.length, 'assumption'), 'The design depends on these being true.', toReview('assumptions')));
+    if (decisions.length) list.appendChild(sheetListItem('\u2261', plural(decisions.length, 'recorded decision'), decisions.map(d => d.id || d.title).join(', '), () => openChapter('review')));
+    list.appendChild(sheetListItem('?', questions.length ? plural(questions.length, 'open question') : 'No open questions recorded',
+      questions.length ? questions.slice(0, 2).map(q => (typeof q === 'string' ? q : q.question || q.text || '')).join(' · ') : 'Unresolved questions in the spec would appear here.', toReview('assumptions')));
+    open.replaceChildren(list);
   }
 }
 

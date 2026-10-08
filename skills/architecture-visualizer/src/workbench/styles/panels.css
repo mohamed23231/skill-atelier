@@ -399,7 +399,8 @@ body:not([data-ready-ms]) .rail { transition: none; }
 .sheet-list-marker { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .sheet-list-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 3px; }
 .sheet-list-title { font-size: 14px; font-weight: 600; }
-.sheet-list-note { color: var(--muted); font-size: 12px; font-family: var(--mono); overflow-wrap: anywhere; }
+.sheet-list-note { color: var(--muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.sheet-list-note.mono { font-family: var(--mono); }
 .sheet-bullets li { position: relative; padding: 5px 0 5px 18px; font-size: 14px; color: var(--ink); }
 .sheet-bullets li::before { content: "\2013"; position: absolute; left: 2px; color: var(--muted); }
 .sheet-rows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; }

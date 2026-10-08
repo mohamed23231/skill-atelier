@@ -3691,4 +3691,47 @@ cases.push(['p8: lenses and top-edge tags keep the page inside every viewport', 
 }]);
 
 
+// Any model: generated specs of every shape get the same real-interaction sweep the examples get.
+cases.push(['generated: twelve generated specs survive a full interaction sweep with no errors, overlaps or overflow', () => {
+  const { generateSpec } = require('./spec-generator.js');
+  const SWEEP = ev(`(async function () {
+    const problems = [];
+    const origError = console.error;
+    console.error = (...args) => { problems.push('console.error: ' + args.join(' ')); };
+    const pause = ms => new Promise(r => setTimeout(r, ms));
+    const rects = selector => [...document.querySelectorAll(selector)].map(el => el.getBoundingClientRect()).filter(r => r.width > 0);
+    const overlaps = list => list.some((a, i) => list.slice(i + 1).some(b => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1));
+    const sheetOpenAfterClick = !document.getElementById('component-sheet').hidden && state.selectedNodeId === 'n0';
+    if (!sheetOpenAfterClick) problems.push('a real click on a card did not open its sheet');
+    closeInspector(); await pause(50); fitToScreen(); await pause(50);
+    if (overlaps(rects('.node-group .node-rect'))) problems.push('cards overlap on screen');
+    if (overlaps(rects('.edge-label-bg'))) problems.push('label pills overlap on screen');
+    for (const node of LAYOUT_DATA.nodes) { openInspectorForNode(node.id); await pause(5); }
+    for (const edge of LAYOUT_DATA.edges) { openInspectorForEdge(edge.id); await pause(2); }
+    closeInspector();
+    for (const scenario of ARCH_SPEC.scenarios || []) {
+      startWalkthrough(scenario.id);
+      const decision = walkEntries().find(entry => entry.kind === 'decision');
+      const outcomes = decision ? decision.branches.length : 1;
+      for (let choice = 0; choice < outcomes; choice++) {
+        startWalkthrough(scenario.id, decision ? { [decision.id]: choice } : {});
+        for (const entry of walkEntries()) { walkTo(entry.id); await pause(2); }
+      }
+      endWalkthrough();
+    }
+    for (const lens of LENSES) { selectLens(lens); await pause(20); if (overlaps(rects('.edge-label-bg'))) problems.push('label pills overlap in ' + lens); }
+    selectLens('structure');
+    for (const chapter of availableChapters()) { openChapter(chapter.id); await pause(10); }
+    console.error = origError;
+    if (Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > innerWidth + 1) problems.push('horizontal page overflow');
+    if (/undefined|NaN|\\[object Object\\]/.test(document.getElementById('rail').innerText)) problems.push('the rail prints undefined, NaN or [object Object]');
+    return JSON.stringify(problems.concat((window.__errors || []).map(e => 'error: ' + e.msg)));
+  })()`);
+  for (let seed = 1; seed <= 12; seed++) {
+    const width = seed % 4 === 0 ? 390 : 1440;
+    const [phase] = runPhases(generateSpec(seed), [{ width, height: 900, steps: [mouse({ action: 'jitter-click', selector: '#node-n0', fx: 0.5, fy: 0.5 }), ev('new Promise(r => setTimeout(() => r(0), 500))'), SWEEP] }]);
+    assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [], `seed ${seed} at ${width}px`);
+  }
+}]);
+
 module.exports = { name: 'Rendered DOM Verification', cases };

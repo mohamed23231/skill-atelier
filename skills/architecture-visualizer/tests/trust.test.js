@@ -318,17 +318,17 @@ const cases = [
       });
       const entry = host(trustSummary(spec, []).evidence);
       assert.strictEqual(entry.state, 'warn');
-      assert.strictEqual(entry.label, '1 of 2 existing lack evidence');
+      assert.strictEqual(entry.label, '1/2 backed · 1 missing evidence');
     },
   ],
 
   [
-    'evidence: an inferred node that never claimed evidence is counted as without evidence, not lacking',
+    'evidence: an inferred node that never claimed evidence is counted as inferred, not missing evidence',
     () => {
       const spec = baseSpec({ nodes: [{ id: 'b', status: 'INFERRED', delta: 'CHANGED' }] });
       const entry = host(trustSummary(spec, []).evidence);
       assert.strictEqual(entry.state, 'unchecked');
-      assert.strictEqual(entry.label, '0/1 existing backed · 1 without evidence');
+      assert.strictEqual(entry.label, '0/1 backed · 1 inferred');
     },
   ],
 
@@ -338,7 +338,7 @@ const cases = [
       const spec = baseSpec({ nodes: [{ id: 'a', status: 'VERIFIED', delta: 'UNCHANGED' }] });
       const entry = host(trustSummary(spec, []).evidence);
       assert.strictEqual(entry.state, 'warn');
-      assert.strictEqual(entry.label, '1 of 1 existing lack evidence');
+      assert.strictEqual(entry.label, '0/1 backed · 1 missing evidence');
     },
   ],
 
@@ -354,7 +354,7 @@ const cases = [
       });
       const entry = host(trustSummary(spec, []).evidence);
       assert.strictEqual(entry.state, 'ok');
-      assert.strictEqual(entry.label, '1/1 existing verified');
+      assert.strictEqual(entry.label, '1/1 verified');
     },
   ],
 
@@ -370,7 +370,7 @@ const cases = [
       });
       const entry = host(trustSummary(spec, []).evidence);
       assert.strictEqual(entry.state, 'ok');
-      assert.strictEqual(entry.label, '2/2 existing verified');
+      assert.strictEqual(entry.label, '2/2 verified');
     },
   ],
 
@@ -387,7 +387,7 @@ const cases = [
       });
       const entry = host(trustSummary(spec, []).evidence);
       assert.strictEqual(entry.state, 'unchecked');
-      assert.strictEqual(entry.label, '1/1 existing backed · 2 planned');
+      assert.strictEqual(entry.label, '1/1 backed · 2 planned');
     },
   ],
 
@@ -396,7 +396,7 @@ const cases = [
     () => {
       const spec = baseSpec({ nodes: [{ id: 'a', status: 'INFERRED', delta: 'ADDED' }] });
       const entry = host(trustSummary(spec, []).evidence);
-      assert.strictEqual(entry.label, '0/0 existing backed · 1 planned');
+      assert.strictEqual(entry.label, '1 planned');
       assert.strictEqual(entry.state, 'unchecked', 'nothing existing to check is not a pass');
     },
   ],
@@ -526,7 +526,7 @@ const cases = [
       const entry = host(trustSummary(baseSpec(), gate).gate);
       assert.strictEqual(entry.state, 'ok');
       assert.strictEqual(entry.label, '2 of 2 pass');
-      assert.strictEqual(entry.detail, '');
+      assert.strictEqual(entry.detail, 'Every quality check passes.');
     },
   ],
 
@@ -540,7 +540,7 @@ const cases = [
       const entry = host(trustSummary(baseSpec(), gate).gate);
       assert.strictEqual(entry.state, 'ok');
       assert.strictEqual(entry.label, '1 of 2 pass · 1 skipped');
-      assert.strictEqual(entry.detail, 'Two: not applicable');
+      assert.strictEqual(entry.detail, 'Skipped: Two.');
     },
   ],
 
@@ -555,7 +555,7 @@ const cases = [
       const entry = host(trustSummary(baseSpec(), one).gate);
       assert.strictEqual(entry.state, 'warn');
       assert.strictEqual(entry.label, '1 of 3 pass · 1 skipped · 1 warning');
-      assert.strictEqual(entry.detail, 'Two: soft Three: n/a');
+      assert.strictEqual(entry.detail, 'Needs attention: Two. Skipped: Three.');
 
       const two = [
         { id: 1, name: 'One', status: 'PASS', detail: 'fine' },
@@ -577,7 +577,7 @@ const cases = [
       const entry = host(trustSummary(baseSpec(), gate).gate);
       assert.strictEqual(entry.state, 'risk');
       assert.strictEqual(entry.label, '1 of 3 pass · 1 warning · 1 failed');
-      assert.strictEqual(entry.detail, 'Two: soft Three: broken');
+      assert.strictEqual(entry.detail, 'Failing: Three. Needs attention: Two.');
     },
   ],
 
@@ -590,7 +590,7 @@ const cases = [
       assert.deepStrictEqual(Object.keys(summary), ['grounding', 'evidence', 'rules', 'openItems', 'gate']);
       assert.strictEqual(summary.grounding.state, 'unchecked');
       assert.strictEqual(summary.evidence.state, 'unchecked', 'an empty model must not read as verified');
-      assert.strictEqual(summary.evidence.label, '0/0 existing backed');
+      assert.strictEqual(summary.evidence.label, 'No components');
       assert.strictEqual(summary.rules.state, 'neutral');
       assert.strictEqual(summary.openItems.state, 'ok');
       assert.strictEqual(summary.gate.state, 'unchecked');
@@ -602,9 +602,9 @@ const cases = [
 // The three real examples must read the same without any rendering.
 const EXAMPLE_DIR = path.join(__dirname, '../examples');
 const EXAMPLE_EVIDENCE = {
-  '1-crud-business-feature': '5/5 existing backed · 2 planned',
-  '2-complex-database-migration': '2/2 existing backed · 5 planned',
-  '3-async-event-driven-workflow': '6/6 existing backed · 4 planned',
+  '1-crud-business-feature': '5/5 backed · 2 planned',
+  '2-complex-database-migration': '2/2 backed · 5 planned',
+  '3-async-event-driven-workflow': '6/6 backed · 4 planned',
 };
 fs.readdirSync(EXAMPLE_DIR)
   .filter((name) => fs.existsSync(path.join(EXAMPLE_DIR, name, 'architecture.json')))

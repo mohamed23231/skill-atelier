@@ -83,7 +83,7 @@ function trustGroundingEntry(spec) {
   const sha7 = String(meta.groundedAt).slice(0, 7);
   const stale = trustArray(source.evidence).filter((record) => record && record.verification === 'stale').length;
   if (stale > 0) {
-    return trustEntry('warn', `${stale} stale since ${sha7}`, `${stale} evidence record(s) no longer match the grounded commit.`, 'evidence');
+    return trustEntry('warn', `${stale} stale since ${sha7}`, `${stale === 1 ? 'One evidence record no longer matches' : `${stale} evidence records no longer match`} the grounded commit.`, 'evidence');
   }
   return trustEntry('ok', `Grounded at ${sha7}`, `Evidence was checked against commit ${sha7}.`, 'evidence');
 }
@@ -100,7 +100,7 @@ function trustEvidenceEntry(spec) {
     const evidence = nodeEvidence(spec, node.id);
     // Lacking means a claim with nothing behind it: a record that did not resolve, a VERIFIED status
     // without records, or evidence ids that point at nothing. An inferred node that never claimed
-    // evidence is counted as without evidence, neither hidden nor raised as a warning.
+    // evidence is counted as inferred, neither hidden nor raised as a warning.
     const claimed = node.status === 'VERIFIED' || trustArray(node.evidenceIds).length > 0;
     if (evidence.state === 'missing' || (evidence.records.length === 0 && claimed)) lacking += 1;
     else if (evidence.records.length === 0) unbacked += 1;
@@ -108,14 +108,22 @@ function trustEvidenceEntry(spec) {
   });
   const total = existing.length;
   const backed = total - lacking - unbacked;
-  const suffix = `${unbacked > 0 ? ` · ${unbacked} without evidence` : ''}${planned > 0 ? ` · ${planned} planned` : ''}`;
-  if (lacking > 0) {
-    return trustEntry('warn', `${lacking} of ${total} existing lack evidence${suffix}`, `${lacking} of ${total} existing components claim evidence that is not there.`, 'evidence');
-  }
-  if (total > 0 && verified === total) {
-    return trustEntry('ok', `${total}/${total} existing verified${suffix}`, 'Every existing component cites verified evidence.', 'evidence');
-  }
-  return trustEntry('unchecked', `${backed}/${total} existing backed${suffix}`, 'Existing components cite evidence that was declared, not verified.', 'evidence');
+  // Lead with what is backed, then name the rest in the reader's words.
+  const parts = [];
+  if (lacking > 0) parts.push(`${lacking} missing evidence`);
+  if (unbacked > 0) parts.push(`${unbacked} inferred`);
+  if (planned > 0) parts.push(`${planned} planned`);
+  const suffix = parts.length ? ` · ${parts.join(' · ')}` : '';
+  const sentences = [];
+  if (backed > 0) sentences.push(`${backed} of ${total} existing component${total === 1 ? '' : 's'} cite${backed === 1 ? 's' : ''} evidence${verified === backed ? ' that was verified' : ' declared in the spec'}.`);
+  if (lacking > 0) sentences.push(`${lacking} claim${lacking === 1 ? 's' : ''} evidence that is not there.`);
+  if (unbacked > 0) sentences.push(`${unbacked} ${unbacked === 1 ? 'is' : 'are'} inferred from the components around ${unbacked === 1 ? 'it' : 'them'}.`);
+  if (planned > 0) sentences.push(`${planned} ${planned === 1 ? 'is' : 'are'} planned and cannot have evidence yet.`);
+  const detail = sentences.join(' ') || 'The model has no existing components to back.';
+  if (total === 0) return trustEntry('unchecked', planned > 0 ? `${planned} planned` : 'No components', detail, 'evidence');
+  if (lacking > 0) return trustEntry('warn', `${backed}/${total} backed${suffix}`, detail, 'evidence');
+  if (total > 0 && verified === total) return trustEntry('ok', `${total}/${total} verified${suffix}`, detail, 'evidence');
+  return trustEntry('unchecked', `${backed}/${total} backed${suffix}`, detail, 'evidence');
 }
 
 function trustRulesEntry(spec) {
@@ -152,10 +160,10 @@ function trustOpenItemsEntry(spec) {
   if (q > 0) {
     let label = `${q} open question${q === 1 ? '' : 's'}`;
     if (a > 0) label += ` · ${a} assumption${a === 1 ? '' : 's'}`;
-    return trustEntry('warn', label, `${q} question(s) and ${a} assumption(s) remain open.`, 'review');
+    return trustEntry('warn', label, `${q} question${q === 1 ? '' : 's'} and ${a} assumption${a === 1 ? '' : 's'} remain open.`, 'review');
   }
   if (a > 0) {
-    return trustEntry('neutral', `${a} assumption${a === 1 ? '' : 's'}`, `${a} assumption(s) were declared without verification.`, 'review');
+    return trustEntry('neutral', `${a} assumption${a === 1 ? '' : 's'}`, `${a === 1 ? 'One assumption was' : `${a} assumptions were`} declared without verification.`, 'review');
   }
   return trustEntry('ok', 'No open items', 'No unresolved questions or assumptions.', 'review');
 }
@@ -176,10 +184,13 @@ function trustGateEntry(gate) {
   if (counts.SKIP > 0) label += ` · ${counts.SKIP} skipped`;
   if (counts.WARN > 0) label += ` · ${counts.WARN} warning${counts.WARN === 1 ? '' : 's'}`;
   if (counts.FAIL > 0) label += ` · ${counts.FAIL} failed`;
-  const detail = entries
-    .filter((entry) => entry && (entry.status === 'SKIP' || entry.status === 'WARN' || entry.status === 'FAIL'))
-    .map((entry) => `${entry.name}: ${entry.detail}`)
-    .join(' ');
+  // Name the checks that need a look; their full findings live in the Review chapter's gate.
+  const named = (status) => entries.filter((entry) => entry && entry.status === status).map((entry) => entry.name);
+  const sentences = [];
+  if (named('FAIL').length) sentences.push(`Failing: ${named('FAIL').join(', ')}.`);
+  if (named('WARN').length) sentences.push(`Needs attention: ${named('WARN').join(', ')}.`);
+  if (named('SKIP').length) sentences.push(`Skipped: ${named('SKIP').join(', ')}.`);
+  const detail = sentences.join(' ') || 'Every quality check passes.';
   return trustEntry(state, label, detail, 'review');
 }
 

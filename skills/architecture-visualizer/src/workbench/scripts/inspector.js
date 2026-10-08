@@ -119,13 +119,13 @@ function renderSheetConnections(nodeId) {
   const outs = edges.filter(edge => edge.source === nodeId);
   const ins = edges.filter(edge => edge.target === nodeId);
   const row = (edge, other, arrow) => sheetListItem(arrow, nodeById.get(other)?.label || other,
-    [edge.label || edge.packetLabel, edge.communication].filter(Boolean).join(' · '), () => openInspectorForNode(other));
+    [edge.label || edge.packetLabel, edge.communication].filter(Boolean).join(' · '), () => openInspectorForNode(other), { mono: true });
   document.getElementById('ins-connections').replaceChildren(...outs.map(edge => row(edge, edge.target, '→')), ...ins.map(edge => row(edge, edge.source, '←')));
   document.getElementById('ins-connection-count').textContent = `${ins.length} in · ${outs.length} out`;
   sheetSection('connections', ins.length + outs.length > 0);
 }
 
-function sheetListItem(marker, title, note, onClick) {
+function sheetListItem(marker, title, note, onClick, options = {}) {
   const li = document.createElement('li');
   const button = document.createElement('button');
   button.type = 'button';
@@ -141,7 +141,7 @@ function sheetListItem(marker, title, note, onClick) {
   text.appendChild(name);
   if (note) {
     const detail = document.createElement('span');
-    detail.className = 'sheet-list-note';
+    detail.className = options.mono ? 'sheet-list-note mono' : 'sheet-list-note';
     detail.textContent = note;
     text.appendChild(detail);
   }
