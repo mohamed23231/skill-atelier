@@ -110,6 +110,13 @@ function renderDiagram() {
     const targetLabel = nodeById.get(e.target)?.label || e.target;
     withTooltip(path, `${sourceLabel} → ${targetLabel}\n${e.label || e.packetLabel || 'unlabeled'} · ${e.communication || 'sync'}${e.pathType ? ` · ${e.pathType}` : ''}`);
     g.appendChild(path);
+    // A thin line is hard to hit: a wide invisible twin takes the pointer, and a click or the label
+    // opens the connection's sheet.
+    g.appendChild(el('path', { id: `hit-${e.id}`, class: 'edge-hit', d: e.path }));
+    g.addEventListener('click', ev => {
+      ev.stopPropagation();
+      if (!state.dragMoved) openInspectorForEdge(e.id);
+    });
 
     const labelText = e.label || e.packetLabel;
     if (labelText) {
@@ -151,14 +158,15 @@ function renderDiagram() {
       .filter(Boolean);
     withTooltip(g, tooltipLines.join('\n'));
 
+    // Clicking a card or pressing Enter on it opens its sheet, frames its neighbourhood and spotlights it.
     g.addEventListener('click', ev => {
       ev.stopPropagation();
-      if (!state.dragMoved) selectNode(n.id);
+      if (!state.dragMoved) openInspectorForNode(n.id);
     });
     g.addEventListener('keydown', ev => {
       if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault();
-        selectNode(n.id);
+        openInspectorForNode(n.id);
       }
     });
     g.addEventListener('mousedown', ev => {

@@ -177,6 +177,7 @@ function recomputeAllEdges() {
     Object.assign(edge, ArchVizOrthogonal.buildRouteGeometry(result.routes[edge.id], labelWidths[edge.id], ArchVizGeometry, { source: nodeById.get(edge.source), target: nodeById.get(edge.target) }));
     const path = document.getElementById(`path-${edge.id}`);
     if (path) path.setAttribute('d', edge.path);
+    document.getElementById(`hit-${edge.id}`)?.setAttribute('d', edge.path);
     const group = document.getElementById(`label-${edge.id}`);
     if (group) {
       const rect = group.querySelector('rect');
@@ -255,6 +256,7 @@ function recalculateCurvedEdges(nodeId) {
 
       const pathEl = document.getElementById(`path-${edge.id}`);
       if (pathEl) pathEl.setAttribute('d', geometry.path);
+      document.getElementById(`hit-${edge.id}`)?.setAttribute('d', geometry.path);
 
       const labelGroup = document.getElementById(`label-${edge.id}`);
       if (labelGroup) {

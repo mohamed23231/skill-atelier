@@ -1320,6 +1320,22 @@ const cases = [
     assert.deepStrictEqual(first.focused, first.expected);
     assert.strictEqual(values[1], 0, 'an open component sheet keeps its own spotlight');
   }],
+  ['viewer: a real click on a card opens its sheet and spotlight, and a real click on a connection opens the connection', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      mouse({ action: 'click', selector: '#node-outbox_poller', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(JSON.stringify({ sheet: document.getElementById('component-sheet').hidden, kind: document.getElementById('rail').dataset.sheet,
+        title: document.getElementById('ins-title').textContent, dimmed: document.querySelectorAll('.node-group.context-dim').length,
+        connections: document.querySelectorAll('#ins-connections button').length })), 600))`),
+      ev(`(closeInspector(), 0)`),
+      mouse({ action: 'click', selector: '#label-e_saga_outbox rect', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(JSON.stringify({ sheet: document.getElementById('component-sheet').hidden, kind: document.getElementById('rail').dataset.sheet, edge: state.selectedEdgeId })), 400))`)] }]);
+    const values = phase.filter(step => step && step.kind === 'eval').map(step => step.value);
+    const card = JSON.parse(values[0]);
+    assert.deepStrictEqual({ ...card, dimmed: card.dimmed > 0, connections: card.connections > 0 }, { sheet: false, kind: 'node', title: 'Outbox Relay Worker', dimmed: true, connections: true });
+    const edge = JSON.parse(values[2]);
+    assert.strictEqual(edge.sheet, false);
+    assert.strictEqual(edge.kind, 'edge');
+  }],
   ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({
       rail: document.querySelector('[data-region="rail"]').getAttribute('data-open'),

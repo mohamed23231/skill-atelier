@@ -194,3 +194,5 @@ body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; rig
 .node-group.walk-active .node-rect { stroke: var(--accent); stroke-width: 2; }
 /* A faint dot grid gives the canvas a surface. */
 #canvas-container { background-image: radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size: 22px 22px; }
+.edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.edge-label { cursor: pointer; }
