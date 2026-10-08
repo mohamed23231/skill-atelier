@@ -176,6 +176,9 @@ body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; rig
 .workbench-minimap svg { width: 100%; height: 100%; display: block; }
 [data-minimap-viewport] { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 [data-selected="true"] { outline: 3px double var(--accent); outline-offset: 3px; }
+/* On the canvas an outline is a square frame that ignores the card's corners; the selected card is
+   drawn in ink on its own shape (canvas.css) and a connection darkens with its context instead. */
+.node-group[data-selected="true"], .edge-path[data-selected="true"] { outline: none; }
 [data-action]:focus-visible, [data-search-result]:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #canvas-container { margin-left: 0; width: 100%; }
 .viewport-controls { right: 20px; }

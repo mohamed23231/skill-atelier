@@ -44,10 +44,48 @@ function initRail() {
   });
 
   renderRailTabs();
+  initChapterTabScroll();
 
   // Ensure current chapter is set and panel is visible
   const initialChapter = availableIds.has(state.chapter) ? state.chapter : 'overview';
   openChapter(initialChapter);
+}
+
+// Seven chapters do not fit a 400px rail. The strip scrolls, a chevron shows at each end with more
+// chapters behind it, a vertical wheel scrolls it sideways, and the open chapter is kept in view.
+function syncChapterTabOverflow() {
+  const strip = document.querySelector('.rail-chapters');
+  if (!strip) return;
+  const more = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1;
+  document.querySelectorAll('[data-tabs-scroll]').forEach(button => {
+    button.hidden = button.dataset.tabsScroll === '1' ? !more : strip.scrollLeft <= 1;
+  });
+}
+
+function revealChapterTab(tab) {
+  const strip = document.querySelector('.rail-chapters');
+  if (!strip || !tab) return;
+  const left = tab.offsetLeft - strip.offsetLeft;
+  if (left < strip.scrollLeft) strip.scrollLeft = left - 8;
+  else if (left + tab.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = left + tab.offsetWidth - strip.clientWidth + 8;
+  syncChapterTabOverflow();
+}
+
+function initChapterTabScroll() {
+  const strip = document.querySelector('.rail-chapters');
+  if (!strip || strip.dataset.scrollReady) return;
+  strip.dataset.scrollReady = 'true';
+  strip.addEventListener('scroll', syncChapterTabOverflow, { passive: true });
+  strip.addEventListener('wheel', event => {
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || strip.scrollWidth <= strip.clientWidth) return;
+    strip.scrollLeft += event.deltaY;
+    event.preventDefault();
+  }, { passive: false });
+  document.querySelectorAll('[data-tabs-scroll]').forEach(button => button.addEventListener('click', () => {
+    strip.scrollLeft += Number(button.dataset.tabsScroll) * strip.clientWidth * 0.6;
+  }));
+  if (typeof ResizeObserver === 'function') new ResizeObserver(syncChapterTabOverflow).observe(strip);
+  syncChapterTabOverflow();
 }
 
 function renderRailTabs() {
@@ -145,6 +183,7 @@ function openChapter(id) {
       tab.setAttribute('aria-selected', isSelected ? 'true' : 'false');
       tab.setAttribute('tabindex', isSelected ? '0' : '-1');
       tab.classList.toggle('active', isSelected);
+      if (isSelected) revealChapterTab(tab);
     }
   });
 
@@ -158,8 +197,15 @@ function openChapter(id) {
     }
   });
 
+  // A different chapter, or leaving a component sheet, starts at the top of the chapter.
+  const sheetWasOpen = !document.getElementById('component-sheet')?.hidden;
+  const railBody = document.querySelector('.rail-body');
+  if (railBody && (chapterChanged || sheetWasOpen) && targetId !== 'walkthrough') railBody.scrollTop = 0;
+
   // Closes the sheet, keeping the selection
   hideSheetKeepSelection();
+  // Closing a sheet brings the rail's close button back and narrows the strip; keep the tab in view.
+  window.requestAnimationFrame(() => revealChapterTab(document.getElementById(`chapter-tab-${targetId}`)));
   if (targetId === 'walkthrough' && typeof scrollRailToWalkCursor === 'function') window.requestAnimationFrame(scrollRailToWalkCursor);
 
   // Update back button text in sheet

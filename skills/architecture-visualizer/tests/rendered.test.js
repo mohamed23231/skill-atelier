@@ -1221,6 +1221,32 @@ const cases = [
     assert.strictEqual(m.inView, true, 'the whole neighbourhood stays on screen');
     assert.strictEqual(m.minimap, 'true', 'the minimap waits for the reader to move the view');
   }],
+  ['viewer: every chapter tab is reachable with a mouse, chapters open at their top, and tabs stay visible over a component sheet', () => {
+    const tabVisible = id => `(() => { const s = document.querySelector('.rail-chapters').getBoundingClientRect(); const t = document.getElementById('chapter-tab-${id}').getBoundingClientRect();
+      return t.left >= s.left - 0.5 && t.right <= s.right + 0.5; })()`;
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      ev(`JSON.stringify({ planVisible: ${tabVisible('plan')}, more: !document.querySelector('[data-tabs-scroll="1"]').hidden })`),
+      mouse({ action: 'click', selector: '[data-tabs-scroll="1"]', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(0), 500))`),
+      mouse({ action: 'click', selector: '[data-tabs-scroll="1"]', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(JSON.stringify({ planVisible: ${tabVisible('plan')}, earlier: !document.querySelector('[data-tabs-scroll="-1"]').hidden })), 500))`),
+      mouse({ action: 'click', selector: '#chapter-tab-plan', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(state.chapter), 200))`),
+      mouse({ action: 'click', selector: '#node-payment_service .node-rect', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => { document.querySelector('.rail-body').scrollTop = 500; document.getElementById('node-payment_service').blur();
+        const sheet = document.getElementById('component-sheet').getBoundingClientRect(); const tabs = document.querySelector('.rail-chapters').getBoundingClientRect();
+        r(JSON.stringify({ tabsAboveSheet: !document.getElementById('component-sheet').hidden && sheet.top >= tabs.bottom - 0.5,
+          outline: getComputedStyle(document.getElementById('node-payment_service')).outlineStyle })); }, 700))`),
+      mouse({ action: 'click', selector: '#chapter-tab-review', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(JSON.stringify({ chapter: state.chapter, top: document.querySelector('.rail-body').scrollTop, visible: ${tabVisible('review')} })), 600))`)] }]);
+    const values = phase.filter(step => step && step.kind === 'eval' && step.value !== 0).map(step => step.value);
+    const [start, scrolled, plan, sheet, review] = [JSON.parse(values[0]), JSON.parse(values[1]), values[2], JSON.parse(values[3]), JSON.parse(values[4])];
+    assert.deepStrictEqual(start, { planVisible: false, more: true }, 'seven chapters overflow the rail and say so');
+    assert.deepStrictEqual(scrolled, { planVisible: true, earlier: true });
+    assert.strictEqual(plan, 'plan');
+    assert.deepStrictEqual(sheet, { tabsAboveSheet: true, outline: 'none' }, 'the sheet opens under the tabs and the selected card has no square frame');
+    assert.deepStrictEqual(review, { chapter: 'review', top: 0, visible: true }, 'a chapter opens at its top with its tab in view');
+  }],
   ['viewer: moving flow dots and walkthrough packets pass behind connection labels, never over their text', () => {
     const overLabel = `(x, y) => LAYOUT_DATA.edges.some(e => e.labelBounds && x > e.labelBounds.left && x < e.labelBounds.left + e.labelBounds.width && y > e.labelBounds.top && y < e.labelBounds.top + e.labelBounds.height)`;
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [

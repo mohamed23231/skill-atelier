@@ -92,9 +92,10 @@ body:not([data-ready-ms]) .rail { transition: none; }
   color: var(--ink);
 }
 
+/* The sheet opens under the chapter tabs, as in the prototype, so any chapter is one click away. */
 .rail-sheet {
   position: absolute;
-  inset: 0;
+  inset: 48px 0 0 0;
   background: var(--surface);
   z-index: 10;
   display: flex;
@@ -105,6 +106,9 @@ body:not([data-ready-ms]) .rail { transition: none; }
 .rail-sheet[hidden] {
   display: none;
 }
+
+/* One close button at a time: while a sheet is open its own close leads back to the chapter. */
+.rail:not([data-sheet="none"]) .rail-head [data-action="rail-close"] { display: none; }
 
 .sheet-header {
   padding: 10px 16px;
@@ -364,7 +368,12 @@ body:not([data-ready-ms]) .rail { transition: none; }
 .overview-start { margin-top: 18px; padding: 9px 14px; border: 1px solid var(--accent); border-radius: 9px; background: var(--accent); color: var(--accent-ink); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
 .ov-trust-row { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; font: inherit; cursor: pointer; }
 .ov-trust-row:hover { background: var(--surface-2); }
-.rail-chapters { gap: 2px; }
+.rail-chapters { gap: 2px; flex: 1 1 auto; min-width: 0; scrollbar-width: none; }
+.rail-chapters::-webkit-scrollbar { display: none; }
+.rail-tabs-scroll { flex: none; display: grid; place-items: center; width: 24px; height: 28px; padding: 0; border: 0; border-radius: 6px;
+  background: var(--surface); color: var(--muted); cursor: pointer; }
+.rail-tabs-scroll:hover { color: var(--ink); background: var(--surface-2); }
+.rail-tabs-scroll[hidden] { display: none; }
 .rail-tab { padding: 0 8px; font-size: 12.5px; }
 .rail-tab-count { margin-left: 3px; }
 .rail-tab.active, .rail-tab[aria-selected="true"] { border-bottom-color: var(--ink); }

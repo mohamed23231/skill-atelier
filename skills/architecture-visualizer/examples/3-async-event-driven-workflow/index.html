@@ -781,7 +781,7 @@ color: var(--ink);
 
 .rail-sheet {
 position: absolute;
-inset: 0;
+inset: 48px 0 0 0;
 background: var(--surface);
 z-index: 10;
 display: flex;
@@ -792,6 +792,8 @@ overflow: hidden;
 .rail-sheet[hidden] {
 display: none;
 }
+
+.rail:not([data-sheet="none"]) .rail-head [data-action="rail-close"] { display: none; }
 
 .sheet-header {
 padding: 10px 16px;
@@ -1042,7 +1044,12 @@ padding-bottom: 10px;
 .overview-start { margin-top: 18px; padding: 9px 14px; border: 1px solid var(--accent); border-radius: 9px; background: var(--accent); color: var(--accent-ink); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
 .ov-trust-row { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; font: inherit; cursor: pointer; }
 .ov-trust-row:hover { background: var(--surface-2); }
-.rail-chapters { gap: 2px; }
+.rail-chapters { gap: 2px; flex: 1 1 auto; min-width: 0; scrollbar-width: none; }
+.rail-chapters::-webkit-scrollbar { display: none; }
+.rail-tabs-scroll { flex: none; display: grid; place-items: center; width: 24px; height: 28px; padding: 0; border: 0; border-radius: 6px;
+background: var(--surface); color: var(--muted); cursor: pointer; }
+.rail-tabs-scroll:hover { color: var(--ink); background: var(--surface-2); }
+.rail-tabs-scroll[hidden] { display: none; }
 .rail-tab { padding: 0 8px; font-size: 12.5px; }
 .rail-tab-count { margin-left: 3px; }
 .rail-tab.active, .rail-tab[aria-selected="true"] { border-bottom-color: var(--ink); }
@@ -1624,6 +1631,9 @@ body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; rig
 .workbench-minimap svg { width: 100%; height: 100%; display: block; }
 [data-minimap-viewport] { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 [data-selected="true"] { outline: 3px double var(--accent); outline-offset: 3px; }
+/* On the canvas an outline is a square frame that ignores the card's corners; the selected card is
+drawn in ink on its own shape (canvas.css) and a connection darkens with its context instead. */
+.node-group[data-selected="true"], .edge-path[data-selected="true"] { outline: none; }
 [data-action]:focus-visible, [data-search-result]:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #canvas-container { margin-left: 0; width: 100%; }
 .viewport-controls { right: 20px; }
@@ -2058,7 +2068,9 @@ margin-left: 2px;
 <!-- Reading Rail -->
 <aside id="rail" class="rail" data-region="rail" data-open="true" data-sheet="none" aria-label="Reading rail">
 <div class="rail-head">
+<button class="rail-tabs-scroll" data-tabs-scroll="-1" aria-label="Show earlier chapters" tabindex="-1" hidden><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-chevron-left"></use></svg></button>
 <div class="rail-chapters" role="tablist" aria-label="Chapters"></div>
+<button class="rail-tabs-scroll" data-tabs-scroll="1" aria-label="Show more chapters" tabindex="-1" hidden><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-chevron-right"></use></svg></button>
 <button class="btn-icon icon-only" data-action="rail-close" aria-label="Close rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
 </div>
 <div class="rail-body">
@@ -5688,7 +5700,7 @@ else group.remove();
 window.requestAnimationFrame(tick);
 });
 const total = (entry.parallel ? 1 : 1 + (hops.length - 1) * 0.6) * duration;
-walkPacketTimer = window.setTimeout(once, total + 900);
+walkPacketTimer = window.setTimeout(once, total + 400);
 };
 once();
 }
@@ -7419,9 +7431,45 @@ panel.remove();
 });
 
 renderRailTabs();
+initChapterTabScroll();
 
 const initialChapter = availableIds.has(state.chapter) ? state.chapter : 'overview';
 openChapter(initialChapter);
+}
+
+function syncChapterTabOverflow() {
+const strip = document.querySelector('.rail-chapters');
+if (!strip) return;
+const more = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1;
+document.querySelectorAll('[data-tabs-scroll]').forEach(button => {
+button.hidden = button.dataset.tabsScroll === '1' ? !more : strip.scrollLeft <= 1;
+});
+}
+
+function revealChapterTab(tab) {
+const strip = document.querySelector('.rail-chapters');
+if (!strip || !tab) return;
+const left = tab.offsetLeft - strip.offsetLeft;
+if (left < strip.scrollLeft) strip.scrollLeft = left - 8;
+else if (left + tab.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = left + tab.offsetWidth - strip.clientWidth + 8;
+syncChapterTabOverflow();
+}
+
+function initChapterTabScroll() {
+const strip = document.querySelector('.rail-chapters');
+if (!strip || strip.dataset.scrollReady) return;
+strip.dataset.scrollReady = 'true';
+strip.addEventListener('scroll', syncChapterTabOverflow, { passive: true });
+strip.addEventListener('wheel', event => {
+if (Math.abs(event.deltaY) <= Math.abs(event.deltaX) || strip.scrollWidth <= strip.clientWidth) return;
+strip.scrollLeft += event.deltaY;
+event.preventDefault();
+}, { passive: false });
+document.querySelectorAll('[data-tabs-scroll]').forEach(button => button.addEventListener('click', () => {
+strip.scrollLeft += Number(button.dataset.tabsScroll) * strip.clientWidth * 0.6;
+}));
+if (typeof ResizeObserver === 'function') new ResizeObserver(syncChapterTabOverflow).observe(strip);
+syncChapterTabOverflow();
 }
 
 function renderRailTabs() {
@@ -7518,6 +7566,7 @@ const isSelected = ch.id === targetId;
 tab.setAttribute('aria-selected', isSelected ? 'true' : 'false');
 tab.setAttribute('tabindex', isSelected ? '0' : '-1');
 tab.classList.toggle('active', isSelected);
+if (isSelected) revealChapterTab(tab);
 }
 });
 
@@ -7530,7 +7579,12 @@ panel.setAttribute('hidden', '');
 }
 });
 
+const sheetWasOpen = !document.getElementById('component-sheet')?.hidden;
+const railBody = document.querySelector('.rail-body');
+if (railBody && (chapterChanged || sheetWasOpen) && targetId !== 'walkthrough') railBody.scrollTop = 0;
+
 hideSheetKeepSelection();
+window.requestAnimationFrame(() => revealChapterTab(document.getElementById(`chapter-tab-${targetId}`)));
 if (targetId === 'walkthrough' && typeof scrollRailToWalkCursor === 'function') window.requestAnimationFrame(scrollRailToWalkCursor);
 
 const backBtn = document.querySelector('[data-action="sheet-back"]');

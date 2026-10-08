@@ -221,7 +221,7 @@ function playWalkPackets(entries, index) {
       window.requestAnimationFrame(tick);
     });
     const total = (entry.parallel ? 1 : 1 + (hops.length - 1) * 0.6) * duration;
-    walkPacketTimer = window.setTimeout(once, total + 900);
+    walkPacketTimer = window.setTimeout(once, total + 400);
   };
   once();
 }
