@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hover previews a component**: hovering a card darkens its connections (hovering a connection darkens it), focus changes fade instead of snapping, and on phones the track's steps are full-size touch targets.
 - **Clicking a component works like the prototype**: the component and its neighbours glide into view while everything else recedes and its connections darken; the rail shows a component sheet that reads as a document (kind and technology, name, description, evidence and change chips, the walkthrough steps it appears in, on every outcome, each opening that step, responsibilities, connections in and out, each opening the other component, evidence, failure modes, tasks). Clicking a connection frames both of its ends. Leaving the sheet returns to the whole diagram.
 - **The walkthrough moves**: each step glides the camera to its participants (never smaller than the whole-diagram fit) and sends a packet along every hop of the step, again after a pause until the step changes, in the warning colour on a recovery outcome; parallel hops travel together. Reduced motion keeps the highlight and jumps the camera.
 - **The page stacks below 900px, as the prototype does**: canvas and walkthrough track first, then the reading rail as a section of the page, always open; selecting a component scrolls its details into view. The overlay drawer, its backdrop and focus trap are gone.

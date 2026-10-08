@@ -197,6 +197,11 @@ async function runMouseStep(session, step) {
     await dispatchMouse(session, 'mouseReleased', point, 'left', 0, 1);
     return;
   }
+  if (step.action === 'move') {
+    var target = await resolvePoint(session, step.selector, step.fx, step.fy, step.x, step.y);
+    if (target) await dispatchMouse(session, 'mouseMoved', target, 'none', 0, 0);
+    return;
+  }
   if (step.action === 'drag') {
     var from = await resolvePoint(session, step.selector, step.fromFx, step.fromFy, step.x, step.y);
     var to = await resolvePoint(session, step.selector, step.toFx, step.toFy, step.toX, step.toY);
@@ -1302,6 +1307,18 @@ const cases = [
     const m = JSON.parse(lastEvalValue(phase));
     assert.deepStrictEqual({ ...m, router: undefined }, { staleKeyIgnored: true, unroutableReverted: true, unroutableCleared: true, router: undefined, follow: true });
     assert.notStrictEqual(m.router, 'lanes', 'scattered cards cannot route as lanes');
+  }],
+  ['viewer: hovering a card darkens exactly its connections, and a selection or walkthrough takes precedence', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      mouse({ action: 'move', selector: '#node-outbox_poller', fx: 0.5, fy: 0.5 }),
+      ev(`JSON.stringify({ focused: [...document.querySelectorAll('.edge-group.hover-focus')].map(g => g.id).sort(),
+        expected: LAYOUT_DATA.edges.filter(e => e.source === 'outbox_poller' || e.target === 'outbox_poller').map(e => 'edge-' + e.id).sort() })`),
+      ev(`(setHoverFocus(null), openInspectorForNode('saga_orchestrator'), setHoverFocus('outbox_poller'), document.querySelectorAll('.edge-group.hover-focus').length)`)] }]);
+    const values = phase.filter(step => step && step.kind === 'eval').map(step => step.value);
+    const first = JSON.parse(values[0]);
+    assert.ok(first.expected.length > 0);
+    assert.deepStrictEqual(first.focused, first.expected);
+    assert.strictEqual(values[1], 0, 'an open component sheet keeps its own spotlight');
   }],
   ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({

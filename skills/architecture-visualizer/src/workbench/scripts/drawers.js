@@ -62,6 +62,19 @@ function applySelectionSpotlight(nodeId, neighbourhood) {
   });
 }
 
+// Hovering a card darkens its connections, as a preview of selecting it. A selection or a
+// walkthrough already holds the spotlight, so hover then does nothing.
+let hoverNodeId = null;
+function setHoverFocus(nodeId) {
+  if (hoverNodeId === nodeId) return;
+  hoverNodeId = nodeId;
+  const busy = (typeof walkIsActive === 'function' && walkIsActive()) || !document.getElementById('component-sheet')?.hidden;
+  document.querySelectorAll('.edge-group').forEach(group => {
+    const edge = edgeById.get(group.id.replace('edge-', ''));
+    group.classList.toggle('hover-focus', Boolean(nodeId) && !busy && Boolean(edge) && (edge.source === nodeId || edge.target === nodeId));
+  });
+}
+
 function focusModelPoint(x, y) {
   const safe = canvasSafeArea();
   const zoom = clampZoom(Math.max(state.zoom * 1.08, 0.85));

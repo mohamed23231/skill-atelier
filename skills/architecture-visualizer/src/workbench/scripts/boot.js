@@ -204,6 +204,17 @@ function setupEventListeners() {
   svg.addEventListener('click', () => {
     if (!state.dragMoved) closeInspector();
   });
+  svg.addEventListener('mouseover', event => {
+    const group = event.target.closest?.('.node-group');
+    setHoverFocus(group ? group.id.replace('node-', '') : null);
+    const edgeGroup = event.target.closest?.('.edge-group');
+    document.querySelectorAll('.edge-group.hover-self').forEach(item => { if (item !== edgeGroup) item.classList.remove('hover-self'); });
+    edgeGroup?.classList.add('hover-self');
+  });
+  svg.addEventListener('mouseleave', () => {
+    setHoverFocus(null);
+    document.querySelectorAll('.edge-group.hover-self').forEach(item => item.classList.remove('hover-self'));
+  });
 }
 
 function handleKeyDown(e) {
