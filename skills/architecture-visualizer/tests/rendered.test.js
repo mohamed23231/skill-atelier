@@ -1247,6 +1247,14 @@ const cases = [
     assert.deepStrictEqual(sheet, { tabsAboveSheet: true, outline: 'none' }, 'the sheet opens under the tabs and the selected card has no square frame');
     assert.deepStrictEqual(review, { chapter: 'review', top: 0, visible: true }, 'a chapter opens at its top with its tab in view');
   }],
+  ['viewer: every chapter of every example fits a phone without sideways scroll, long file paths included', () => {
+    const OPEN_ALL = ev(`JSON.stringify([...document.querySelectorAll('.rail-tab')].map(tab => { tab.click();
+      const width = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth); return width > innerWidth + 1 ? tab.id + ':' + width : null; }).filter(Boolean))`);
+    ['examples/1-crud-business-feature/architecture.json', 'examples/2-complex-database-migration/architecture.json', 'examples/3-async-event-driven-workflow/architecture.json'].forEach(spec => {
+      runPhases(spec, [320, 390].map(width => ({ width, height: 844, steps: [OPEN_ALL] }))).forEach((phase, i) =>
+        assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [], `${spec} at ${[320, 390][i]}px`));
+    });
+  }],
   ['viewer: moving flow dots and walkthrough packets pass behind connection labels, never over their text', () => {
     const overLabel = `(x, y) => LAYOUT_DATA.edges.some(e => e.labelBounds && x > e.labelBounds.left && x < e.labelBounds.left + e.labelBounds.width && y > e.labelBounds.top && y < e.labelBounds.top + e.labelBounds.height)`;
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
