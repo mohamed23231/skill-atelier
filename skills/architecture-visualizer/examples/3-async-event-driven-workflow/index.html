@@ -4023,7 +4023,8 @@ const left = state.panX + bounds.minX * state.zoom;
 const top = state.panY + bounds.minY * state.zoom;
 const idle = left >= -1 && top >= -1 && left + bounds.width * state.zoom <= rect.width + 1 && top + bounds.height * state.zoom <= rect.height + 1;
 const walking = typeof walkIsActive === 'function' && walkIsActive();
-document.querySelector('.workbench-minimap')?.setAttribute('data-idle', idle || walking ? 'true' : 'false');
+const framed = !state.userMovedView;
+document.querySelector('.workbench-minimap')?.setAttribute('data-idle', idle || walking || framed ? 'true' : 'false');
 }
 
 function handleMinimapClick(event) {
@@ -8881,9 +8882,11 @@ function canvasSafeArea() {
 const rect = svg.getBoundingClientRect();
 const overlays = canvasOverlayRects();
 const top = Math.max(16, ...overlays.filter(item => item.isKey).map(item => item.bottom));
-const bottom = Math.max(16, ...overlays.filter(item => !item.isKey && item.top > rect.height / 2)
-.map(item => rect.height - item.top));
-return { left: 16, top, width: Math.max(1, rect.width - 32),
+const lower = overlays.filter(item => !item.isKey && item.top > rect.height / 2);
+const column = item => item.right - item.left < rect.width / 4 && item.left > rect.width / 2;
+const bottom = Math.max(16, ...lower.filter(item => !column(item)).map(item => rect.height - item.top));
+const right = Math.max(16, ...lower.filter(column).map(item => rect.width - item.left + 8));
+return { left: 16, top, width: Math.max(1, rect.width - 16 - right),
 height: Math.max(1, rect.height - top - bottom) };
 }
 

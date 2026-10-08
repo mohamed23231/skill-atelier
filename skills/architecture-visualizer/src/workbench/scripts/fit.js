@@ -103,9 +103,13 @@ function canvasSafeArea() {
   const overlays = canvasOverlayRects();
   // The lens key is a horizontal pill: reserve its top band, not a full right column.
   const top = Math.max(16, ...overlays.filter(item => item.isKey).map(item => item.bottom));
-  const bottom = Math.max(16, ...overlays.filter(item => !item.isKey && item.top > rect.height / 2)
-    .map(item => rect.height - item.top));
-  return { left: 16, top, width: Math.max(1, rect.width - 32),
+  // The walkthrough track spans the canvas and takes a bottom band; the zoom controls are a narrow
+  // column at the right edge and take only that column, so framing keeps the height beside them.
+  const lower = overlays.filter(item => !item.isKey && item.top > rect.height / 2);
+  const column = item => item.right - item.left < rect.width / 4 && item.left > rect.width / 2;
+  const bottom = Math.max(16, ...lower.filter(item => !column(item)).map(item => rect.height - item.top));
+  const right = Math.max(16, ...lower.filter(column).map(item => rect.width - item.left + 8));
+  return { left: 16, top, width: Math.max(1, rect.width - 16 - right),
     height: Math.max(1, rect.height - top - bottom) };
 }
 

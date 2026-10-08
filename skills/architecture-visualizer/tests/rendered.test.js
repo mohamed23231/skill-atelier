@@ -1208,6 +1208,19 @@ const cases = [
     assert.strictEqual(m.view, 'data_flow');
     assert.ok(/Data flow/i.test(m.status), m.status);
   }],
+  ['viewer: clicking a card zooms in on its neighbourhood as the prototype does, and the minimap stays out of the way', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      ev(`(window.__fit = fitCamera().zoom, 0)`),
+      mouse({ action: 'click', selector: '#node-payment_service .node-rect', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(JSON.stringify({ fit: window.__fit, zoom: state.zoom,
+        minimap: document.querySelector('.workbench-minimap').getAttribute('data-idle'),
+        inView: ['payment_service', 'kafka_broker', 'saga_orchestrator'].every(id => { const b = document.getElementById('node-' + id).getBoundingClientRect();
+          const c = document.getElementById('arch-svg').getBoundingClientRect(); return b.left >= c.left && b.right <= c.right && b.top >= c.top && b.bottom <= c.bottom; }) })), 700))`)] }]);
+    const m = JSON.parse(lastEvalValue(phase));
+    assert.ok(m.zoom > m.fit * 1.1, JSON.stringify(m));
+    assert.strictEqual(m.inView, true, 'the whole neighbourhood stays on screen');
+    assert.strictEqual(m.minimap, 'true', 'the minimap waits for the reader to move the view');
+  }],
   ['viewer: moving flow dots and walkthrough packets pass behind connection labels, never over their text', () => {
     const overLabel = `(x, y) => LAYOUT_DATA.edges.some(e => e.labelBounds && x > e.labelBounds.left && x < e.labelBounds.left + e.labelBounds.width && y > e.labelBounds.top && y < e.labelBounds.top + e.labelBounds.height)`;
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
@@ -1399,7 +1412,12 @@ const cases = [
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
       START, mouse({ action: 'click', selector: '.walk-end', fx: 0.5, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${LIT}), 300))`),
       START, mouse({ action: 'jitter-click', selector: '#canvas-container', fx: 0.02, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${LIT}), 300))`),
-      START, mouse({ action: 'click', selector: '#node-warehouse_service', fx: 0.5, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${LIT}), 400))`)] }]);
+      // The step frames the camera, so pick a card that is on screen and not part of the step.
+      START, ev(`new Promise(r => setTimeout(() => { const c = document.getElementById('arch-svg').getBoundingClientRect();
+        const pick = [...document.querySelectorAll('.node-group:not(.walk-active)')].find(g => { const b = g.getBoundingClientRect();
+          return b.left >= c.left && b.right <= c.right && b.top >= c.top && b.bottom <= c.bottom; });
+        pick.setAttribute('data-test-pick', ''); r(0); }, 600))`),
+      mouse({ action: 'click', selector: '[data-test-pick] .node-rect', fx: 0.5, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${LIT}), 400))`)] }]);
     const [endButton, emptyCanvas, card] = phase.filter(step => step && step.kind === 'eval' && step.value !== 0).map(step => JSON.parse(step.value));
     assert.deepStrictEqual(endButton, { active: false, lit: 0, sheet: true });
     assert.deepStrictEqual(emptyCanvas, { active: false, lit: 0, sheet: true });
@@ -3483,7 +3501,9 @@ const cases = [
         const safe = canvasSafeArea();
         const canvas = svg.getBoundingClientRect();
         const keyRect = document.querySelector('.lens-key').getBoundingClientRect();
-        const pillClearance = safe.top >= keyRect.bottom - canvas.top && safe.width === canvas.width - 32;
+        const controls = document.querySelector('.viewport-controls').getBoundingClientRect();
+        // The pill takes a top band, never a column; only the zoom controls take a right-hand column (their padded box plus a gap).
+        const pillClearance = safe.top >= keyRect.bottom - canvas.top && Math.abs(safe.width - (canvas.width - 16 - (canvas.right - controls.left + 16))) < 0.5;
         const button = () => document.querySelector('[data-action="lens-filters"]');
         button().click();
         const opened = !document.querySelector('.lens-filters').hidden;
