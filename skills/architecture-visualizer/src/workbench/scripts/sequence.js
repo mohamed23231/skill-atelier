@@ -54,6 +54,7 @@ function spotlightInteractions(interactions) {
     p.classList.toggle('highlighted', isActive);
     syncEdgeMarker(p);
     p.classList.toggle('dimmed', !isActive);
+    p.closest('.edge-group')?.classList.toggle('out-of-focus', !isActive);
   });
   drawGhostSteps(unmatched);
 }
@@ -61,7 +62,7 @@ function spotlightInteractions(interactions) {
 function clearSpotlight() {
   ghostLayer.querySelectorAll('.playback-ghost').forEach(item => item.remove());
   document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
-  document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('highlighted', 'dimmed'); syncEdgeMarker(p); });
+  document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('highlighted', 'dimmed'); p.closest('.edge-group')?.classList.remove('out-of-focus'); syncEdgeMarker(p); });
   if (state.selectedNodeId) {
     const selected = document.getElementById(`node-${state.selectedNodeId}`);
     if (selected) selected.classList.add('selected');

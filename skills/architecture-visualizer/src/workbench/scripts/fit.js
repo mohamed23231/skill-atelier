@@ -59,7 +59,7 @@ function computeTotalVisualBounds() {
   };
 }
 
-// Overlay rectangles are canvas-local and include a 16px breathing room.
+// Compact canvas chrome needs an 8px gap, including below the horizontal lens pill.
 function canvasOverlayRects() {
   const canvas = svg.getBoundingClientRect();
   // The minimap is left out: once the diagram fits it is idle and hidden.
@@ -68,19 +68,19 @@ function canvasOverlayRects() {
     .filter(element => element && !element.hidden && getComputedStyle(element).display !== 'none')
     .map(element => ({ rect: element.getBoundingClientRect(), isKey: element.matches('.lens-key') }))
     .filter(({ rect }) => rect.width > 0 && rect.height > 0)
-    .map(({ rect, isKey }) => ({ isKey, left: rect.left - canvas.left - 16, right: rect.right - canvas.left + 16,
-      top: rect.top - canvas.top - 16, bottom: rect.bottom - canvas.top + 16 }));
+    .map(({ rect, isKey }) => ({ isKey, left: rect.left - canvas.left - 8, right: rect.right - canvas.left + 8,
+      top: rect.top - canvas.top - 8, bottom: rect.bottom - canvas.top + 8 }));
 }
 
 function canvasSafeArea() {
   const rect = svg.getBoundingClientRect();
   const overlays = canvasOverlayRects();
-  const key = document.querySelector('.lens-key')?.getBoundingClientRect();
-  const right = key?.width ? key.width + 32 : 16;
+  // The lens key is a horizontal pill: reserve its top band, not a full right column.
+  const top = Math.max(16, ...overlays.filter(item => item.isKey).map(item => item.bottom));
   const bottom = Math.max(16, ...overlays.filter(item => !item.isKey && item.top > rect.height / 2)
     .map(item => rect.height - item.top));
-  return { left: 16, top: 16, width: Math.max(1, rect.width - 16 - right),
-    height: Math.max(1, rect.height - 16 - bottom) };
+  return { left: 16, top, width: Math.max(1, rect.width - 32),
+    height: Math.max(1, rect.height - top - bottom) };
 }
 
 function fitToScreen() {
@@ -99,7 +99,8 @@ function fitToScreen() {
     (rect.height - 32) / Math.max(1, bounds.height), 1.4);
   // Keep the whole drawing on-screen, but reserve overlay bands only where cards or labels cross them.
   // Candidate translations touch an inset or an overlay edge; prefer the centred solution.
-  for (let zoom = clampZoom(initialZoom); ; zoom = Math.max(0.15, zoom * 0.98)) {
+  // Test translations at a fixed scale, then refine the first feasible scale below.
+  const cameraAtZoom = zoom => {
     const minX = 16 - bounds.minX * zoom, maxX = rect.width - 16 - bounds.maxX * zoom;
     const minY = 16 - bounds.minY * zoom, maxY = rect.height - 16 - bounds.maxY * zoom;
     const centreX = (minX + maxX) / 2, centreY = (minY + maxY) / 2;
@@ -117,12 +118,30 @@ function fitToScreen() {
           panX + node.x * zoom < overlay.right - 0.01 && panX + (node.x + node.width) * zoom > overlay.left + 0.01 &&
           panY + node.y * zoom < overlay.bottom - 0.01 && panY + (node.y + node.height) * zoom > overlay.top + 0.01));
         if (!blocked) {
-          actions.setCamera({ zoom, panX, panY });
-          updateTransform();
-          return;
+          return { zoom, panX, panY };
         }
       }
     }
+    return null;
+  };
+  let upperZoom = clampZoom(initialZoom);
+  for (let zoom = upperZoom; ; zoom = Math.max(0.15, zoom * 0.995)) {
+    let camera = cameraAtZoom(zoom);
+    if (camera) {
+      // A 0.5% search step can skip a valid fit above the readability threshold.
+      // Bisect the last interval so the camera uses the available space precisely.
+      let lowerZoom = zoom;
+      for (let i = 0; i < 10 && upperZoom - lowerZoom > 0.00001; i++) {
+        const middleZoom = (lowerZoom + upperZoom) / 2;
+        const refined = cameraAtZoom(middleZoom);
+        if (refined) { camera = refined; lowerZoom = middleZoom; }
+        else upperZoom = middleZoom;
+      }
+      actions.setCamera(camera);
+      updateTransform();
+      return;
+    }
+    upperZoom = zoom;
     if (zoom <= 0.15) break;
   }
   const safe = canvasSafeArea();
@@ -130,6 +149,16 @@ function fitToScreen() {
   actions.setCamera({ zoom, panX: safe.left + safe.width / 2 - (bounds.minX + bounds.maxX) * zoom / 2,
     panY: safe.top + safe.height / 2 - (bounds.minY + bounds.maxY) * zoom / 2 });
   updateTransform();
+}
+
+// The camera fitToScreen would choose, without moving the view.
+function fitCamera() {
+  const current = { zoom: state.zoom, panX: state.panX, panY: state.panY };
+  fitToScreen();
+  const fit = { zoom: state.zoom, panX: state.panX, panY: state.panY };
+  actions.setCamera(current);
+  updateTransform();
+  return fit;
 }
 
 function resetView() {

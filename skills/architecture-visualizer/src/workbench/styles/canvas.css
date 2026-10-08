@@ -74,8 +74,9 @@ svg#arch-svg {
 
 /* Lens tokens stay below selection, hover and playback highlights in precedence. */
 .node-group[data-lens-stroke="line"] .node-rect,
-.edge-path[data-lens-stroke="line"],
 .policy-ghost-line[data-lens-stroke="line"] { stroke: var(--line); }
+/* An unremarkable connection in a lens is context: the normal edge colour, quieter. */
+.edge-path[data-lens-stroke="line"] { stroke: var(--edge); opacity: 0.45; }
 .node-group[data-lens-stroke="ink"] .node-rect,
 .edge-path[data-lens-stroke="ink"],
 .policy-ghost-line[data-lens-stroke="ink"] { stroke: var(--ink); }
@@ -216,10 +217,16 @@ svg#arch-svg {
 .node-group[data-lens-style="dotted"] .node-rect,
 .edge-path[data-lens-stroke][data-lens-style="dotted"] { stroke-dasharray: 2 3; }
 
+/* Out of focus, a connection stays readable as context: quieter, never gone. */
 .edge-path.dimmed {
-  stroke: var(--edge-dim) !important;
-  opacity: 0.15 !important;
+  stroke: var(--edge) !important;
+  opacity: 0.35 !important;
 }
+
+.walk-packet { pointer-events: none; }
+.walk-packet-core { fill: var(--accent); }
+.walk-packet-halo { fill: var(--accent); opacity: 0.22; }
+.walk-packet.recovery .walk-packet-core, .walk-packet.recovery .walk-packet-halo { fill: var(--warn); }
 
 .edge-path[data-lens-stroke].highlighted,
 .edge-path.ghost.highlighted {
@@ -257,3 +264,8 @@ svg#arch-svg {
 .flow-particle {
   fill: var(--accent);
 }
+
+/* Selection spotlight: the component and its neighbours stay, its connections darken, the rest recedes. */
+.node-group.context-dim, .edge-group.context-dim { opacity: 0.18; transition: opacity 0.25s ease; }
+.edge-group.context-focus .edge-path { stroke: var(--ink); stroke-width: 1.8; }
+@media (prefers-reduced-motion: reduce) { .node-group.context-dim, .edge-group.context-dim { transition: none; } }

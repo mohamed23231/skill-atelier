@@ -1,3 +1,16 @@
+function workbenchDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+function chapterCount(id) {
+  if (id === 'walkthrough') return (ARCH_SPEC.scenarios || [])[0] ? walkAllStepsTotal(ARCH_SPEC.scenarios[0]) : null;
+  if (id === 'changes') return ARCH_SPEC.review?.changedComponents?.length || (ARCH_SPEC.nodes || []).filter(node => node.delta && node.delta !== 'UNCHANGED').length;
+  if (id === 'review') return (ARCH_SPEC.policies || []).length + (ARCH_SPEC.findings || []).length + (ARCH_SPEC.review?.policyFindings || []).length + (ARCH_SPEC.review?.unresolvedQuestions ?? ARCH_SPEC.meta?.unresolvedQuestions ?? []).length;
+  return null;
+}
+
 function availableChapters() {
   const chapters = [
     { id: 'overview', label: 'Overview' },
@@ -55,6 +68,13 @@ function renderRailTabs() {
     tab.setAttribute('tabindex', isSelected ? '0' : '-1');
     if (isSelected) tab.classList.add('active');
     tab.textContent = ch.label;
+    const count = chapterCount(ch.id);
+    if (count !== null) {
+      const number = document.createElement('span');
+      number.className = 'rail-tab-count';
+      number.textContent = String(count);
+      tab.append(' ', number);
+    }
 
     tab.addEventListener('click', () => {
       openChapter(ch.id);
@@ -144,14 +164,21 @@ function openChapter(id) {
   // Update back button text in sheet
   const backBtn = document.querySelector('[data-action="sheet-back"]');
   if (backBtn) {
-    backBtn.textContent = `Back to ${targetChapter.label}`;
+    const label = backBtn.querySelector('span');
+    if (label) label.textContent = `Back to ${targetChapter.label}`;
+    else backBtn.textContent = `Back to ${targetChapter.label}`;
   }
 
   updateUrlState();
 }
 
 function hideSheetKeepSelection() {
+  applySelectionSpotlight(null);
   const sheet = document.getElementById('component-sheet');
+  // Leaving a component returns to the whole diagram, unless the reader placed the camera or a walkthrough holds it.
+  if (sheet && !sheet.hidden && !state.userMovedView && !(typeof walkIsActive === 'function' && walkIsActive())) {
+    window.requestAnimationFrame(() => fitToScreen());
+  }
   if (sheet) sheet.setAttribute('hidden', '');
   const rail = document.getElementById('rail');
   if (rail) rail.setAttribute('data-sheet', 'none');
@@ -162,8 +189,7 @@ function showSheet(kind) {
   if (sheet) sheet.removeAttribute('hidden');
   const rail = document.getElementById('rail');
   if (rail) rail.setAttribute('data-sheet', kind);
-  const railToggle = document.querySelector('[data-action="rail-toggle"]');
-  setDrawerOpen('rail', true, railToggle);
+  setDrawerOpen('rail', true);
 }
 
 function chapterLabel(id) {
@@ -174,6 +200,13 @@ function chapterLabel(id) {
 function renderOverviewChapter() {
   if (!document.getElementById('chapter-overview')) return;
   const meta = ARCH_SPEC.meta || {};
+  const panel = document.getElementById('chapter-overview');
+  if (!panel.querySelector('.overview-eyebrow')) {
+    const eyebrow = document.createElement('p');
+    eyebrow.className = 'overview-eyebrow';
+    eyebrow.textContent = 'SYSTEM';
+    panel.prepend(eyebrow);
+  }
 
   const title = document.getElementById('overview-title');
   if (title) title.textContent = meta.title || 'Overview';
@@ -183,17 +216,16 @@ function renderOverviewChapter() {
 
   const metaLine = document.getElementById('overview-meta');
   if (metaLine) {
-    metaLine.textContent = [meta.status, meta.author, meta.date].filter(part => part != null && part !== '').join(' · ');
+    metaLine.textContent = [meta.author, workbenchDate(meta.date)].filter(part => part != null && part !== '').join(' · ');
   }
 
   const facts = document.getElementById('overview-facts');
   if (facts) {
     facts.replaceChildren();
     [
-      ['Components', (ARCH_SPEC.nodes || []).length],
-      ['Connections', (ARCH_SPEC.edges || []).length],
-      ['Boundaries', (ARCH_SPEC.boundaries || []).length],
-      ['Scenarios', (ARCH_SPEC.scenarios || []).length],
+      ['components', (ARCH_SPEC.nodes || []).length],
+      ['layers', (ARCH_SPEC.boundaries || []).length],
+      ['connections', (ARCH_SPEC.edges || []).length],
     ].forEach(([label, count]) => {
       const item = document.createElement('div');
       item.className = 'overview-fact';
@@ -210,8 +242,11 @@ function renderOverviewChapter() {
   if (trust && typeof trustSummary === 'function') {
     trust.replaceChildren();
     Object.entries(trustSummary(ARCH_SPEC, QUALITY_GATE)).forEach(([key, entry]) => {
-      const row = document.createElement('div');
+      const row = document.createElement('button');
+      row.type = 'button';
       row.className = 'ov-trust-row';
+      row.setAttribute('data-trust-chapter', entry.chapter);
+      row.addEventListener('click', () => openTrustChapter(entry.chapter, row));
       row.setAttribute('data-trust-key', key);
 
       const dot = document.createElement('span');
@@ -226,14 +261,7 @@ function renderOverviewChapter() {
       detail.className = 'ov-trust-detail';
       detail.textContent = entry.detail;
 
-      const open = document.createElement('button');
-      open.type = 'button';
-      open.className = 'btn-icon ov-trust-open';
-      open.setAttribute('data-trust-chapter', entry.chapter);
-      open.textContent = `Open ${chapterLabel(entry.chapter)}`;
-      open.addEventListener('click', () => openChapter(entry.chapter));
-
-      row.append(dot, label, detail, open);
+      row.append(dot, label, detail);
       trust.appendChild(row);
     });
   }
@@ -248,21 +276,56 @@ function renderOverviewChapter() {
       empty.textContent = 'No scenarios recorded.';
       stagesTarget.appendChild(empty);
     } else {
-      scenario.stages.forEach((stage, index) => {
+      const entries = linearizeScenario(scenario, {});
+      const decisionIndex = entries.findIndex(entry => entry.kind === 'decision');
+      const main = decisionIndex < 0 ? entries : entries.slice(0, decisionIndex + 1);
+      const heading = stagesTarget.previousElementSibling;
+      heading.textContent = 'How it works';
+      const aside = document.createElement('span');
+      aside.className = 'overview-path-count';
+      const decision = main.find(entry => entry.kind === 'decision');
+      aside.textContent = `${walkthroughTotal(main)} steps, then ${decision?.branches.length || 0} outcomes`;
+      heading.appendChild(aside);
+      main.forEach(entry => {
         const item = document.createElement('li');
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'overview-stage';
-        button.setAttribute('data-overview-stage', stage.id || String(index));
-        button.textContent = stage.name || stage.label || stage.id || `Stage ${index + 1}`;
+        button.setAttribute('data-overview-stage', entry.id);
+        const number = document.createElement('span');
+        number.className = 'overview-step-number';
+        number.textContent = entry.kind === 'decision' ? '◇' : String(entry.number);
+        const name = document.createElement('span');
+        name.className = 'overview-step-name';
+        name.textContent = entry.kind === 'decision' ? `Decision: ${entry.stage.condition || entry.id}` : entry.stage.name || entry.stage.label || entry.id;
+        button.append(number, name);
+        if (entry.kind === 'decision') {
+          const outcomes = document.createElement('span');
+          outcomes.className = 'overview-step-outcomes';
+          outcomes.textContent = entry.branches.map(branch => branch.name || branch.condition).join(' · ');
+          button.appendChild(outcomes);
+        }
         button.addEventListener('click', () => {
           startWalkthrough(scenario.id);
-          walkTo(stage.id);
+          walkTo(entry.id);
           openChapter('walkthrough');
         });
         item.appendChild(button);
         stagesTarget.appendChild(item);
       });
+      let start = panel.querySelector('[data-start-walkthrough]');
+      if (!start) {
+        start = document.createElement('button');
+        start.type = 'button';
+        start.className = 'overview-start';
+        start.setAttribute('data-start-walkthrough', '');
+        start.textContent = 'Start walkthrough';
+        start.addEventListener('click', () => { startWalkthrough(scenario.id); openChapter('walkthrough'); });
+      }
+      stagesTarget.after(start);
+      const trustHeading = trust?.previousElementSibling;
+      if (trustHeading?.tagName === 'H3') start.after(trustHeading, trust);
+
     }
   }
 

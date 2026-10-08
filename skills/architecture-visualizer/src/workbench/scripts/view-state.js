@@ -30,8 +30,22 @@ function modelIdentity() {
   return String(ARCH_SPEC.meta?.id || ARCH_SPEC.meta?.title || 'architecture').toLowerCase().replace(/[^a-z0-9]+/g, '-');
 }
 
+// Saved card positions belong to the layout they were dragged from: a rebuilt page with a
+// different layout gets a different key, so old positions never land on a new arrangement.
+let builtLayoutFingerprint = null;
+function layoutFingerprint() {
+  if (builtLayoutFingerprint === null) {
+    const text = JSON.stringify([LAYOUT_DATA.config, (LAYOUT_DATA.nodes || []).map(n => [n.id, n.x, n.y, n.width, n.height]),
+      (LAYOUT_DATA.boundaries || []).map(b => [b.id, b.x, b.y, b.width, b.height])]);
+    let hash = 5381;
+    for (let i = 0; i < text.length; i++) hash = ((hash * 33) ^ text.charCodeAt(i)) >>> 0;
+    builtLayoutFingerprint = hash.toString(36);
+  }
+  return builtLayoutFingerprint;
+}
+
 function layoutStorageKey() {
-  return `arch-viz-layout:${modelIdentity()}`;
+  return `arch-viz-layout:${modelIdentity()}:${layoutFingerprint()}`;
 }
 
 function persistLayoutOverrides() {
@@ -47,6 +61,11 @@ function persistLayoutOverrides() {
 }
 
 function restorePersistedLayout() {
+  layoutFingerprint();
+  const original = {
+    nodes: (LAYOUT_DATA.nodes || []).map(node => [node, node.x, node.y]),
+    boundaries: (LAYOUT_DATA.boundaries || []).map(boundary => [boundary, boundary.x, boundary.y]),
+  };
   try {
     const raw = window.localStorage.getItem(layoutStorageKey());
     if (!raw) return;
@@ -65,9 +84,15 @@ function restorePersistedLayout() {
         boundary.y = point.y;
       }
     });
-    recomputeAllEdges();
+    // A saved arrangement the lane router cannot route is discarded rather than drawn half-broken.
+    if (recomputeAllEdges() !== (LAYOUT_DATA.config.layout === 'lanes' ? 'lanes' : 'columns') && LAYOUT_DATA.config.router === 'orthogonal') {
+      throw new Error('saved layout no longer routes');
+    }
   } catch (error) {
-    return;
+    original.nodes.forEach(([node, x, y]) => { node.x = x; node.y = y; });
+    original.boundaries.forEach(([boundary, x, y]) => { boundary.x = x; boundary.y = y; });
+    try { window.localStorage.removeItem(layoutStorageKey()); } catch (storageError) { /* storage unavailable */ }
+    try { recomputeAllEdges(); } catch (routeError) { /* the built routes stay */ }
   }
 }
 

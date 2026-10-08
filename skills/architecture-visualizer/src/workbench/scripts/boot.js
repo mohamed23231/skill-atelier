@@ -11,20 +11,13 @@ function initMotionPreference() {
   });
 }
 
-let lastOverlayMode = null;
+let lastStackedMode = null;
+// Crossing the breakpoint opens the rail: docked it starts open, stacked it is always open.
 function syncResponsiveRegions(force) {
-  const overlay = isOverlayPanels();
-  const railRegion = document.querySelector('[data-region="rail"]');
-  if (railRegion) {
-    railRegion.setAttribute('aria-modal', overlay && railRegion.getAttribute('data-open') === 'true' ? 'true' : 'false');
-  }
-  if (!force && overlay === lastOverlayMode) return;
-  lastOverlayMode = overlay;
-  activeDrawer = null;
-  drawerReturnFocus = null;
-  if (railRegion) {
-    railRegion.setAttribute('data-open', overlay ? 'false' : 'true');
-  }
+  const stacked = isStackedLayout();
+  if (!force && stacked === lastStackedMode) return;
+  lastStackedMode = stacked;
+  document.querySelector('[data-region="rail"]')?.setAttribute('data-open', 'true');
 }
 
 // Initialize application
@@ -34,7 +27,7 @@ function init() {
   if (ARCH_SPEC.meta) {
     document.getElementById('doc-title').textContent = ARCH_SPEC.meta.title || 'Architecture Visualization';
     const subtitleEl = document.getElementById('doc-subtitle');
-    subtitleEl.textContent = ARCH_SPEC.meta.description || '';
+    subtitleEl.textContent = `${(ARCH_SPEC.nodes || []).length} components${ARCH_SPEC.meta.date ? ` · ${workbenchDate(ARCH_SPEC.meta.date)}` : ''}`;
     subtitleEl.setAttribute('title', subtitleEl.textContent);
     const statusBadge = document.getElementById('doc-status');
     statusBadge.textContent = ARCH_SPEC.meta.status || 'PROPOSED';
@@ -104,7 +97,7 @@ function fitFromButton() {
 
 function toggleGatePanel() {
   openChapter('review');
-  setDrawerOpen('rail', true, document.activeElement);
+  setDrawerOpen('rail', true);
   const gateSec = document.getElementById('section-gate') || document.getElementById('gate-body');
   gateSec?.scrollIntoView?.({ block: 'nearest' });
 }
@@ -163,7 +156,6 @@ function setupEventListeners() {
   document.querySelector('[data-action="rail-close"]')?.addEventListener('click', () => setDrawerOpen('rail', false));
   document.querySelector('[data-action="sheet-back"]')?.addEventListener('click', hideSheetKeepSelection);
   document.querySelector('[data-action="inspector-close"]').addEventListener('click', closeInspector);
-  document.querySelector('[data-action="drawer-backdrop"]').addEventListener('click', closeActiveDrawer);
   document.querySelector('[data-region="minimap"]').addEventListener('mousedown', event => event.stopPropagation());
   document.querySelector('[data-region="minimap"]').addEventListener('click', handleMinimapClick);
   document.getElementById('btn-focus-neighbors').addEventListener('click', () => setFocusMode(FOCUS_MODES.NEIGHBORS));
@@ -208,7 +200,6 @@ function setupEventListeners() {
   document.getElementById('modal-copy').addEventListener('click', copyModalContent);
 
   document.addEventListener('click', () => document.getElementById('export-menu').classList.remove('open'));
-  document.addEventListener('keydown', trapDrawerFocus);
   document.addEventListener('keydown', handleKeyDown);
   svg.addEventListener('click', () => {
     if (!state.dragMoved) closeInspector();
@@ -242,10 +233,6 @@ function handleKeyDown(e) {
   const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement ||
     e.target instanceof HTMLSelectElement || e.target.isContentEditable;
   if (typing) {
-    if (e.key === 'Escape' && activeDrawer) {
-      closeActiveDrawer();
-      return;
-    }
     if (e.key === 'Escape') e.target.blur();
     return;
   }
@@ -265,7 +252,6 @@ function handleKeyDown(e) {
       if (state.focusMode) { setFocusMode(state.focusMode); break; }
       if (!document.getElementById('component-sheet')?.hidden) { hideSheetKeepSelection(); break; }
       if (state.scenarioActive) { endWalkthrough(); break; }
-      closeActiveDrawer();
       closeModal();
       document.getElementById('export-menu').classList.remove('open');
       closeInspector();

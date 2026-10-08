@@ -147,13 +147,31 @@ function resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes) {
   });
 }
 
+// Re-routes every connection for the current card positions and says which router managed it.
+// Lane routing assumes each card sits in its lane; a card dragged out of it falls back to the
+// column router, then to curves, so connections always follow their cards.
 function recomputeAllEdges() {
   if (LAYOUT_DATA.config.router !== 'orthogonal') {
-    (LAYOUT_DATA.nodes || []).forEach(node => recalculateNodeEdges(node.id));
-    return;
+    (LAYOUT_DATA.nodes || []).forEach(node => recalculateCurvedEdges(node.id));
+    return 'curved';
   }
   const labelWidths = Object.fromEntries(LAYOUT_DATA.edges.map(edge => [edge.id, estimateLabelWidth(edge.label || edge.packetLabel)]));
-  const result = ArchVizOrthogonal.routeOrthogonal(LAYOUT_DATA, { labelWidths, direction: LAYOUT_DATA.config.direction });
+  const attempts = LAYOUT_DATA.config.layout === 'lanes' ? [['lanes', {}], ['columns', { lanes: false }]] : [['columns', {}]];
+  let result = null;
+  let used = 'curved';
+  for (const [name, extra] of attempts) {
+    try {
+      result = ArchVizOrthogonal.routeOrthogonal(LAYOUT_DATA, { labelWidths, direction: LAYOUT_DATA.config.direction, ...extra });
+      used = name;
+      break;
+    } catch (error) {
+      result = null;
+    }
+  }
+  if (!result) {
+    (LAYOUT_DATA.nodes || []).forEach(node => recalculateCurvedEdges(node.id));
+    return used;
+  }
   LAYOUT_DATA.routingStats = result.stats;
   LAYOUT_DATA.edges.forEach(edge => {
     Object.assign(edge, ArchVizOrthogonal.buildRouteGeometry(result.routes[edge.id], labelWidths[edge.id], ArchVizGeometry, { source: nodeById.get(edge.source), target: nodeById.get(edge.target) }));
@@ -174,6 +192,7 @@ function recomputeAllEdges() {
       syncLabelLeader(edge);
     }
   });
+  return used;
 }
 
 function recalculateNodeEdges(nodeId) {
@@ -181,6 +200,10 @@ function recalculateNodeEdges(nodeId) {
     recomputeAllEdges();
     return;
   }
+  recalculateCurvedEdges(nodeId);
+}
+
+function recalculateCurvedEdges(nodeId) {
   (LAYOUT_DATA.edges || [])
     .filter(e => e.source === nodeId || e.target === nodeId)
     .forEach(edge => {

@@ -176,3 +176,7 @@ header {
 
 /* Inside an embedded viewer the host owns the address bar, so a view link has nothing to point at. */
 body[data-embedded] #btn-copy-link { display: none; }
+
+.header-meta { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trust-pill { color: var(--muted); }
+.trust-pill strong { color: var(--ink); font-weight: 650; }

@@ -54,6 +54,7 @@ function spotlightWalkFocus(focus) {
     path.classList.toggle('highlighted', isActive);
     if (typeof syncEdgeMarker === 'function') syncEdgeMarker(path);
     path.classList.toggle('dimmed', !isActive);
+    path.closest('.edge-group')?.classList.toggle('out-of-focus', !isActive);
   });
   if (typeof drawGhostSteps === 'function') drawGhostSteps((focus && focus.ghosts) || []);
   drawWalkMarkers((focus && focus.markers) || []);
@@ -91,7 +92,126 @@ function drawWalkMarkers(markers) {
 }
 
 function applyWalkFocus(entries, index) {
-  spotlightWalkFocus(focusOfEntry(entries, index, LAYOUT_DATA.edges || []));
+  const focus = focusOfEntry(entries, index, LAYOUT_DATA.edges || []);
+  spotlightWalkFocus(focus);
+  frameWalkFocus(focus);
+  playWalkPackets(entries, index);
+}
+
+// Each step glides the camera to its participants; never smaller than the whole diagram's fit.
+let walkCameraFrame = null;
+function frameWalkFocus(focus) {
+  frameModelNodes(focus.primaryNodes || [], focus.primaryEdges || []);
+}
+
+// Glides the camera to frame these components and connections, never smaller than the whole fit.
+function frameModelNodes(nodeIds, edgeIdList) {
+  const ids = new Set(nodeIds);
+  const nodes = (LAYOUT_DATA.nodes || []).filter(node => ids.has(node.id) && !isNodeHidden(node));
+  if (!nodes.length) return;
+  const edgeIds = new Set(edgeIdList);
+  const boxes = nodes.map(node => ({ minX: node.x, minY: node.y, maxX: node.x + node.width, maxY: node.y + node.height }))
+    .concat((LAYOUT_DATA.edges || []).filter(edge => edgeIds.has(edge.id) && edge.totalVisualBounds).map(edge => edge.totalVisualBounds));
+  const pad = 72;
+  const box = { minX: Math.min(...boxes.map(b => b.minX)) - pad, minY: Math.min(...boxes.map(b => b.minY)) - pad,
+    maxX: Math.max(...boxes.map(b => b.maxX)) + pad, maxY: Math.max(...boxes.map(b => b.maxY)) + pad };
+  const safe = canvasSafeArea();
+  const fit = fitCamera();
+  const zoom = clampZoom(Math.min(safe.width / (box.maxX - box.minX), safe.height / (box.maxY - box.minY), 1));
+  // When the group needs the whole diagram anyway, use exactly the whole-diagram view.
+  if (zoom <= fit.zoom * 1.05) {
+    animateWalkCamera(fit);
+    return;
+  }
+  animateWalkCamera({ zoom, panX: safe.left + safe.width / 2 - (box.minX + box.maxX) * zoom / 2,
+    panY: safe.top + safe.height / 2 - (box.minY + box.maxY) * zoom / 2 });
+}
+
+function animateWalkCamera(target) {
+  window.cancelAnimationFrame(walkCameraFrame);
+  if (state.prefersReducedMotion || restoringViewState || !viewStateReady) {
+    actions.setCamera({ ...target, userMoved: false });
+    updateTransform();
+    return;
+  }
+  const from = { zoom: state.zoom, panX: state.panX, panY: state.panY };
+  actions.setCamera({ userMoved: false });
+  const start = performance.now();
+  const tick = now => {
+    // A reader who pans or zooms mid-glide keeps their view.
+    if (state.userMovedView) return;
+    const t = Math.min(1, (now - start) / 420);
+    const k = 1 - Math.pow(1 - t, 3);
+    actions.setCamera({ zoom: from.zoom + (target.zoom - from.zoom) * k, panX: from.panX + (target.panX - from.panX) * k,
+      panY: from.panY + (target.panY - from.panY) * k });
+    updateTransform();
+    if (t < 1) walkCameraFrame = window.requestAnimationFrame(tick);
+  };
+  walkCameraFrame = window.requestAnimationFrame(tick);
+}
+
+// A packet travels each hop of the current step, again after a pause, until the step changes.
+// Recovery outcomes travel in the warning colour. Reduced motion shows the highlight alone.
+let walkPacketTimer = null;
+let walkPacketRun = 0;
+function walkPacketsLayer() {
+  let layer = document.getElementById('walk-packets');
+  if (!layer) {
+    layer = el('g', { id: 'walk-packets', 'aria-hidden': 'true' });
+    particlesLayer.parentNode.appendChild(layer);
+  }
+  return layer;
+}
+
+function stopWalkPackets() {
+  walkPacketRun += 1;
+  window.clearTimeout(walkPacketTimer);
+  document.getElementById('walk-packets')?.replaceChildren();
+}
+
+function playWalkPackets(entries, index) {
+  stopWalkPackets();
+  const entry = entries[index];
+  if (state.prefersReducedMotion || !entry || entry.kind !== 'step') return;
+  const decisionIndex = entries.findIndex(item => item.kind === 'decision');
+  const decision = entries[decisionIndex];
+  const recovery = decisionIndex >= 0 && index > decisionIndex && decision.branches[decision.chosen]?.status === 'recovery';
+  const hops = (entry.interactions || []).map(hop => {
+    const edgeId = walkEdgeId(hop, LAYOUT_DATA.edges || []);
+    const edge = edgeById.get(edgeId);
+    const path = document.getElementById(`path-${edgeId}`);
+    return edge && path ? { path, reverse: edge.source === hop.to && edge.target === hop.from } : null;
+  }).filter(Boolean);
+  if (!hops.length) return;
+  const run = walkPacketRun;
+  const layer = walkPacketsLayer();
+  const duration = 1100;
+  const once = () => {
+    if (run !== walkPacketRun) return;
+    hops.forEach((hop, i) => {
+      const group = el('g', { class: recovery ? 'walk-packet recovery' : 'walk-packet' });
+      group.appendChild(el('circle', { class: 'walk-packet-halo', r: '9' }));
+      group.appendChild(el('circle', { class: 'walk-packet-core', r: '4.5' }));
+      layer.appendChild(group);
+      const length = hop.path.getTotalLength();
+      // Parallel hops travel together; sequential hops in one step follow each other.
+      const delay = entry.parallel ? 0 : i * duration * 0.6;
+      const start = performance.now() + delay;
+      const tick = now => {
+        if (run !== walkPacketRun || !group.isConnected) return;
+        const t = Math.max(0, Math.min(1, (now - start) / duration));
+        const point = hop.path.getPointAtLength(length * (hop.reverse ? 1 - t : t));
+        group.setAttribute('transform', `translate(${point.x},${point.y})`);
+        group.style.opacity = t > 0 && t < 1 ? '1' : '0';
+        if (t < 1) window.requestAnimationFrame(tick);
+        else group.remove();
+      };
+      window.requestAnimationFrame(tick);
+    });
+    const total = (entry.parallel ? 1 : 1 + (hops.length - 1) * 0.6) * duration;
+    walkPacketTimer = window.setTimeout(once, total + 900);
+  };
+  once();
 }
 
 function walkAnnouncement(entries, index) {
@@ -172,18 +292,22 @@ function startWalkthrough(scenarioId, choices) {
 
 function endWalkthrough() {
   stopWalkPlayback();
+  stopWalkPackets();
   if (typeof clearSpotlight === 'function') clearSpotlight();
   actions.setWalkCursor(null);
   actions.setScenarioActive(false);
   renderWalkTrack();
   renderWalkthrough();
   updateUrlState();
+  // Ending returns to the whole diagram.
+  if (!state.userMovedView) fitToScreen();
 }
 
 // Leaving the architecture view stows the walkthrough without forgetting the reader's place.
 function suspendWalkthrough() {
   if (!state.scenarioActive) return;
   stopWalkPlayback();
+  stopWalkPackets();
   actions.setScenarioActive(false);
   renderWalkTrack();
 }
@@ -293,6 +417,20 @@ function buildWalkButton(className, icon, label, handler) {
   return button;
 }
 
+// Steps across the main path and every outcome, as the track numbers them.
+function walkAllStepsTotal(scenario) {
+  const entries = linearizeScenario(scenario, {});
+  const decisionIndex = entries.findIndex(entry => entry.kind === 'decision');
+  if (decisionIndex < 0) return walkthroughTotal(entries);
+  let total = walkthroughTotal(entries.slice(0, decisionIndex));
+  entries[decisionIndex].branches.forEach(branch => {
+    const branchEntries = [];
+    walkStages(branch.stages, {}, branchEntries, { next: total + 1 });
+    total += walkthroughTotal(branchEntries);
+  });
+  return total;
+}
+
 function renderWalkTrack() {
   const track = document.querySelector('.walk-track');
   if (!track) return;
@@ -300,15 +438,22 @@ function renderWalkTrack() {
   if (!walkTrackBound) {
     walkTrackBound = true;
     ['mousedown', 'touchstart'].forEach((type) => track.addEventListener(type, (event) => event.stopPropagation()));
+    // The idle track also needs clearance, and its lanes can grow or wrap on resize.
+    new ResizeObserver(() => {
+      document.body.style.setProperty('--walk-track-height', `${track.getBoundingClientRect().height}px`);
+    }).observe(track);
   }
   const previousHeight = track.getBoundingClientRect().height;
   const refitTrack = () => {
+    document.body.style.setProperty('--walk-track-height', `${track.getBoundingClientRect().height}px`);
     if (!state.userMovedView && track.getBoundingClientRect().height !== previousHeight) {
       window.requestAnimationFrame(() => { if (!state.userMovedView) fitToScreen(); });
     }
   };
-  const entries = state.scenarioActive ? walkEntries() : [];
-  if (!state.scenarioActive || !entries.length) {
+  const scenario = selectedScenario() || (ARCH_SPEC.scenarios || [])[0];
+  const active = walkIsActive();
+  const entries = active ? walkEntries() : linearizeScenario(scenario, {});
+  if (!entries.length) {
     track.hidden = true;
     track.replaceChildren();
     refitTrack();
@@ -324,27 +469,32 @@ function renderWalkTrack() {
 
   const controls = document.createElement('div');
   controls.className = 'walk-track-controls';
-  const previous = buildWalkButton('btn-icon walk-prev', 'ui-prev', 'Previous walkthrough entry', () => walkPrev());
+  const previous = buildWalkButton('btn-icon walk-prev', 'ui-chevron-left', 'Previous walkthrough entry', () => walkPrev());
   previous.disabled = cursorIndex <= 0;
-  const play = buildWalkButton('btn-icon walk-play', walkPlaying ? 'ui-pause' : 'ui-play', walkPlaying ? 'Pause walkthrough' : 'Play walkthrough', () => toggleWalkPlayback());
+  const play = buildWalkButton('btn-icon walk-play', walkPlaying ? 'ui-pause' : 'ui-play', walkPlaying ? 'Pause walkthrough' : 'Play walkthrough', () => { if (!walkIsActive()) startWalkthrough(scenario.id); toggleWalkPlayback(); });
   play.setAttribute('aria-pressed', String(walkPlaying));
   if (state.prefersReducedMotion) {
     play.disabled = true;
     play.setAttribute('aria-disabled', 'true');
     play.title = 'Play unavailable under reduced motion';
   }
-  const next = buildWalkButton('btn-icon walk-next', 'ui-next', 'Next walkthrough entry', () => walkNext());
+  const next = buildWalkButton('btn-icon walk-next', 'ui-chevron-right', 'Next walkthrough entry', () => walkNext());
   next.disabled = cursorIndex >= entries.length - 1;
   controls.append(previous, play, next);
 
   const count = document.createElement('span');
   count.className = 'walk-count';
-  count.textContent = `Step ${stepNumber} of ${total}`;
+  count.textContent = active ? `Step ${stepNumber} of ${total}` : 'Start';
+  const length = document.createElement('span');
+  length.className = 'walk-length';
+  length.textContent = `${walkAllStepsTotal(scenario)} steps`;
+  length.hidden = active;
+  controls.append(count, length);
 
   const beads = document.createElement('div');
   beads.className = 'walk-beads';
   beads.setAttribute('role', 'presentation');
-  entries.forEach((entry) => {
+  const makeBead = (entry, choose) => {
     const bead = document.createElement('button');
     bead.type = 'button';
     bead.className = `walk-bead walk-bead-${walkBeadKind(entry)}`;
@@ -352,17 +502,56 @@ function renderWalkTrack() {
     bead.setAttribute('data-walk-entry', entry.id);
     bead.setAttribute('data-walk-kind', walkBeadKind(entry));
     bead.setAttribute('aria-label', walkEntryAriaLabel(entry));
-    bead.setAttribute('aria-selected', String(entry.id === state.walkCursor));
-    if (entry.id === state.walkCursor) bead.classList.add('current');
+    const selected = active && !choose && entry.id === state.walkCursor;
+    bead.setAttribute('aria-selected', String(selected));
+    bead.classList.toggle('current', selected);
     const number = document.createElement('span');
     number.className = 'walk-bead-number';
-    number.textContent = entry.kind === 'step' ? String(entry.number) : (entry.kind === 'decision' ? '?' : '');
+    number.textContent = entry.kind === 'step' ? String(entry.number) : entry.kind === 'decision' ? '◇ Decision' : entry.branch?.name || 'End';
     bead.appendChild(number);
-    bead.addEventListener('click', () => walkTo(entry.id));
-    beads.appendChild(bead);
-  });
-
-  track.append(controls, count, beads);
+    if (entry.parallel) {
+      const ticks = document.createElement('span');
+      ticks.className = 'walk-parallel-ticks';
+      ticks.setAttribute('aria-hidden', 'true');
+      entry.interactions.forEach(() => ticks.appendChild(document.createElement('i')));
+      bead.appendChild(ticks);
+    }
+    bead.addEventListener('click', () => {
+      if (!walkIsActive()) startWalkthrough(scenario.id);
+      if (choose) chooseOutcome(choose.id, choose.index);
+      walkTo(entry.id);
+    });
+    return bead;
+  };
+  const lane = (label, entries, choose) => {
+    const row = document.createElement('div');
+    row.className = 'walk-lane';
+    const tag = document.createElement('span');
+    tag.className = 'walk-lane-label';
+    tag.textContent = label;
+    tag.title = label;
+    row.appendChild(tag);
+    entries.forEach(entry => row.appendChild(makeBead(entry, choose)));
+    beads.appendChild(row);
+    return row;
+  };
+  const decisionIndex = entries.findIndex(entry => entry.kind === 'decision');
+  lane('Main path', decisionIndex < 0 ? entries : entries.slice(0, decisionIndex + 1));
+  // Every outcome lane shows, idle or not, so a reader sees where the story can go before starting.
+  if (decisionIndex >= 0) {
+    const decision = entries[decisionIndex];
+    decision.branches.forEach((branch, index) => {
+      const branchEntries = [];
+      const counter = { next: walkthroughTotal(entries.slice(0, decisionIndex)) + 1 };
+      walkStages(branch.stages, active ? state.walkChoices : {}, branchEntries, counter);
+      if (!branchEntries.length) branchEntries.push({ kind: 'end', id: `end:${decision.id}`, decisionId: decision.id, branch });
+      const row = lane(`\u21b3 ${branch.name || branch.condition || `Outcome ${index + 1}`}`, branchEntries,
+        index === decision.chosen ? null : { id: decision.id, index });
+      row.dataset.walkOutcomeLane = String(index);
+      row.dataset.chosen = String(index === decision.chosen);
+    });
+  }
+  track.append(controls, beads);
   if (current && walkPlaybackNote()) {
     const note = document.createElement('span');
     note.className = 'walk-note';
@@ -406,9 +595,33 @@ function walkChapterStep(entry) {
   if (entry.stage?.narrativeGenerated) {
     const generated = document.createElement('span');
     generated.className = 'walk-generated';
-    generated.textContent = 'generated';
+    generated.textContent = 'Generated from step data';
     item.appendChild(generated);
   }
+  (entry.interactions || []).forEach(hop => {
+    const route = document.createElement('p');
+    route.className = 'walk-item-route';
+    route.textContent = `${walkNodeLabel(hop.from)} → ${walkNodeLabel(hop.to)}${hop.label ? ` · ${hop.label}` : ''}`;
+    item.appendChild(route);
+    const payload = hop.payload || entry.stage?.payload;
+    if (payload && typeof payload === 'object') {
+      const table = document.createElement('table');
+      table.className = 'walk-payload';
+      const body = document.createElement('tbody');
+      Object.entries(payload).forEach(([key, value]) => {
+        const row = document.createElement('tr');
+        const label = document.createElement('th');
+        label.scope = 'row';
+        label.textContent = key;
+        const cell = document.createElement('td');
+        cell.textContent = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        row.append(label, cell);
+        body.appendChild(row);
+      });
+      table.appendChild(body);
+      item.appendChild(table);
+    }
+  });
   return item;
 }
 
@@ -508,4 +721,5 @@ function renderScenarioNavigator() {
   list.setAttribute('data-walk-list', '');
   target.append(select, list);
   renderWalkthrough();
+  renderWalkTrack();
 }

@@ -1,9 +1,9 @@
 const PANEL_BREAKPOINT = 900;
-let activeDrawer = null;
-let drawerReturnFocus = null;
 let panelReflowTimer = null;
 
-function isOverlayPanels() {
+// From the breakpoint up the rail docks beside the canvas and can be closed. Below it the page
+// stacks: canvas and track first, then the rail as a section of the page that is always open.
+function isStackedLayout() {
   return window.innerWidth < PANEL_BREAKPOINT;
 }
 
@@ -14,64 +14,52 @@ function refreshViewportForPanelChange() {
   }, 220);
 }
 
-function drawerTabbables(region) {
-  return Array.from(region.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')).filter(item => {
-    if (item.disabled || item.getAttribute('aria-hidden') === 'true') return false;
-    const tabindex = item.getAttribute('tabindex');
-    return tabindex === null || Number(tabindex) >= 0;
-  });
-}
-
-function setDrawerOpen(kind, open, opener) {
+function setDrawerOpen(kind, open) {
   const region = document.querySelector(`[data-region="${kind}"]`);
   if (!region) return;
-  const overlay = isOverlayPanels();
+  const stacked = isStackedLayout();
   const wasOpen = region.getAttribute('data-open') === 'true';
-  if (open && overlay) {
-    activeDrawer = kind;
-    drawerReturnFocus = opener || document.activeElement;
+  const next = stacked || open;
+  region.setAttribute('data-open', next ? 'true' : 'false');
+  // A stacked rail opened by the reader (a card, a trust pill) scrolls into view; a link restoring
+  // a selection on load leaves the page at the top.
+  if (stacked && open && viewStateReady) {
+    region.scrollIntoView({ block: 'start', behavior: state.prefersReducedMotion ? 'auto' : 'smooth' });
   }
-  region.setAttribute('data-open', open ? 'true' : 'false');
-  region.setAttribute('aria-modal', overlay && open ? 'true' : 'false');
-  if (open && overlay) {
-    window.requestAnimationFrame(() => drawerTabbables(region)[0]?.focus());
-  }
-  if (!open && activeDrawer === kind) {
-    const target = drawerReturnFocus;
-    activeDrawer = null;
-    drawerReturnFocus = null;
-    if (overlay) {
-      target?.focus();
-      window.requestAnimationFrame(() => target?.focus());
-    }
-  }
-  if (wasOpen !== open) refreshViewportForPanelChange();
+  if (wasOpen !== next) refreshViewportForPanelChange();
 }
 
-function toggleDrawer(kind, opener) {
+function toggleDrawer(kind) {
   const region = document.querySelector(`[data-region="${kind}"]`);
   if (!region) return;
-  setDrawerOpen(kind, region.getAttribute('data-open') !== 'true', opener);
+  setDrawerOpen(kind, region.getAttribute('data-open') !== 'true');
 }
 
-function closeActiveDrawer() {
-  if (activeDrawer) setDrawerOpen(activeDrawer, false);
+function selectionNeighbourhood(nodeId) {
+  const nodes = new Set([nodeId]);
+  const edges = new Set();
+  (LAYOUT_DATA.edges || []).forEach(edge => {
+    if (edge.source !== nodeId && edge.target !== nodeId) return;
+    nodes.add(edge.source);
+    nodes.add(edge.target);
+    edges.add(edge.id);
+  });
+  return { nodes, edges };
 }
 
-function trapDrawerFocus(event) {
-  if (event.key !== 'Tab' || !isOverlayPanels() || !activeDrawer) return;
-  const region = document.querySelector(`[data-region="${activeDrawer}"]`);
-  const items = drawerTabbables(region);
-  if (items.length === 0) return;
-  const first = items[0];
-  const last = items[items.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
+// A selected component and its neighbours stay at full strength, its connections darken, the rest
+// recedes. A running walkthrough keeps its own spotlight.
+function applySelectionSpotlight(nodeId, neighbourhood) {
+  const walking = typeof walkIsActive === 'function' && walkIsActive();
+  const active = walking ? null : neighbourhood || (nodeId ? selectionNeighbourhood(nodeId) : null);
+  document.querySelectorAll('.node-group').forEach(group => {
+    group.classList.toggle('context-dim', Boolean(active) && !active.nodes.has(group.id.replace('node-', '')));
+  });
+  document.querySelectorAll('.edge-group').forEach(group => {
+    const id = group.id.replace('edge-', '');
+    group.classList.toggle('context-dim', Boolean(active) && !active.edges.has(id));
+    group.classList.toggle('context-focus', Boolean(active) && active.edges.has(id));
+  });
 }
 
 function focusModelPoint(x, y) {
@@ -94,8 +82,12 @@ function openInspectorForNode(nodeId) {
   const node = nodeById.get(nodeId);
   const nodeElement = document.getElementById(`node-${nodeId}`);
   if (nodeElement) nodeElement.setAttribute('data-selected', 'true');
+  document.getElementById('node-inspector-body').dataset.kind = 'node';
   showSheet('node');
-  if (node) focusModelPoint(node.x + node.width / 2, node.y + node.height / 2);
+  // Like a walkthrough step: the component and its neighbours in view, everything else quiet.
+  const near = selectionNeighbourhood(nodeId);
+  if (node) frameModelNodes([...near.nodes], [...near.edges]);
+  applySelectionSpotlight(nodeId);
   applyFocusMode();
   updateUrlState();
 }
@@ -110,13 +102,15 @@ function openInspectorForEdge(edgeId) {
   const path = document.getElementById(`path-${edgeId}`);
   if (path) path.setAttribute('data-selected', 'true');
   actions.selectNode(null);
+  document.getElementById('node-inspector-body').dataset.kind = 'edge';
+  // A connection frames both of its ends, with the connection itself in focus.
+  const ends = { nodes: new Set([edge.source, edge.target]), edges: new Set([edgeId]) };
+  applySelectionSpotlight(null, ends);
   showSheet('edge');
   document.getElementById('ins-title').textContent = edge.label || edge.packetLabel || edge.id;
   document.getElementById('ins-tech').textContent = `${edge.communication || 'sync'} relationship`;
   document.getElementById('ins-description').textContent = `${nodeById.get(edge.source)?.label || edge.source} to ${nodeById.get(edge.target)?.label || edge.target}`;
-  const x = edge.labelAnchor?.x ?? edge.labelX ?? ((edge.points?.x1 || 0) + (edge.points?.x2 || 0)) / 2;
-  const y = edge.labelAnchor?.y ?? edge.labelY ?? ((edge.points?.y1 || 0) + (edge.points?.y2 || 0)) / 2;
-  focusModelPoint(x, y);
+  frameModelNodes([...ends.nodes], [edgeId]);
   applyFocusMode();
   updateUrlState();
 }

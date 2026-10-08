@@ -60,6 +60,8 @@
         <symbol id="ui-copy" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></g></symbol>
         <symbol id="ui-check" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></g></symbol>
         <symbol id="ui-keyboard" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.1M6.5 6.5h.1M9 6.5h.1M11.5 6.5h.1M5 9.5h6"/></g></symbol>
+        <symbol id="ui-chevron-left" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="ui-chevron-right" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
         <symbol id="ui-collapse" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4 5.5 8l4 4M13 4 9 8l4 4"/></g></symbol>
         <symbol id="ui-panel" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></symbol><symbol id="ui-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3.3 3.3"/></symbol>
       </defs>
@@ -73,7 +75,7 @@
         <h1 id="doc-title" style="font-size: 14px; font-weight: 700;">Architecture Visualizer</h1>
         <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px;">
           <span id="doc-status" class="badge-status PROPOSED">PROPOSED</span>
-          <span id="doc-subtitle" style="font-size: 11px; color: var(--muted); max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Interactive System Model</span>
+          <span id="doc-subtitle" class="header-meta">Interactive System Model</span>
         </div>
       </div>
     </div>
@@ -151,7 +153,6 @@
     </div>
   </div>
 
-<button class="workbench-backdrop" data-action="drawer-backdrop" aria-label="Close open panel"></button>
 
   <!-- Interactive SVG Canvas Container -->
   <div id="canvas-container" data-region="canvas">
@@ -199,7 +200,7 @@
   </div>
 
   <!-- Reading Rail -->
-  <aside id="rail" class="rail" data-region="rail" data-open="true" data-sheet="none" aria-label="Reading rail" aria-modal="false">
+  <aside id="rail" class="rail" data-region="rail" data-open="true" data-sheet="none" aria-label="Reading rail">
     <div class="rail-head">
       <div class="rail-chapters" role="tablist" aria-label="Chapters"></div>
       <button class="btn-icon icon-only" data-action="rail-close" aria-label="Close rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
@@ -272,76 +273,55 @@
     </div>
     <section class="rail-sheet" id="component-sheet" aria-label="Component details" hidden>
       <div class="sheet-header">
-        <button class="btn-icon" data-action="sheet-back"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-prev"></use></svg><span>Back to Walkthrough</span></button>
-        <div style="flex: 1; min-width: 0; margin: 0 8px;">
-          <h2 id="ins-title" style="font-size: 15px; font-weight: 700; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Component Details</h2>
-          <span id="ins-tech" style="font-size: 11px; color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Technology</span>
-        </div>
+        <button class="sheet-back" data-action="sheet-back"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-chevron-left"></use></svg><span>Back to Walkthrough</span></button>
         <button class="btn-icon icon-only" data-action="inspector-close" aria-label="Close details" style="width: 28px; height: 28px; padding: 0;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
       </div>
-      <div class="sheet-focus-row" style="display: flex; gap: 8px; padding: 12px 20px 0;">
-        <button id="btn-focus-neighbors" class="btn-icon" aria-pressed="false" style="flex: 1;" title="Focus selected component and direct neighbors">Show neighbours</button>
-        <button id="btn-focus-affected" class="btn-icon" aria-pressed="false" style="flex: 1;" title="Focus downstream affected path">Show blast radius</button>
-      </div>
-      <div id="node-inspector-body" class="inspector-body">
-        <!-- Status Badges -->
-        <div style="display: flex; gap: 8px;">
-          <span id="ins-status-badge" class="badge-status">VERIFIED</span>
-          <span id="ins-delta-badge" class="badge-status">UNCHANGED</span>
+      <div id="node-inspector-body" class="inspector-body sheet-reading">
+        <p class="sheet-kind"><svg class="icon" id="ins-kind-icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-service"></use></svg><span id="ins-tech">Technology</span></p>
+        <h2 id="ins-title" class="sheet-title">Component Details</h2>
+        <p id="ins-description" class="sheet-prose"></p>
+        <div class="sheet-chips">
+          <span id="ins-status-badge" class="sheet-state">Unknown</span>
+          <span id="ins-delta-badge" class="sheet-state">Unchanged</span>
+        </div>
+        <div class="sheet-focus-row">
+          <button id="btn-focus-neighbors" class="sheet-link" aria-pressed="false" title="Focus selected component and direct neighbors">Show neighbours</button>
+          <button id="btn-focus-affected" class="sheet-link" aria-pressed="false" title="Focus downstream affected path">Show blast radius</button>
+          <button id="ins-btn-highlight" class="sheet-link"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Highlight Dependency Chain</span></button>
         </div>
 
-        <!-- Responsibility -->
-        <div>
-          <div class="inspector-section-title">Responsibility</div>
-          <p id="ins-description" class="detail-card" style="line-height: 1.5;"></p>
-        </div>
-
-        <!-- Traceability: Files in Repository -->
-        <div>
-          <div class="inspector-section-title">Repository Source Files</div>
-          <div id="ins-files" class="detail-card">
-            <span style="color: var(--muted);">No files linked.</span>
-          </div>
-        </div>
-
-        <!-- API Endpoints -->
-        <div>
-          <div class="inspector-section-title">APIs & Interfaces</div>
-          <div id="ins-apis" class="detail-card">
-            <span style="color: var(--muted);">None</span>
-          </div>
-        </div>
-
-        <!-- Database Tables -->
-        <div>
-          <div class="inspector-section-title">Data Entities / Tables</div>
-          <div id="ins-tables" class="detail-card">
-            <span style="color: var(--muted);">None</span>
-          </div>
-        </div>
-
-        <!-- Implementation Checklist -->
-        <div>
-          <div class="inspector-section-title">Implementation Tasks</div>
-          <div id="ins-tasks" class="detail-card">
-            <span style="color: var(--muted);">None</span>
-          </div>
-        </div>
-
-        <!-- Failure Modes & Bottlenecks -->
-        <div>
-          <div class="inspector-section-title">Failure Modes & Risks</div>
-          <div id="ins-risks" class="detail-card">
-            <span style="color: var(--muted);">None recorded</span>
-          </div>
-        </div>
-
-        <!-- Dependency Graph Highlights -->
-        <div>
-          <button id="ins-btn-highlight" class="btn-icon" style="width: 100%; justify-content: center;">
-            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Highlight Dependency Chain</span>
-          </button>
-        </div>
+        <section class="sheet-section" data-sheet-section="walkthrough">
+          <h3>Appears in the walkthrough <span class="sheet-aside" id="ins-walk-count"></span></h3>
+          <ul id="ins-walk" class="sheet-list"></ul>
+        </section>
+        <section class="sheet-section" data-sheet-section="responsibilities">
+          <h3>Responsibilities</h3>
+          <ul id="ins-responsibilities" class="sheet-bullets"></ul>
+        </section>
+        <section class="sheet-section" data-sheet-section="connections">
+          <h3>Connections <span class="sheet-aside" id="ins-connection-count"></span></h3>
+          <ul id="ins-connections" class="sheet-list"></ul>
+        </section>
+        <section class="sheet-section" data-sheet-section="files">
+          <h3>Evidence and source files</h3>
+          <div id="ins-files" class="sheet-rows"></div>
+        </section>
+        <section class="sheet-section" data-sheet-section="apis">
+          <h3>APIs and interfaces</h3>
+          <div id="ins-apis" class="sheet-rows"></div>
+        </section>
+        <section class="sheet-section" data-sheet-section="tables">
+          <h3>Data entities</h3>
+          <div id="ins-tables" class="sheet-rows"></div>
+        </section>
+        <section class="sheet-section" data-sheet-section="risks">
+          <h3>Failure modes</h3>
+          <div id="ins-risks"></div>
+        </section>
+        <section class="sheet-section" data-sheet-section="tasks">
+          <h3>Implementation tasks</h3>
+          <div id="ins-tasks" class="sheet-rows"></div>
+        </section>
       </div>
       <div id="review-inspector-body" class="inspector-body workbench-hidden" tabindex="-1"></div>
     </section>

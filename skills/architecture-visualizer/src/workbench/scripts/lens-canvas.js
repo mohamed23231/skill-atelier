@@ -100,6 +100,17 @@ function applyLens() {
   renderLensKey(encoding.keyItems);
 }
 
+let lensFiltersBound = false;
+
+function closeLensFilters() {
+  const key = document.querySelector('.lens-key');
+  const popover = key?.querySelector('.lens-filters');
+  if (!popover || popover.hidden) return;
+  popover.hidden = true;
+  key.querySelector('[data-action="lens-filters"]')?.setAttribute('aria-expanded', 'false');
+  key.querySelector('[data-action="lens-filters"]')?.focus();
+}
+
 function renderLensKey(items) {
   const key = document.querySelector('.lens-key');
   if (!key) return;
@@ -108,6 +119,23 @@ function renderLensKey(items) {
   const focused = key.contains(document.activeElement) ? document.activeElement : null;
   const focusAttribute = ['data-filter', 'data-delta-mode', 'data-action'].find(attribute => focused?.hasAttribute(attribute));
   const focusValue = focusAttribute ? focused.getAttribute(focusAttribute) : null;
+  const filtersOpen = key.querySelector('.lens-filters')?.hidden === false;
+  if (!lensFiltersBound) {
+    lensFiltersBound = true;
+    ['mousedown', 'touchstart'].forEach(type => key.addEventListener(type, event => event.stopPropagation()));
+    document.addEventListener('click', event => {
+      // Filtering rebuilds the key before this event bubbles to the document.
+      // Its original path still identifies a click inside the popover.
+      if (!event.composedPath().includes(key)) closeLensFilters();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.querySelector('.lens-filters')?.hidden === false) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeLensFilters();
+      }
+    }, true);
+  }
   key.dataset.encoding = signature;
   key.replaceChildren();
   const title = document.createElement('strong');
@@ -126,6 +154,12 @@ function renderLensKey(items) {
     row.append(swatch, label);
     key.appendChild(row);
   });
+  const filters = document.createElement('div');
+  filters.id = 'lens-filters';
+  filters.className = 'lens-filters';
+  filters.hidden = !filtersOpen;
+  filters.setAttribute('role', 'group');
+  filters.setAttribute('aria-label', 'Canvas filters');
   if (state.lens === 'structure') {
     const toggle = document.createElement('button');
     toggle.type = 'button';
@@ -135,7 +169,9 @@ function renderLensKey(items) {
       switchView(state.currentView === VIEWS.DATA_FLOW ? VIEWS.ARCHITECTURE : VIEWS.DATA_FLOW);
     });
     toggle.dataset.action = 'data-flow-toggle';
-    key.appendChild(toggle);
+    filters.appendChild(toggle);
+  }
+  {
     const layers = document.createElement('div');
     layers.className = 'lens-key-controls lens-key-layers';
     layers.setAttribute('role', 'group');
@@ -152,7 +188,7 @@ function renderLensKey(items) {
       chip.addEventListener('click', () => selectLayerFilter(layer));
       layers.appendChild(chip);
     });
-    key.appendChild(layers);
+    filters.appendChild(layers);
   }
   if (state.lens === 'change') {
     const modes = document.createElement('div');
@@ -173,5 +209,17 @@ function renderLensKey(items) {
     });
     key.appendChild(modes);
   }
+  const filterButton = document.createElement('button');
+  filterButton.type = 'button';
+  filterButton.dataset.action = 'lens-filters';
+  filterButton.textContent = 'Filters';
+  filterButton.setAttribute('aria-controls', filters.id);
+  filterButton.setAttribute('aria-expanded', String(filtersOpen));
+  filterButton.addEventListener('click', () => {
+    filters.hidden = !filters.hidden;
+    filterButton.setAttribute('aria-expanded', String(!filters.hidden));
+    if (!filters.hidden) filters.querySelector('button')?.focus();
+  });
+  key.append(filterButton, filters);
   if (focusAttribute) key.querySelector(`[${focusAttribute}="${focusValue}"]`)?.focus();
 }

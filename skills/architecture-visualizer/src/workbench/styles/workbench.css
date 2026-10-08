@@ -1,8 +1,9 @@
 /* --- 1.1.0 additions --- */
 .hidden { display: none !important; }
 
-.edge-group.dimmed .edge-path { stroke: var(--edge-dim) !important; opacity: 0.12 !important; }
-.edge-group.dimmed .edge-label { opacity: 0.12; }
+.edge-group.dimmed .edge-path { stroke: var(--edge) !important; opacity: 0.3 !important; }
+/* A quiet label keeps its solid pill so no line shows through the text; only the text fades. */
+.edge-group.dimmed .edge-label text, .edge-group.out-of-focus .edge-label text { opacity: 0.4; }
 
 .node-group:focus { outline: none; }
 .node-group:focus-visible .node-rect {
@@ -170,7 +171,6 @@ body[data-presentation="true"] .rail { display: none !important; }
 body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }
 body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }
 .workbench-mobile-toggle { min-width: 32px; display: inline-flex; }
-.workbench-backdrop { display: none; position: fixed; inset: var(--chrome-top) 0 0; z-index: 54; border: 0; background: var(--scrim); }
 .workbench-minimap { position: absolute; left: 16px; bottom: 16px; width: 176px; height: 116px; z-index: 35; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); }
 .workbench-minimap[data-idle="true"] { visibility: hidden; }
 .workbench-minimap svg { width: 100%; height: 100%; display: block; }

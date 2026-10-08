@@ -9,8 +9,7 @@ const TRUST_PILLS = [
 
 function openTrustChapter(chapter, opener) {
   openChapter(chapter);
-  if (isOverlayPanels()) setDrawerOpen('rail', true, opener);
-  else if (document.querySelector('[data-region="rail"]')?.getAttribute('data-open') !== 'true') setDrawerOpen('rail', true, opener);
+  setDrawerOpen('rail', true);
 }
 
 function renderTrustStrip() {
@@ -33,7 +32,14 @@ function renderTrustStrip() {
     dot.className = 'trust-dot';
     dot.setAttribute('aria-hidden', 'true');
     const label = document.createElement('span');
-    label.textContent = entry.label;
+    const text = entry.label === 'Illustrative' ? 'Illustrative example' : entry.label;
+    const match = text.match(/\b\d+(?:\/\d+)?\b/);
+    const lead = match ? match[0] : text.split(' ')[0];
+    const offset = match ? match.index : 0;
+    label.append(text.slice(0, offset));
+    const strong = document.createElement('strong');
+    strong.textContent = lead;
+    label.append(strong, text.slice(offset + lead.length));
     pill.append(dot, label);
     pill.addEventListener('click', () => openTrustChapter(entry.chapter, pill));
     target.appendChild(pill);

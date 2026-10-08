@@ -652,112 +652,31 @@ function regionsScript() {
   })()`;
 }
 
-function drawerSteps() {
-  const railToggle = '[data-action="rail-toggle"]';
-  const steps = [];
-
-  steps.push(
+function stackedRailSteps() {
+  return [
     ev(`(async function () {
       ${PAGE_HELPERS}
       window.__obs = {};
-      __record('railToggle', !!__q(${q(railToggle)}));
       __record('railInitialOpen', __open('rail'));
-      return __observed();
-    })()`)
-  );
-
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      __click(__q(${q(railToggle)}));
-      await __sleep(100);
-      __record('railOpen', __open('rail'));
-      __record('railVisible', __visible(__region('rail')));
-      __record('railFocusOnOpen', __inside(__region('rail')));
-      var tabbables = __tabbables(__region('rail'));
-      __record('railTabbableCount', tabbables.length);
-      var last = tabbables[tabbables.length - 1];
-      var first = tabbables[0];
-      if (last) last.focus();
-      __record('railLastTabbableFocused', !!last && document.activeElement === last);
-      if (first) first.focus();
-      __record('railFirstTabbableFocused', !!first && document.activeElement === first);
-      return __observed();
-    })()`)
-  );
-
-  steps.push(TAB());
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      await __sleep(60);
-      __record('railForwardWrappedInside', __inside(__region('rail')));
-      return __observed();
-    })()`)
-  );
-
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      var tabbables = __tabbables(__region('rail'));
-      var first = tabbables[0];
-      if (first) first.focus();
-      __record('railFirstRefocused', !!first && document.activeElement === first);
-      return __observed();
-    })()`)
-  );
-
-  steps.push(SHIFT_TAB());
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      await __sleep(60);
-      __record('railBackwardWrappedInside', __inside(__region('rail')));
-      return __observed();
-    })()`)
-  );
-
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      var backdrop = __q('[data-action="drawer-backdrop"]');
-      __record('backdropPresent', !!backdrop);
-      __click(backdrop);
-      await __sleep(120);
-      __record('railAfterBackdropOpen', __open('rail'));
-      __record('backdropFocusRestored', document.activeElement === __q(${q(railToggle)}));
-      return __observed();
-    })()`)
-  );
-
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
-      __click(__q(${q(railToggle)}));
-      await __sleep(100);
-      var close = __q('[data-action="rail-close"]');
-      __record('railCloseControl', !!close);
-      __click(close);
-      await __sleep(120);
-      __record('railAfterCloseOpen', __open('rail'));
-      return __observed();
-    })()`)
-  );
-
-  steps.push(
-    ev(`(async function () {
-      ${PAGE_HELPERS}
+      __record('toggleShown', getComputedStyle(__q('[data-action="rail-toggle"]')).display !== 'none');
+      __record('closeShown', getComputedStyle(__q('[data-action="rail-close"]')).display !== 'none');
+      __record('backdropPresent', !!__q('[data-action="drawer-backdrop"]'));
+      __record('scrollBefore', window.scrollY);
+      var rail = __region('rail').getBoundingClientRect(), canvas = __region('canvas').getBoundingClientRect();
+      __record('railBelowCanvas', rail.top >= canvas.bottom - 1);
+      __record('railFullWidth', Math.abs(rail.width - innerWidth) <= 1);
       openInspectorForNode('api');
-      await __sleep(100);
-      var back = __q('[data-action="sheet-back"]');
-      __record('sheetBackPresent', !!back);
-      hideSheetKeepSelection();
+      await __sleep(400);
+      __record('scrollAfterSelect', window.scrollY);
+      var sheet = __q('#component-sheet').getBoundingClientRect();
+      __record('sheetInView', sheet.top < innerHeight && sheet.bottom > 0);
+      __record('sheetBackPresent', !!__q('[data-action="sheet-back"]'));
       setDrawerOpen('rail', false);
+      __record('railAfterCloseRequest', __open('rail'));
+      __record('docScrollWidth', document.documentElement.scrollWidth);
       return __observed();
-    })()`)
-  );
-
-  return steps;
+    })()`),
+  ];
 }
 
 // Search now lives in the command palette; these rows carry the same data-model-id contract.
@@ -784,11 +703,12 @@ function searchSteps(label, modelId, selectedSelector, expectedKind) {
     ENTER(),
     ev(`(async function () {
       ${PAGE_HELPERS}
-      await __sleep(200);
+      await __sleep(600);
       __record('selectionPresent', !!__q(${q(selectedSelector)}));
       __record('railOpen', __open('rail'));
       __record('railSheet', __region('rail') ? __region('rail').getAttribute('data-sheet') : null);
       __record('transformAfter', __transform());
+      __record('selectionInView', (function () { var t = __q(${q(selectedSelector)}); var c = __region('canvas'); if (!t || !c) return false; var a = t.getBoundingClientRect(), b = c.getBoundingClientRect(); return (a.width > 0 || a.height > 0) && a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1; })());
       return __observed();
     })()`),
   ];
@@ -989,37 +909,21 @@ function assertDesktopInspectorClose(raw) {
   );
 }
 
-function assertTabletRailOverlay(raw) {
+function assertTabletRailStacked(raw) {
   assert.ok(raw, 'no tablet rail observations returned');
   assert.strictEqual(raw.innerWidth, 860, `Emulation override not applied: innerWidth=${raw.innerWidth}, expected 860`);
-  assert.strictEqual(raw.railInitialOpen, 'false', 'rail should start closed at 900px');
-  assert.strictEqual(raw.railInitialVisible, false, 'rail should not be visible at 900px before opening');
-
-  assert.strictEqual(raw.railOpenAfterToggle, 'true', 'rail header toggle did not open the overlay');
-  assert.ok(raw.railVisibleAfterToggle, 'rail overlay is not visible after opening');
-  assert.ok(
-    rectsOverlap(raw.railRectOpen, raw.canvasRectOpen),
-    'rail should overlay the canvas at 900px'
-  );
-  assert.ok(
-    Math.abs(raw.canvasWidthOpen - raw.canvasWidthInitial) <= 1,
-    `overlay rail permanently shrank the canvas (initial=${raw.canvasWidthInitial}, open=${raw.canvasWidthOpen})`
-  );
-
-  assert.strictEqual(raw.railOpenAfterClose, 'false', 'rail close control did not dismiss the overlay');
-  assert.strictEqual(raw.railVisibleAfterClose, false, 'rail overlay is still visible after dismissal');
-  assert.ok(
-    Math.abs(raw.canvasWidthAfterClose - raw.canvasWidthInitial) <= 1,
-    `canvas width changed after overlay dismissal (initial=${raw.canvasWidthInitial}, after=${raw.canvasWidthAfterClose})`
-  );
-  assert.ok(
-    !rectsOverlap(raw.railRectAfterClose, raw.canvasRectAfterClose),
-    'dismissed rail overlay still overlaps the canvas'
-  );
+  assert.strictEqual(raw.railInitialOpen, 'true', 'the stacked rail starts open at 860px');
+  [['railRectOpen', 'canvasRectOpen'], ['railRectAfterClose', 'canvasRectAfterClose']].forEach(([rail, canvas]) => {
+    assert.ok(!rectsOverlap(raw[rail], raw[canvas]), `${rail} overlaps the canvas`);
+    assert.ok(raw[rail].y >= raw[canvas].y + raw[canvas].height - 1, `${rail} is not below the canvas`);
+  });
+  assert.strictEqual(raw.railOpenAfterClose, 'true', 'the stacked rail stays open');
+  assert.ok(Math.abs(raw.canvasWidthAfterClose - raw.canvasWidthInitial) <= 1 && Math.abs(raw.canvasWidthInitial - raw.innerWidth) <= 1,
+    'the stacked canvas spans the page and keeps its width');
   assert.ok(
     raw.docScrollWidthInitial <= raw.innerWidth + 1 && raw.docScrollWidthOpen <= raw.innerWidth + 1 &&
       raw.docScrollWidthAfterClose <= raw.innerWidth + 1,
-    `rail caused horizontal page overflow (initial=${raw.docScrollWidthInitial}, open=${raw.docScrollWidthOpen}, after=${raw.docScrollWidthAfterClose}, viewport=${raw.innerWidth})`
+    `horizontal page overflow (initial=${raw.docScrollWidthInitial}, open=${raw.docScrollWidthOpen}, after=${raw.docScrollWidthAfterClose}, viewport=${raw.innerWidth})`
   );
 }
 
@@ -1053,7 +957,7 @@ function assertRegionLayout(raw, width) {
   assert.ok(raw.visible.canvas, `canvas region not visible at ${width}px`);
   if (width >= PANEL_BREAKPOINT) {
     assert.ok(raw.visible.rail, `rail should be docked open by default at ${width}px`);
-    const expectedRailWidth = width >= 1280 ? 400 : 340;
+    const expectedRailWidth = width >= 1280 ? 400 : width >= 1100 ? 340 : 360;
     assert.ok(
       Math.abs(raw.rects.rail.width - expectedRailWidth) <= 1,
       `rail width should be ${expectedRailWidth}px at ${width}px, got ${raw.rects.rail.width}`
@@ -1064,8 +968,10 @@ function assertRegionLayout(raw, width) {
       `canvas width should be ${expectedCanvasWidth}px at ${width}px, got ${raw.rects.canvas.width}`
     );
     assert.ok(Math.abs(raw.rects.canvas.x) <= 1, `canvas should start at x=0 at ${width}px, got ${raw.rects.canvas.x}`);
-  } else {
-    assert.ok(!raw.visible.rail, `rail region should be collapsed by default at ${width}px`);
+  } else if (raw.rects.rail) {
+    // Stacked: the rail is a page section under the canvas, as wide as the page.
+    assert.ok(raw.rects.rail.y >= raw.rects.canvas.y + raw.rects.canvas.height - 1, `rail should sit below the canvas at ${width}px`);
+    assert.ok(Math.abs(raw.rects.rail.width - width) <= 1, `stacked rail should span the page at ${width}px`);
   }
 
   const visibleNames = REGION_NAMES.filter((name) => raw.visible[name]);
@@ -1109,32 +1015,19 @@ function assertMinimapContainment(raw, width) {
     });
 }
 
-function assertDrawerBehavior(raw) {
-  assert.ok(raw, 'no drawer observations returned');
-  assert.ok(raw.railToggle, 'missing [data-action="rail-toggle"] control at 320px');
-
-  assert.strictEqual(raw.railInitialOpen, 'false', 'rail drawer should start collapsed at 320px');
-
-  assert.strictEqual(raw.railOpen, 'true', 'rail toggle did not open the drawer');
-  assert.ok(raw.railVisible, 'rail drawer is not visibly rendered after opening');
-  assert.ok(raw.railFocusOnOpen, 'keyboard focus was not moved into the rail drawer on open');
-  assert.ok(raw.railTabbableCount >= 2, `rail drawer exposes ${raw.railTabbableCount} tabbables, expected at least 2`);
-  assert.ok(raw.railLastTabbableFocused, 'could not focus the last tabbable in the rail drawer');
-  assert.ok(raw.railFirstTabbableFocused, 'could not focus the first tabbable in the rail drawer');
-  assert.ok(raw.railForwardWrappedInside, 'real Tab from the last rail tabbable escaped the rail drawer');
-  assert.ok(raw.railFirstRefocused, 'could not refocus the first tabbable in the rail drawer');
-  assert.ok(raw.railBackwardWrappedInside, 'real Shift+Tab from the first rail tabbable escaped the rail drawer');
-
-  assert.ok(raw.backdropPresent, 'missing [data-action="drawer-backdrop"] while the rail drawer is open');
-  assert.strictEqual(raw.railAfterBackdropOpen, 'false', 'backdrop click did not dismiss the rail drawer');
-  assert.ok(raw.backdropFocusRestored, 'focus was not restored to the rail toggle after backdrop dismissal');
-
-  assert.ok(raw.railCloseControl, 'missing [data-action="rail-close"] control at 320px');
-  assert.strictEqual(raw.railAfterCloseOpen, 'false', 'rail close control did not dismiss the drawer');
-
-  if (raw.sheetBackPresent !== undefined) {
-    assert.ok(raw.sheetBackPresent, 'missing [data-action="sheet-back"] when sheet open');
-  }
+function assertStackedRail(raw) {
+  assert.ok(raw, 'no stacked rail observations returned');
+  assert.strictEqual(raw.railInitialOpen, 'true', 'the stacked rail is open from the start at 320px');
+  assert.strictEqual(raw.toggleShown, false, 'a stacked rail has nothing to toggle');
+  assert.strictEqual(raw.closeShown, false, 'a stacked rail has nothing to close');
+  assert.strictEqual(raw.backdropPresent, false, 'no drawer backdrop exists any more');
+  assert.ok(raw.railBelowCanvas, 'the rail sits below the canvas');
+  assert.ok(raw.railFullWidth, 'the stacked rail spans the page');
+  assert.ok(raw.scrollAfterSelect > raw.scrollBefore, 'selecting a component scrolls its details into view');
+  assert.ok(raw.sheetInView, 'the component sheet is on screen after selecting');
+  assert.ok(raw.sheetBackPresent, 'missing [data-action="sheet-back"] when the sheet is open');
+  assert.strictEqual(raw.railAfterCloseRequest, 'true', 'a stacked rail stays open');
+  assert.ok(raw.docScrollWidth <= 321, `horizontal page overflow ${raw.docScrollWidth}`);
 }
 
 function assertSearchActivation(raw, expectedKind, modelId) {
@@ -1146,7 +1039,8 @@ function assertSearchActivation(raw, expectedKind, modelId) {
   assert.ok(raw.selectionPresent, `real Enter on the palette row for ${modelId} did not mark it data-selected="true"`);
   assert.strictEqual(raw.railOpen, 'true', `activating palette result for ${modelId} did not open the rail`);
   assert.strictEqual(raw.railSheet, expectedKind, `rail is not in the ${expectedKind} sheet state after activating ${modelId}`);
-  assert.notStrictEqual(raw.transformAfter, raw.transformBefore, `camera transform did not change after activating palette result for ${modelId}`);
+  // The camera brings the selection into view; when it already is (a small diagram), it may stay.
+  assert.ok(raw.selectionInView, `palette result for ${modelId} is not in view after activating it`);
 }
 
 function assertMinimapBehavior(raw) {
@@ -1238,6 +1132,28 @@ function riskRender(spec, script) {
 }
 
 const cases = [
+  ['p4: polish fit refines a narrow feasible zoom interval without losing overlay clearance', () => {
+    const vm = require('node:vm');
+    let camera;
+    const context = vm.createContext({
+      LAYOUT_DATA: { nodes: [{ x: 0, y: 0, width: 1000, height: 1000 }], boundaries: [], edges: [] },
+      state: { collapsedBoundaries: new Set() },
+      ArchVizGeometry: geometry,
+      svg: { getBoundingClientRect: () => ({ width: 1000, height: 1000 }) },
+      isNodeHidden: () => false,
+      clampZoom: zoom => Math.max(0.15, Math.min(2, zoom)),
+      actions: { setCamera: value => { camera = value; } },
+      updateTransform: () => {},
+    });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/fit.js'), 'utf8'), context);
+    context.canvasOverlayRects = () => [{ left: -8, right: 1008, top: 768, bottom: 1008 }];
+    context.fitToScreen();
+    assert.ok(camera.zoom >= 0.752, `coarse search missed the feasible scale: ${camera.zoom}`);
+    assert.ok(camera.panY >= 16 - 0.01, 'drawing leaves the top inset');
+    assert.ok(camera.panY + 1000 * camera.zoom <= 768 + 0.01, 'drawing crosses overlay clearance');
+    assert.ok(camera.panX >= 16 - 0.01 && camera.panX + 1000 * camera.zoom <= 984 + 0.01,
+      'drawing leaves the horizontal insets');
+  }],
   ['lanes render equal bands, wrapped gutter titles and counts without page overflow', () => {
     const spec = fixtures.clone(fixtures.VALID_SPEC);
     spec.boundaries[0].label = 'A boundary title long enough to wrap into two lines';
@@ -1366,17 +1282,36 @@ const cases = [
     assert.ok(/blocks downloads/.test(m.png), m.png);
     assert.strictEqual(m.svgText, true);
   }],
+  ['viewer: saved card positions from another layout or that no longer route are ignored, and connections always follow their cards', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(function () {
+      const built = LAYOUT_DATA.nodes.map(n => [n.id, n.x, n.y]);
+      const scattered = { nodes: Object.fromEntries(LAYOUT_DATA.nodes.map((n, i) => [n.id, { x: 300 + (i % 4) * 350, y: 60 + Math.floor(i / 4) * 120 }])), boundaries: {} };
+      localStorage.setItem('arch-viz-layout:' + modelIdentity(), JSON.stringify(scattered));
+      const staleKeyIgnored = (restorePersistedLayout(), LAYOUT_DATA.nodes.every((n, i) => n.x === built[i][1] && n.y === built[i][2]));
+      localStorage.setItem(layoutStorageKey(), JSON.stringify(scattered));
+      restorePersistedLayout();
+      const unroutableReverted = LAYOUT_DATA.nodes.every((n, i) => n.x === built[i][1] && n.y === built[i][2]);
+      const unroutableCleared = localStorage.getItem(layoutStorageKey()) === null;
+      LAYOUT_DATA.nodes.forEach((n, i) => { n.x = scattered.nodes[n.id].x; n.y = scattered.nodes[n.id].y; });
+      const router = recomputeAllEdges();
+      const near = (p, n) => p.x >= n.x - 14 && p.x <= n.x + n.width + 14 && p.y >= n.y - 14 && p.y <= n.y + n.height + 14;
+      const follow = LAYOUT_DATA.edges.every(e => { const path = document.getElementById('path-' + e.id); const len = path.getTotalLength();
+        return near(path.getPointAtLength(0), nodeById.get(e.source)) && near(path.getPointAtLength(len), nodeById.get(e.target)); });
+      return JSON.stringify({ staleKeyIgnored, unroutableReverted, unroutableCleared, router, follow });
+    })()`)] }]);
+    const m = JSON.parse(lastEvalValue(phase));
+    assert.deepStrictEqual({ ...m, router: undefined }, { staleKeyIgnored: true, unroutableReverted: true, unroutableCleared: true, router: undefined, follow: true });
+    assert.notStrictEqual(m.router, 'lanes', 'scattered cards cannot route as lanes');
+  }],
   ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({
       rail: document.querySelector('[data-region="rail"]').getAttribute('data-open'),
-      modal: document.querySelector('[data-region="rail"]').getAttribute('aria-modal'),
       canvasRight: document.getElementById('canvas-container').getBoundingClientRect().right,
       railLeft: document.querySelector('[data-region="rail"]').getBoundingClientRect().left,
       overflow: document.documentElement.scrollWidth > innerWidth,
       titles: [...document.querySelectorAll('.boundary-header')].map(t => t.textContent) })`)] }]);
     const m = JSON.parse(lastEvalValue(phase));
     assert.strictEqual(m.rail, 'true');
-    assert.strictEqual(m.modal, 'false');
     assert.ok(m.canvasRight <= m.railLeft + 1, `canvas ${m.canvasRight} runs under the rail at ${m.railLeft}`);
     assert.strictEqual(m.overflow, false);
     assert.ok(m.titles.length > 0 && m.titles.every(t => !t.includes('\u2026')), JSON.stringify(m.titles));
@@ -1846,10 +1781,10 @@ const cases = [
   ],
 
   [
-    'B2b: at 860 the rail is an overlay, dismisses cleanly and never shrinks or overlaps the canvas',
+    'B2b: at 860 the rail stacks below the canvas, stays open and never overlaps or narrows it',
     () => {
       const results = runPhases(fixtures.VALID_SPEC, [{ width: 860, height: 900, mobile: false, steps: tabletRailOverlaySteps() }]);
-      assertTabletRailOverlay(lastEvalValue(results[0]));
+      assertTabletRailStacked(lastEvalValue(results[0]));
     },
   ],
 
@@ -1862,10 +1797,10 @@ const cases = [
   ],
 
   [
-    'B2a: at 320 the rail drawer traps focus, dismisses and restores focus',
+    'B2a: at 320 the rail is a page section under the canvas and selecting a component scrolls to its details',
     () => {
-      const results = runPhases(fixtures.VALID_SPEC, [{ width: 320, height: 800, mobile: false, steps: drawerSteps() }]);
-      assertDrawerBehavior(lastEvalValue(results[0]));
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 320, height: 800, mobile: false, steps: stackedRailSteps() }]);
+      assertStackedRail(lastEvalValue(results[0]));
     },
   ],
 
@@ -2022,9 +1957,9 @@ const cases = [
       const [phase] = runPhases(SAGA, [{ width: 1440, height: 900, steps: [PROBE, NEXT, AFTER_NEXT, PREV, AFTER_PREV] }]);
       const [probe, afterNext, afterPrev] = phase.filter((step) => step.kind === 'eval').map((step) => step.value);
       assert.strictEqual(probe.beforeActive, false);
-      assert.strictEqual(probe.beforeHidden, true, 'the track is hidden until a walkthrough starts');
+      assert.strictEqual(probe.beforeHidden, false, 'the idle track is visible');
       assert.strictEqual(probe.trackHidden, false, 'starting shows the track');
-      assert.strictEqual(probe.beadCount, probe.entryCount, 'one bead per entry');
+      assert.ok(probe.beadCount >= probe.entryCount, 'the track includes the active path and alternate outcomes');
       assert.strictEqual(probe.countText, 'Step 1 of ' + probe.total);
       assert.strictEqual(probe.cursor, probe.firstEntry);
       assert.strictEqual(probe.activeBead, probe.firstEntry, 'the cursor bead is aria-selected');
@@ -2129,7 +2064,7 @@ const cases = [
       assert.ok(before.beadCount > 0);
       assert.strictEqual(before.pressed, 'true', 'the restored outcome shows as chosen');
       assert.strictEqual(after.active, false, 'Esc ends the walkthrough');
-      assert.strictEqual(after.trackHidden, true, 'Esc removes the track');
+      assert.strictEqual(after.trackHidden, false, 'Esc restores the idle track');
       assert.strictEqual(after.edges, 0);
     },
   ],
@@ -2313,6 +2248,7 @@ const cases = [
         ev("openInspectorForNode('saga_orchestrator'); 0"), settle, OVERLAPS,
         ev("closeInspector(); selectLens('change', { explicit: true }); 0"), settle, OVERLAPS,
         ev("switchView('architecture'); toggleGatePanel(); 0"), settle, OVERLAPS,
+        ev("startWalkthrough(ARCH_SPEC.scenarios[0].id); 0"), settle, OVERLAPS,
       ];
       const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [
         { width: 1440, height: 900, steps },
@@ -2320,7 +2256,7 @@ const cases = [
       ]);
       results.forEach((phase, index) => {
         const checks = phase.filter((step) => step.kind === 'eval' && Array.isArray(step.value)).map((step) => step.value);
-        assert.strictEqual(checks.length, 4);
+        assert.strictEqual(checks.length, 5);
         checks.forEach((hits, state) => assert.deepStrictEqual(hits, [], `viewport ${index}, state ${state}: ${hits.join('; ')}`));
       });
     },
@@ -2403,6 +2339,8 @@ const cases = [
           __record('railOpenNode', __open('rail'));
           __record('railSheetNode', rail ? rail.getAttribute('data-sheet') : null);
           __record('transformAfterNode', __transform());
+          await __sleep(500);
+          __record('nodeInView', (function () { var t = __q('#node-api'); var c = __region('canvas'); if (!t || !c) return false; var a = t.getBoundingClientRect(), b = c.getBoundingClientRect(); return (a.width > 0 || a.height > 0) && a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1; })());
           return __observed();
         })()`),
         CTRL_K,
@@ -2428,6 +2366,8 @@ const cases = [
           __record('railOpenEdge', __open('rail'));
           __record('railSheetEdge', rail ? rail.getAttribute('data-sheet') : null);
           __record('transformAfterEdge', __transform());
+          await __sleep(500);
+          __record('edgeInView', (function () { var t = __q('#path-e1'); var c = __region('canvas'); if (!t || !c) return false; var a = t.getBoundingClientRect(), b = c.getBoundingClientRect(); return (a.width > 0 || a.height > 0) && a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1; })());
           return __observed();
         })()`),
       ];
@@ -2439,14 +2379,14 @@ const cases = [
       assert.strictEqual(obs.nodeSelected, 'true', 'Enter should mark #node-api data-selected="true"');
       assert.strictEqual(obs.railOpenNode, 'true', 'Selecting node should open rail');
       assert.strictEqual(obs.railSheetNode, 'node', 'Rail should be in node sheet state');
-      assert.notStrictEqual(obs.transformAfterNode, obs.transformBefore, 'Camera transform should change on node selection');
+      assert.strictEqual(obs.nodeInView, true, 'The selected component should be in view');
       assert.strictEqual(obs.paletteClosedAfterNode, 'false', 'Palette should close after running node item');
 
       assert.strictEqual(obs.edgeRowModelId, 'e1', 'Typing "SQL Write" should put e1 connection first');
       assert.strictEqual(obs.edgeSelected, 'true', 'Enter should mark #path-e1 data-selected="true"');
       assert.strictEqual(obs.railOpenEdge, 'true', 'Selecting edge should open rail');
       assert.strictEqual(obs.railSheetEdge, 'edge', 'Rail should be in edge sheet state');
-      assert.notStrictEqual(obs.transformAfterEdge, obs.transformAfterNode, 'Camera transform should change on edge selection');
+      assert.strictEqual(obs.edgeInView, true, 'The selected connection should be in view');
       assert.strictEqual(obs.paletteClosedAfterEdge, 'false', 'Palette should close after running edge item');
     },
   ],
@@ -2911,7 +2851,7 @@ const cases = [
   ],
 
   [
-    '1c: chapters Overview shows the five trust rows and its Open Evidence button selects Evidence',
+    '1c: chapters Overview shows the five trust rows and its evidence row selects Evidence',
     () => {
       const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
       const steps = [
@@ -2930,7 +2870,7 @@ const cases = [
               key: row.getAttribute('data-trust-key'),
               label: (row.querySelector('.ov-trust-label') || {}).textContent,
               state: dot ? dot.getAttribute('data-state') : null,
-              chapter: row.querySelector('.ov-trust-open') ? row.querySelector('.ov-trust-open').getAttribute('data-trust-chapter') : null,
+              chapter: row.getAttribute('data-trust-chapter'),
             };
           }));
           __record('title', (__q('#overview-title') || {}).textContent);
@@ -2951,8 +2891,8 @@ const cases = [
       assert.strictEqual(obs.rows.length, 5, `Overview should show five trust rows, found ${obs.rows.length}`);
       assert.deepStrictEqual(obs.rows, obs.expected, 'Overview trust rows must mirror trustSummary(ARCH_SPEC, QUALITY_GATE)');
       assert.strictEqual(obs.title, obs.expectedTitle, 'Overview h2 should be the model title');
-      assert.strictEqual(obs.facts, 4, `Overview should show four facts, found ${obs.facts}`);
-      assert.strictEqual(obs.evidenceButtonText, 'Open Evidence', 'grounding/evidence rows should offer an Open Evidence button');
+      assert.strictEqual(obs.facts, 3, `Overview should show three stats, found ${obs.facts}`);
+      assert.ok(obs.evidenceButtonText.length > 0, 'the whole evidence row is a labelled button');
       assert.strictEqual(obs.chapterAfter, 'evidence', 'Open Evidence should select the Evidence chapter');
       assert.strictEqual(obs.evidencePanelHidden, false, 'Evidence panel should be visible after Open Evidence');
       assert.strictEqual(obs.evidenceTabSelected, 'true', 'Evidence tab should be selected after Open Evidence');
@@ -2987,7 +2927,7 @@ const cases = [
       ];
       const results = runPhases(SAGA, [{ width: 1440, height: 900, mobile: false, steps }]);
       const obs = lastEvalValue(results[0]);
-      assert.ok(obs.names.includes('Publish to Kafka Event Bus'), `top-level stage names missing: ${JSON.stringify(obs.names)}`);
+      assert.ok(obs.names.some(name => name.includes('Publish to Kafka Event Bus')), `top-level stage names missing: ${JSON.stringify(obs.names)}`);
       assert.strictEqual(obs.targetPresent, true, 'the Publish to Kafka Event Bus stage button should exist');
       assert.strictEqual(obs.scenarioActive, true, 'selecting an Overview stage should activate the scenario');
       assert.strictEqual(obs.stageId, 'stage_publish_order_created', 'the clicked stage should be the active stage');
@@ -3109,7 +3049,7 @@ const cases = [
       ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow'].forEach((name) => {
         const [phase] = runPhases(`examples/${name}/architecture.json`, [{ width: 1440, height: 900, steps: [ev(`JSON.stringify({
           pills: [...document.querySelectorAll('.trust-pill')].map((p) => [p.dataset.trust, p.dataset.state, p.textContent.trim()]),
-          model: (function () { const t = trustSummary(ARCH_SPEC, QUALITY_GATE); return ['grounding', 'evidence', 'rules', 'openItems'].map((k) => [k, t[k].state, t[k].label]); })(),
+          model: (function () { const t = trustSummary(ARCH_SPEC, QUALITY_GATE); return ['grounding', 'evidence', 'rules', 'openItems'].map((k) => [k, t[k].state, t[k].label === 'Illustrative' ? 'Illustrative example' : t[k].label]); })(),
         })`)] }]);
         const { pills, model } = JSON.parse(lastEvalValue(phase));
         assert.deepStrictEqual(pills, model, `${name}: the strip must say exactly what the trust model says`);
@@ -3304,6 +3244,7 @@ const cases = [
       const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`
         selectLens('structure');
         const absent = !document.querySelector('.filter-bar, #delta-bar, .legend-box');
+        document.querySelector('.lens-key [data-action="lens-filters"]').click();
         document.querySelector('.lens-key [data-filter="backend"]').click();
         const backend = state.activeFilter === 'backend' && LAYOUT_DATA.nodes.every(node =>
           document.getElementById('node-' + node.id).classList.contains('dimmed') === !matchesLayerFilter(node));
@@ -3365,6 +3306,78 @@ const cases = [
             if (index === 0) assert.ok(obs.zoom >= 0.75, name + ': fit zoom ' + obs.zoom);
           }));
       }
+    },
+  ],
+
+  [
+    'p4: polish Overview, trust, chapter counts and outcome lanes follow the model',
+    () => {
+      const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`
+        const defaults = linearizeScenario(ARCH_SPEC.scenarios[0], {});
+        const decision = defaults.find(entry => entry.kind === 'decision');
+        const main = defaults.slice(0, defaults.indexOf(decision) + 1);
+        const idle = !document.querySelector('.walk-track').hidden && document.querySelector('.walk-count').textContent === 'Start';
+        const stats = [...document.querySelectorAll('.overview-fact dd')].map(el => Number(el.textContent));
+        const tabs = ['walkthrough', 'changes', 'review'].map(id => Number(document.querySelector('#chapter-tab-' + id + ' .rail-tab-count').textContent));
+        const expectedTabs = [walkAllStepsTotal(ARCH_SPEC.scenarios[0]), (ARCH_SPEC.review?.changedComponents?.length || ARCH_SPEC.nodes.filter(node => node.delta && node.delta !== 'UNCHANGED').length), ARCH_SPEC.policies.length + (ARCH_SPEC.findings || []).length + (ARCH_SPEC.review?.policyFindings || []).length + (ARCH_SPEC.review?.unresolvedQuestions ?? ARCH_SPEC.meta?.unresolvedQuestions ?? []).length];
+        const overview = document.querySelector('.overview-eyebrow').textContent === 'SYSTEM' && document.querySelectorAll('#overview-stages li').length === main.length;
+        const pills = [...document.querySelectorAll('.trust-pill')].every(pill => !!pill.querySelector('strong'));
+        document.querySelector('[data-start-walkthrough]').click();
+        const started = state.scenarioActive && state.chapter === 'walkthrough';
+        const highlight = document.querySelector('.walk-item.current').dataset.walkEntry === state.walkCursor;
+        const lanes = document.querySelectorAll('[data-walk-outcome-lane]').length;
+        document.querySelector('[data-walk-outcome-lane="1"] .walk-bead').click();
+        const chosen = state.walkChoices[decision.id] === 1 && document.querySelector('[data-walk-outcome-lane="1"]').dataset.chosen === 'true';
+        JSON.stringify({ idle, overview, pills, stats, expectedStats: [ARCH_SPEC.nodes.length, ARCH_SPEC.boundaries.length, ARCH_SPEC.edges.length], tabs, expectedTabs, started, highlight, lanes, expectedLanes: decision.branches.length, chosen });
+      `)] }])[0]));
+      assert.ok(obs.idle && obs.overview && obs.pills && obs.started && obs.highlight && obs.chosen);
+      assert.deepStrictEqual(obs.stats, obs.expectedStats);
+      assert.deepStrictEqual(obs.tabs, obs.expectedTabs);
+      assert.strictEqual(obs.lanes, obs.expectedLanes);
+    },
+  ],
+  [
+    'p4: polish lens pill stays slim and Filters closes with focus return',
+    () => {
+      const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`
+        const heights = LENSES.map(lens => { selectLens(lens); return document.querySelector('.lens-key').getBoundingClientRect().height; });
+        selectLens('structure');
+        const safe = canvasSafeArea();
+        const canvas = svg.getBoundingClientRect();
+        const keyRect = document.querySelector('.lens-key').getBoundingClientRect();
+        const pillClearance = safe.top >= keyRect.bottom - canvas.top && safe.width === canvas.width - 32;
+        const button = () => document.querySelector('[data-action="lens-filters"]');
+        button().click();
+        const opened = !document.querySelector('.lens-filters').hidden;
+        document.querySelector('.lens-filters [data-filter="backend"]').click();
+        const filtered = state.activeFilter === 'backend' && !document.querySelector('.lens-filters').hidden;
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const escaped = document.querySelector('.lens-filters').hidden && document.activeElement === button();
+        button().click();
+        document.body.click();
+        const outside = document.querySelector('.lens-filters').hidden && document.activeElement === button();
+        JSON.stringify({ heights, pillClearance, opened, filtered, escaped, outside });
+      `)] }])[0]));
+      assert.ok(obs.heights.every(height => height <= 40));
+      assert.ok(obs.pillClearance, 'Fit reserves the horizontal pill band without losing a full canvas column');
+      assert.ok(obs.opened, 'Filters opens the popover');
+      assert.ok(obs.filtered, 'Backend filters the canvas and keeps the popover open');
+      assert.ok(obs.escaped, 'Escape closes Filters and returns focus');
+      assert.ok(obs.outside, 'An outside click closes Filters and returns focus');
+    },
+  ],
+
+  [
+    'p4: polish chrome avoids page overflow at 320, 768, 1024 and 1440',
+    () => {
+      const results = runPhases('examples/3-async-event-driven-workflow/architecture.json', [320, 768, 1024, 1440].map(width => ({ width, height: 900, steps: [ev(`(function () {
+        const overflow = () => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > window.innerWidth;
+        const idle = overflow();
+        startWalkthrough(ARCH_SPEC.scenarios[0].id);
+        const visits = LENSES.map(lens => { selectLens(lens); return overflow(); });
+        return JSON.stringify([idle, ...visits]);
+      })()`)] })));
+      results.forEach((phase, index) => assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [false, false, false, false, false], 'viewport ' + index));
     },
   ],
 

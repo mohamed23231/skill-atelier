@@ -128,3 +128,21 @@ body.presentation-mode #floating-bar {
 .lens-key-controls > span { flex-basis: 100%; color: var(--muted); }
 .lens-key-controls button { margin: 0; padding: 3px 6px; font-size: 11px; }
 .lens-key-controls button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.lens-key { display: flex; align-items: center; gap: 14px; height: 34px; box-sizing: border-box; padding: 0 12px; max-width: calc(100vw - var(--canvas-left) - var(--canvas-right) - 32px); white-space: nowrap; }
+.lens-key strong { display: inline; margin: 0; font-size: 12px; font-weight: 650; }
+.lens-key-row { margin: 0; gap: 6px; color: var(--muted); }
+.lens-key-swatch { width: 18px; }
+.lens-key button { margin: 0; font-size: 11px; }
+.lens-key-controls { margin: 0; flex-wrap: nowrap; }
+.lens-filters { position: absolute; top: 40px; right: 0; width: 240px; max-width: calc(100vw - 32px); padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); white-space: normal; }
+.lens-filters[hidden] { display: none; }
+.lens-filters .lens-key-controls { flex-wrap: wrap; margin-top: 10px; }
+@media (max-width: 1099px) { .lens-key { gap: 10px; } .lens-key-swatch { width: 14px; } }
+/* Phones keep only the lens name and Filters; the encodings are in the Filters popover's lens. */
+@media (max-width: 767px) { .lens-key { gap: 8px; } .lens-key-row { display: none; } }
+@media (max-width: 767px) {
+  .lens-key { gap: 6px; padding: 0 8px; }
+  .lens-key-delta { gap: 2px; }
+  .lens-key-delta button { padding: 4px; }
+}
