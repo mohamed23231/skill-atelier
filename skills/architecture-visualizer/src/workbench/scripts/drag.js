@@ -1,4 +1,5 @@
 function startNodeDrag(e, nodeId) {
+  rememberPress(e);
   state.draggingNodeId = nodeId;
   state.dragMoved = false;
   const node = nodeById.get(nodeId);
@@ -25,6 +26,7 @@ function moveDraggedNode(clientX, clientY) {
 
 function startBoundaryDrag(e, boundaryId) {
   if (e.target && e.target.closest && e.target.closest('.node-group')) return;
+  rememberPress(e);
   state.draggingBoundaryId = boundaryId;
   state.dragMoved = false;
   const boundary = boundaryById.get(boundaryId);

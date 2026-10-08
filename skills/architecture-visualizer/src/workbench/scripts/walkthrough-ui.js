@@ -681,6 +681,29 @@ function walkChapterEnd(entry) {
   return item;
 }
 
+// A step, decision or outcome card in the Walkthrough chapter goes to that point of the story when
+// clicked or activated with Enter or Space; controls inside it (outcome buttons) keep their own action.
+function makeWalkItemActivatable(item, entry, scenario) {
+  item.tabIndex = 0;
+  item.classList.add('walk-item-activatable');
+  const label = entry.kind === 'step' ? `Go to step ${entry.number}: ${entry.stage?.name || entry.id}`
+    : entry.kind === 'decision' ? `Go to the decision: ${entry.stage?.condition || entry.id}` : `Go to the outcome: ${entry.branch?.name || 'end'}`;
+  item.setAttribute('aria-label', label);
+  const go = () => {
+    if (!walkIsActive()) startWalkthrough(scenario.id, state.walkChoices);
+    walkTo(entry.id);
+  };
+  item.addEventListener('click', event => {
+    if (event.target.closest('button, a, input, select, textarea')) return;
+    go();
+  });
+  item.addEventListener('keydown', event => {
+    if (event.target !== item || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    go();
+  });
+}
+
 function renderWalkthrough() {
   const list = document.querySelector('[data-walk-list]');
   const select = document.querySelector('[data-scenario-select]');
@@ -703,6 +726,7 @@ function renderWalkthrough() {
       : entry.kind === 'decision' ? walkChapterDecision(entry)
         : walkChapterEnd(entry);
     if (cursorId && entry.id === cursorId) item.classList.add('current');
+    makeWalkItemActivatable(item, entry, scenario);
     list.appendChild(item);
   });
   scrollRailToWalkCursor();

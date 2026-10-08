@@ -154,7 +154,7 @@ function setupEventListeners() {
   const railToggle = document.querySelector('[data-action="rail-toggle"]');
   if (railToggle) railToggle.addEventListener('click', () => toggleDrawer('rail', railToggle));
   document.querySelector('[data-action="rail-close"]')?.addEventListener('click', () => setDrawerOpen('rail', false));
-  document.querySelector('[data-action="sheet-back"]')?.addEventListener('click', hideSheetKeepSelection);
+  document.querySelector('[data-action="sheet-back"]')?.addEventListener('click', closeInspector);
   document.querySelector('[data-action="inspector-close"]').addEventListener('click', closeInspector);
   document.querySelector('[data-region="minimap"]').addEventListener('mousedown', event => event.stopPropagation());
   document.querySelector('[data-region="minimap"]').addEventListener('click', handleMinimapClick);
@@ -261,7 +261,8 @@ function handleKeyDown(e) {
       if (state.presentation) { setPresentation(false); break; }
       if (document.fullscreenElement) { document.exitFullscreen?.(); break; }
       if (state.focusMode) { setFocusMode(state.focusMode); break; }
-      if (!document.getElementById('component-sheet')?.hidden) { hideSheetKeepSelection(); break; }
+      // Escape on an open component clears it entirely, as clicking empty canvas does.
+      if (!document.getElementById('component-sheet')?.hidden) { closeInspector(); break; }
       if (state.scenarioActive) { endWalkthrough(); break; }
       closeModal();
       document.getElementById('export-menu').classList.remove('open');

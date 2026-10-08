@@ -202,6 +202,17 @@ async function runMouseStep(session, step) {
     if (target) await dispatchMouse(session, 'mouseMoved', target, 'none', 0, 0);
     return;
   }
+  if (step.action === 'jitter-click') {
+    // A real hand's click: press, drift a couple of pixels, release.
+    var at = await resolvePoint(session, step.selector, step.fx, step.fy, step.x, step.y);
+    if (!at) return;
+    await dispatchMouse(session, 'mouseMoved', at, 'none', 0, 0);
+    await dispatchMouse(session, 'mousePressed', at, 'left', 1, 1);
+    await dispatchMouse(session, 'mouseMoved', { x: at.x + 1, y: at.y + 1 }, 'left', 1, 0);
+    await dispatchMouse(session, 'mouseMoved', { x: at.x + 2, y: at.y + 1 }, 'left', 1, 0);
+    await dispatchMouse(session, 'mouseReleased', { x: at.x + 2, y: at.y + 1 }, 'left', 0, 1);
+    return;
+  }
   if (step.action === 'drag') {
     var from = await resolvePoint(session, step.selector, step.fromFx, step.fromFy, step.x, step.y);
     var to = await resolvePoint(session, step.selector, step.toFx, step.toFy, step.toX, step.toY);
@@ -1335,6 +1346,39 @@ const cases = [
     const edge = JSON.parse(values[2]);
     assert.strictEqual(edge.sheet, false);
     assert.strictEqual(edge.kind, 'edge');
+  }],
+  ['viewer: a jittery real click selects a card without moving it, and empty canvas, Escape, Back and close all clear it', () => {
+    const SNAP = `JSON.stringify({ sel: state.selectedNodeId, sheet: document.getElementById('component-sheet').hidden, dim: document.querySelectorAll('.context-dim').length,
+      selected: document.querySelectorAll('.node-group.selected, [data-selected="true"]').length, x: LAYOUT_DATA.nodes.find(n => n.id === 'outbox_poller').x })`;
+    const steps = [ev(SNAP), mouse({ action: 'jitter-click', selector: '#node-outbox_poller', fx: 0.5, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${SNAP}), 500))`),
+      mouse({ action: 'jitter-click', selector: '#canvas-container', fx: 0.02, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(${SNAP}), 300))`)];
+    ['escape', '[data-action="sheet-back"]', '[data-action="inspector-close"]'].forEach(way => {
+      steps.push(mouse({ action: 'click', selector: '#node-outbox_poller', fx: 0.5, fy: 0.5 }), ev(`new Promise(r => setTimeout(() => r(0), 400))`));
+      if (way === 'escape') steps.push(ev(`(document.activeElement && document.activeElement.blur(), 0)`), key('Escape', { code: 'Escape', windowsVirtualKeyCode: 27 }));
+      else steps.push(mouse({ action: 'click', selector: way, fx: 0.5, fy: 0.5 }));
+      steps.push(ev(`new Promise(r => setTimeout(() => r(${SNAP}), 300))`));
+    });
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps }]);
+    const values = phase.filter(step => step && step.kind === 'eval').map(step => step.value).filter(v => v !== 0).map(v => JSON.parse(v));
+    const [start, opened, cleared, ...ways] = values;
+    assert.strictEqual(opened.sel, 'outbox_poller');
+    assert.strictEqual(opened.sheet, false, 'a jittery click opens the sheet');
+    assert.strictEqual(opened.x, start.x, 'a click does not drag the card');
+    assert.ok(opened.dim > 0);
+    [cleared, ...ways].forEach((state, i) => assert.deepStrictEqual({ sel: state.sel, sheet: state.sheet, dim: state.dim, selected: state.selected },
+      { sel: null, sheet: true, dim: 0, selected: 0 }, ['empty canvas', 'Escape', 'Back', 'close'][i]));
+  }],
+  ['viewer: clicking a step card in the Walkthrough chapter goes to that step, and Enter on a card does too', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      ev(`(openChapter('walkthrough'), 0)`),
+      mouse({ action: 'click', selector: '[data-walk-list] [data-walk-entry="stage_relay_outbox_event"] .walk-item-name', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(JSON.stringify([state.scenarioActive, state.walkCursor])), 300))`),
+      ev(`(document.querySelector('[data-walk-list] [data-walk-entry="stage_publish_order_created"]').focus(), 0)`),
+      key('Enter', { code: 'Enter', windowsVirtualKeyCode: 13 }),
+      ev(`new Promise(r => setTimeout(() => r(state.walkCursor), 300))`)] }]);
+    const values = phase.filter(step => step && step.kind === 'eval').map(step => step.value);
+    assert.deepStrictEqual(JSON.parse(values[1]), [true, 'stage_relay_outbox_event']);
+    assert.strictEqual(values[3], 'stage_publish_order_created');
   }],
   ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({
@@ -2777,7 +2821,7 @@ const cases = [
   ],
 
   [
-    '1c: rail sheet Back returns to the chapter and keeps the node selected',
+    '1c: rail sheet Back returns to the chapter and clears the selection, as in the prototype',
     () => {
       const steps = [
         ev(`(async function () {
@@ -2811,8 +2855,8 @@ const cases = [
       assert.strictEqual(obs.nodeSelectedBefore, 'api', 'Node should be selected before Back');
       assert.strictEqual(obs.sheetClosed, 'none', 'Rail data-sheet should be none after Back');
       assert.strictEqual(obs.sheetHiddenAfter, true, 'Sheet should be hidden after Back');
-      assert.strictEqual(obs.nodeSelectedAfter, 'api', 'Node should still be selected in state after Back');
-      assert.strictEqual(obs.nodeAttrSelected, 'true', '#node-api should keep data-selected="true" after Back');
+      assert.strictEqual(obs.nodeSelectedAfter, null, 'Back clears the selection, so nothing stays highlighted');
+      assert.notStrictEqual(obs.nodeAttrSelected, 'true', '#node-api is no longer marked selected after Back');
       assert.strictEqual(obs.chapter, 'overview', 'Should return to the default chapter (overview)');
       assert.strictEqual(obs.chapterOverviewHidden, false, 'Overview chapter should be visible');
     },
