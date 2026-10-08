@@ -3,6 +3,21 @@ function slugTitle() {
   return (ARCH_SPEC.meta?.title || 'architecture').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+// Embedded viewers (an iframe such as a chat artifact pane) block downloads and own the address bar.
+function isFramedWindow(win = window) {
+  try {
+    return win.self !== win.top;
+  } catch (error) {
+    return true;
+  }
+}
+let embeddedViewer = isFramedWindow();
+
+function applyEmbeddedMode(embedded) {
+  embeddedViewer = embedded;
+  document.body.toggleAttribute('data-embedded', embedded);
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -58,7 +73,16 @@ function buildExportSvg() {
   return { markup: new XMLSerializer().serializeToString(clone), width, height };
 }
 
+const EMBEDDED_DOWNLOAD_NOTE = 'This viewer blocks downloads. Open the HTML file on its own to save it; the text formats can be copied from here.';
+
 function runExport(kind) {
+  // Mermaid already opens as copyable text; every download becomes copyable text or a note.
+  if (embeddedViewer && kind !== 'mermaid') {
+    if (kind === 'markdown') openModal('Markdown report', MARKDOWN_REPORT);
+    else if (kind === 'svg') openModal('SVG', buildExportSvg().markup);
+    else openModal(kind === 'html' ? 'Download HTML' : 'Download PNG', EMBEDDED_DOWNLOAD_NOTE);
+    return;
+  }
   switch (kind) {
     case 'html':
       downloadBlob(new Blob([document.documentElement.outerHTML], { type: 'text/html' }), `${slugTitle()}.html`);

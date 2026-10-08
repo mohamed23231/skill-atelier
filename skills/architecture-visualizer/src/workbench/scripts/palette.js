@@ -95,7 +95,7 @@ function paletteBuildAllItems() {
       icon: 'ui-copy',
       run: () => copyCurrentLink()
     }
-  ];
+  ].filter(command => !(embeddedViewer && command.id === 'cmd-copy-link'));
 
   if (state.selectedNodeId) {
     commands.push(

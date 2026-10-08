@@ -42,6 +42,7 @@ function init() {
   }
 
   initTheme();
+  applyEmbeddedMode(embeddedViewer);
   initMotionPreference();
   setupEventListeners();
   renderDiagram();

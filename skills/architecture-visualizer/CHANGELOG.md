@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Inside an embedded viewer nothing dead-ends**: when the page runs in a frame (a chat artifact pane), Copy link is hidden because the host owns the address bar, Markdown and SVG exports open as copyable text, and HTML and PNG say how to download instead of silently doing nothing.
 - **A link copied during a walkthrough keeps the sender's camera**: the camera was left out of the link whenever a walkthrough was active, so the reader opened on the step's default framing instead of what the sender was looking at.
 - **No floating Data Flow banner**: the "Data Flow view: …" pill ran under the lens key; the pressed "Data flow only" toggle and the status announcement already say it.
 

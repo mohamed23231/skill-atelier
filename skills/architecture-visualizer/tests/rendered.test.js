@@ -1339,6 +1339,33 @@ const cases = [
     assert.deepStrictEqual(restAfter, restBefore, before.hash);
     ['x', 'y', 'w'].forEach(axis => assert.ok(Math.abs(wa[axis] - wb[axis]) <= 0.1, `camera ${axis}: ${wb[axis]} -> ${wa[axis]}`));
   }],
+  ['viewer: inside an embedded frame Copy link hides and exports copy text instead of a blocked download', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(function () {
+      const top = isFramedWindow(window);
+      const framed = isFramedWindow({ get self() { return 1; }, get top() { return 2; } });
+      const blocked = isFramedWindow({ self: 1, get top() { throw new Error('cross-origin'); } });
+      const before = getComputedStyle(document.getElementById('btn-copy-link')).display;
+      applyEmbeddedMode(true);
+      const after = getComputedStyle(document.getElementById('btn-copy-link')).display;
+      const palette = paletteBuildAllItems().some(item => item.id === 'cmd-copy-link');
+      runExport('markdown');
+      const md = [document.getElementById('modal').classList.contains('open'), document.getElementById('modal-content').textContent.startsWith('# ')];
+      closeModal(); runExport('png');
+      const png = document.getElementById('modal-content').textContent;
+      closeModal(); runExport('svg');
+      const svgText = document.getElementById('modal-content').textContent.trim().startsWith('<svg');
+      closeModal();
+      return JSON.stringify({ top, framed, blocked, before, after, palette, md, png, svgText });
+    })()`)] }]);
+    const m = JSON.parse(lastEvalValue(phase));
+    assert.deepStrictEqual([m.top, m.framed, m.blocked], [false, true, true]);
+    assert.notStrictEqual(m.before, 'none');
+    assert.strictEqual(m.after, 'none');
+    assert.strictEqual(m.palette, false);
+    assert.deepStrictEqual(m.md, [true, true]);
+    assert.ok(/blocks downloads/.test(m.png), m.png);
+    assert.strictEqual(m.svgText, true);
+  }],
   ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({
       rail: document.querySelector('[data-region="rail"]').getAttribute('data-open'),
