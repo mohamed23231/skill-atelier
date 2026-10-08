@@ -48,6 +48,7 @@ function spotlightWalkFocus(focus) {
   document.querySelectorAll('.node-group').forEach((node) => {
     const inStep = nodes.has(node.id.replace('node-', ''));
     node.classList.toggle('selected', inStep);
+    node.classList.toggle('walk-active', inStep);
     node.classList.toggle('out-of-focus', nodes.size > 0 && !inStep);
   });
   const edges = new Set((focus && focus.primaryEdges) || []);
@@ -291,6 +292,8 @@ function startWalkthrough(scenarioId, choices) {
   activateScenario();
   actions.setScenario(scenario.id);
   actions.setWalkChoices(choices || {});
+  // Starting from the track, a key or the palette brings the reader to the steps in the rail.
+  if (viewStateReady && !restoringViewState && state.chapter !== 'walkthrough') openChapter('walkthrough');
   const entries = walkEntries();
   if (!entries.length) {
     actions.setWalkCursor(null);

@@ -190,3 +190,7 @@ body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; rig
 .node-group.out-of-focus { opacity: 0.35; }
 /* The step's own connections are never faded by a lens's quiet style. */
 .edge-path.highlighted { opacity: 1; }
+/* The current step's components carry the accent, as its connections do. */
+.node-group.walk-active .node-rect { stroke: var(--accent); stroke-width: 2; }
+/* A faint dot grid gives the canvas a surface. */
+#canvas-container { background-image: radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size: 22px 22px; }
