@@ -3716,7 +3716,7 @@ cases.push(['p8: lenses and top-edge tags keep the page inside every viewport', 
 
 
 // Any model: generated specs of every shape get the same real-interaction sweep the examples get.
-cases.push(['generated: twelve generated specs survive a full interaction sweep with no errors, overlaps or overflow', () => {
+cases.push(['generated: fourteen generated specs survive a full interaction sweep with no errors, overlaps or overflow', () => {
   const { generateSpec } = require('./spec-generator.js');
   const SWEEP = ev(`(async function () {
     const problems = [];
@@ -3730,6 +3730,9 @@ cases.push(['generated: twelve generated specs survive a full interaction sweep 
     closeInspector(); await pause(50); fitToScreen(); await pause(50);
     if (overlaps(rects('.node-group .node-rect'))) problems.push('cards overlap on screen');
     if (overlaps(rects('.edge-label-bg'))) problems.push('label pills overlap on screen');
+    const cards = rects('.node-group .node-rect');
+    if (rects('.edge-label-bg').some(a => cards.some(b => a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1))) problems.push('a label pill covers a card');
+    for (const edge of LAYOUT_DATA.edges) if ((edge.label || edge.packetLabel) && !edge.labelBounds && document.getElementById('label-' + edge.id)?.getBoundingClientRect().width) problems.push('label ' + edge.id + ' has no room but is drawn');
     for (const node of LAYOUT_DATA.nodes) { openInspectorForNode(node.id); await pause(5); }
     for (const edge of LAYOUT_DATA.edges) { openInspectorForEdge(edge.id); await pause(2); }
     closeInspector();
@@ -3751,7 +3754,8 @@ cases.push(['generated: twelve generated specs survive a full interaction sweep 
     if (/undefined|NaN|\\[object Object\\]/.test(document.getElementById('rail').innerText)) problems.push('the rail prints undefined, NaN or [object Object]');
     return JSON.stringify(problems.concat((window.__errors || []).map(e => 'error: ' + e.msg)));
   })()`);
-  for (let seed = 1; seed <= 12; seed++) {
+  // Seeds 20 and 30 each have a label the router finds no room for.
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 20, 30]) {
     const width = seed % 4 === 0 ? 390 : 1440;
     const [phase] = runPhases(generateSpec(seed), [{ width, height: 900, steps: [mouse({ action: 'jitter-click', selector: '#node-n0', fx: 0.5, fy: 0.5 }), ev('new Promise(r => setTimeout(() => r(0), 500))'), SWEEP] }]);
     assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [], `seed ${seed} at ${width}px`);

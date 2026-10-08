@@ -234,6 +234,8 @@ svg#arch-svg {
   stroke-width: 2.2 !important;
 }
 
+.edge-label[data-unplaced] { display: none; }
+
 .edge-label-bg {
   fill: var(--surface);
   rx: 5px;

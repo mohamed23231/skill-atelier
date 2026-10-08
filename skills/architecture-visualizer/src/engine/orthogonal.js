@@ -133,6 +133,7 @@
         if (x < 0 || x >= nx || y < 0 || y >= ny) continue;
         if (dy && !rule.lanes && !channels.has(a.x)) continue;
         if (dx < 0 && rule.forward) continue;
+        if (dx && rule.rowDirection && dx !== rule.rowDirection) continue;
         const b = { x: xs[x], y: ys[y] };
         if (obstacles.some(box => intersects(a, b, box))) continue;
         const d = dx > 0 ? 0 : dy > 0 ? 1 : dx < 0 ? 2 : 3;
@@ -294,9 +295,16 @@
       const kind = source.id === target.id ? 'self' : target.rank > source.rank ? 'forward' : target.rank < source.rank ? 'backward' : 'same-column';
       if (ports.has(edge.id)) throw new Error(`Duplicate edge id ${edge.id}.`);
       ports.set(edge.id, { kind });
-      const local = options.lanes && kind === 'same-column' && source.x === target.x;
-      const sourceFace = local ? (target.y > source.y ? 'bottom' : 'top') : options.lanes && kind === 'backward' ? 'left' : 'right';
-      const targetFace = local ? (target.y > source.y ? 'top' : 'bottom') : options.lanes && kind === 'backward' ? 'right' : options.targetFace || (kind === 'self' || kind === 'same-column' ? 'right' : 'left');
+      const laneMembers = options.lanes ? nodes.filter(n => n.boundary === source.boundary) : [];
+      // With few lanes, spend a row channel on local links so their pills fit below the cards.
+      const sameRowFace = boundaries.length <= 2 && laneMembers.some(n => n.row !== source.row)
+        && kind === 'same-column' && source.x === target.x
+        ? (source.x === Math.max(...laneMembers.map(n => n.x)) ? 'left' : 'right') : null;
+      const local = options.lanes && kind === 'same-column' && source.x === target.x && !sameRowFace;
+      const rowLink = options.lanes && kind === 'same-column' && source.boundary === target.boundary && source.x !== target.x;
+      const rowBackward = rowLink && target.x < source.x;
+      const sourceFace = sameRowFace || (rowBackward ? 'left' : local ? (target.y > source.y ? 'bottom' : 'top') : options.lanes && kind === 'backward' ? 'left' : 'right');
+      const targetFace = sameRowFace || (rowLink ? (rowBackward ? 'right' : 'left') : local ? (target.y > source.y ? 'top' : 'bottom') : options.lanes && kind === 'backward' ? 'right' : options.targetFace || (kind === 'self' || kind === 'same-column' ? 'right' : 'left'));
       [['source', source, target, sourceFace], ['target', target, source, targetFace]].forEach(([end, node, other, face]) => {
         const key = `${node.id}:${face}`;
         if (!faceGroups.has(key)) faceGroups.set(key, []);
@@ -363,6 +371,7 @@
       const involvedHeaders = boundaries.filter(b => involved.some(n => n.boundary === b.id));
       const rule = {
         forward: port.kind === 'forward' && port.target.face === 'left',
+        rowDirection: options.lanes && source.boundary === target.boundary && source.x !== target.x ? Math.sign(target.x - source.x) : 0,
         lanes: options.lanes,
         startDirection: { right: 0, bottom: 1, left: 2, top: 3 }[port.source.face],
         backward: port.kind === 'backward',
@@ -426,64 +435,98 @@
       });
     });
     const labelObstacles = [...nodes.map(n => rect(n, 0)), ...headers.map(h => ({ left: h.left + margin, right: h.right - margin, top: h.top + margin, bottom: h.bottom - margin }))];
-    const labelCandidates = (edge, slots, displaced = false) => {
-      const placements = [];
+    const labelExtentBoxes = [...nodes.map(n => rect(n, 0)), ...boundaries.map(b => rect(b, 0))];
+    const labelExtent = { left: Math.min(...labelExtentBoxes.map(b => b.left)), right: Math.max(...labelExtentBoxes.map(b => b.right)),
+      top: Math.min(...labelExtentBoxes.map(b => b.top)), bottom: Math.max(...labelExtentBoxes.map(b => b.bottom)) };
+    let exteriorPadding = 40;
+    const labelContexts = new Map();
+    const multiRow = options.lanes && nodes.some(n => n.row > 0);
+    // Candidates are produced lazily, in a fixed order: backtracking usually takes one of the first.
+    const labelCandidateStream = function* (edge, slots, displaced = false) {
       const route = routes[edge.id];
       const width = labelWidths[edge.id] == null ? (edge.labelWidth == null ? 80 : edge.labelWidth) : labelWidths[edge.id];
       if (!Number.isFinite(width) || width < 0) throw new RangeError(`Invalid label width for edge ${edge.id}.`);
       const height = options.labelHeights?.[edge.id] ?? 18;
       if (!Number.isFinite(height) || height < 0) throw new RangeError(`Invalid label height for edge ${edge.id}.`);
-      const lines = edges.filter(other => other.id !== edge.id).flatMap(other => {
-        const points = routes[other.id].points;
-        return points.slice(1).map((b, i) => ({ left: Math.min(points[i].x, b.x) - 1, right: Math.max(points[i].x, b.x) + 1, top: Math.min(points[i].y, b.y) - 1, bottom: Math.max(points[i].y, b.y) + 1 }));
-      });
-      const segments = [];
-      for (let i = 0; i + 1 < route.points.length; i++) {
-        const a = route.points[i];
-        const b = route.points[i + 1];
-        segments.push({ a, b, index: i, length: distance(a, b), orientation: a.y === b.y ? 'horizontal' : 'vertical' });
+      let context = labelContexts.get(edge.id);
+      if (!context) {
+        const lines = edges.filter(other => other.id !== edge.id).flatMap(other => {
+          const points = routes[other.id].points;
+          return points.slice(1).map((b, i) => ({ left: Math.min(points[i].x, b.x) - 1, right: Math.max(points[i].x, b.x) + 1, top: Math.min(points[i].y, b.y) - 1, bottom: Math.max(points[i].y, b.y) + 1 }));
+        });
+        const segments = [];
+        for (let i = 0; i + 1 < route.points.length; i++) {
+          const a = route.points[i];
+          const b = route.points[i + 1];
+          segments.push({ a, b, index: i, length: distance(a, b), orientation: a.y === b.y ? 'horizontal' : 'vertical' });
+        }
+        segments.sort((a, b) => b.length - a.length || a.index - b.index);
+        const preferredOrientation = options.labelHeights ? 'vertical' : 'horizontal';
+        const preferredLength = options.labelHeights ? height : width + 16;
+        const preferred = segments.filter(segment => segment.orientation === preferredOrientation && segment.length >= preferredLength);
+        const candidates = [...preferred, ...segments.filter(segment => !preferred.includes(segment))];
+        context = { lines, candidates, positions: new Map() };
+        labelContexts.set(edge.id, context);
       }
-      segments.sort((a, b) => b.length - a.length || a.index - b.index);
-      const preferredOrientation = options.labelHeights ? 'vertical' : 'horizontal';
-      const preferredLength = options.labelHeights ? height : width + 16;
-      const preferred = segments.filter(segment => segment.orientation === preferredOrientation && segment.length >= preferredLength);
-      const candidates = [...preferred, ...segments.filter(segment => !preferred.includes(segment))];
+      const { lines, candidates } = context;
       for (const segment of candidates) {
         const horizontal = segment.orientation === 'horizontal';
         const anchorFixed = horizontal ? segment.a.y : segment.a.x;
-        const offsets = displaced ? [0, ...Array.from({ length: options.lanes ? 12 : 24 }, (_, i) => (i + 1) * 14).flatMap(n => [-n, n])] : [0];
+        // A pill in a lower row may need to reach clear space several rows away.
+        const offsets = displaced ? [0, ...Array.from({ length: multiRow ? 48 : options.lanes ? 12 : 24 }, (_, i) => (i + 1) * 14).flatMap(n => [-n, n])] : [0];
+        if (displaced && exteriorPadding > 40) {
+          // Try the nearest fully clear exterior strip directly, even from a far lower-row slot.
+          offsets.push(...(horizontal ? [labelExtent.top - height / 2 - 8, labelExtent.bottom + height / 2 + 8]
+            : [labelExtent.left - width / 2 - 16, labelExtent.right + width / 2 + 16]).map(fixed => fixed - anchorFixed));
+        }
         for (const offset of offsets) {
           const fixed = anchorFixed + offset;
+          // Reject out-of-bounds offsets before scanning blockers and packing positions.
+          // Every position on this run has the same coordinate on the fixed axis.
+          if (offset && (horizontal
+            ? fixed - height / 2 < labelExtent.top - exteriorPadding || fixed + height / 2 > labelExtent.bottom + exteriorPadding
+            : fixed - width / 2 - 8 < labelExtent.left - exteriorPadding || fixed + width / 2 + 8 > labelExtent.right + exteriorPadding)) continue;
           const low = Math.min(horizontal ? segment.a.x : segment.a.y, horizontal ? segment.b.x : segment.b.y);
           const high = low + segment.length;
           const half = horizontal ? width / 2 + 8 : height / 2;
           // Prefer the midpoint, then the nearest exact collision boundary. The pill
           // may overhang a short segment; its anchor remains on the line.
-          const blockers = [...labelObstacles, ...slots, ...lines].filter(box => horizontal
+          const key = `${segment.index}:${fixed}`;
+          let packing = context.positions.get(key);
+          const crossesFixedAxis = box => horizontal
             ? fixed - height / 2 < box.bottom && fixed + height / 2 > box.top
-            : fixed - width / 2 - 8 < box.right && fixed + width / 2 + 8 > box.left);
-          const center = (low + high) / 2;
-          const positions = [...new Set([center, low, high, ...blockers.flatMap(box => horizontal
+            : fixed - width / 2 - 8 < box.right && fixed + width / 2 + 8 > box.left;
+          const collisionPositions = box => horizontal
             ? [box.left - half, box.right + half]
-            : [box.top - half, box.bottom + half])])]
+            : [box.top - half, box.bottom + half];
+          const center = (low + high) / 2;
+          if (!packing) {
+            const blockers = [...labelObstacles, ...lines].filter(crossesFixedAxis);
+            packing = { positions: [center, low, high, ...blockers.flatMap(collisionPositions)], valid: new Map() };
+            context.positions.set(key, packing);
+          }
+          const positions = [...new Set([...packing.positions, ...slots.filter(crossesFixedAxis).flatMap(collisionPositions)])]
             .filter(value => value >= low && value <= high)
             .sort((a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b);
           for (const position of positions) {
             const x = horizontal ? position : fixed;
             const y = horizontal ? fixed : position;
             const box = { left: x - width / 2 - 8, right: x + width / 2 + 8, top: y - height / 2, bottom: y + height / 2 };
-            if (labelObstacles.some(card => overlap(box, card)) || slots.some(slot => overlap(box, slot)) || lines.some(line => overlap(box, line))) continue;
+            // Static collisions do not change during backtracking; label/label checks do.
+            if (!packing.valid.has(position)) packing.valid.set(position,
+              !labelObstacles.some(card => overlap(box, card)) && !lines.some(line => overlap(box, line)));
+            if (!packing.valid.get(position) || slots.some(slot => overlap(box, slot))) continue;
             if (offset) {
-              const bounds = [...nodes.map(n => rect(n, 0)), ...boundaries.map(b => rect(b, 0))];
-              const limit = { left: Math.min(...bounds.map(b => b.left)) - 40, right: Math.max(...bounds.map(b => b.right)) + 40, top: Math.min(...bounds.map(b => b.top)) - 40, bottom: Math.max(...bounds.map(b => b.bottom)) + 40 };
+              const limit = { left: labelExtent.left - exteriorPadding, right: labelExtent.right + exteriorPadding,
+                top: labelExtent.top - exteriorPadding, bottom: labelExtent.bottom + exteriorPadding };
               if (box.left < limit.left || box.right > limit.right || box.top < limit.top || box.bottom > limit.bottom) continue;
             }
-            placements.push({ slot: { x, y, width, height, segment: segment.index, orientation: segment.orientation, ...(offset ? { tether: horizontal ? { x, y: anchorFixed } : { x: anchorFixed, y } } : {}) }, box });
+            yield ({ slot: { x, y, width, height, segment: segment.index, orientation: segment.orientation, ...(offset ? { tether: horizontal ? { x, y: anchorFixed } : { x: anchorFixed, y } } : {}) }, box });
           }
         }
       }
-      return placements;
     };
+    const labelCandidates = (edge, slots, displaced) => [...labelCandidateStream(edge, slots, displaced)];
     // Backtrack when a centred pill consumes another label's only free space.
     // A bounded search keeps impossible or very dense inputs predictable.
     let labelOrder;
@@ -492,13 +535,15 @@
     let best = [];
     const place = (index, chosen) => {
       if (chosen.filter(Boolean).length > best.filter(Boolean).length) best = [...chosen];
-      if (index === labelOrder.length) return chosen.every(Boolean);
+      // Every call spends the budget, leaves included: a dense last label can offer hundreds of slots.
+      if (index === labelOrder.length) return ++attempts, chosen.every(Boolean);
       if (++attempts > 10000) return false;
-      const candidates = labelCandidates(labelOrder[index], chosen.filter(Boolean).map(item => item.box), allowDisplaced);
-      for (const candidate of candidates) {
+      for (const candidate of labelCandidateStream(labelOrder[index], chosen.filter(Boolean).map(item => item.box), allowDisplaced)) {
         chosen.push(candidate);
         if (place(index + 1, chosen)) return true;
         chosen.pop();
+        // Past the budget every later branch fails at once and can only tie the best partial.
+        if (attempts > 10000) return false;
       }
       chosen.push(null);
       const complete = place(index + 1, chosen);
@@ -528,7 +573,13 @@
       // the pill into nearby clear space, retaining a leader to that run.
       attempts = 0;
       allowDisplaced = true;
-      place(0, []);
+      if (!place(0, [])) {
+        // A dense diagram can exhaust the narrow exterior strip; retain the same bounded search.
+        // Multi-row lanes have row channels to reach; one-row diagrams keep labels close so the fit holds.
+        exteriorPadding = multiRow ? 280 : 80;
+        attempts = 0;
+        place(0, []);
+      }
     }
     labelOrder.forEach((edge, i) => {
       const route = routes[edge.id];

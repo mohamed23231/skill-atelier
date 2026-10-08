@@ -564,4 +564,42 @@ cases.push(['lane face ports span sixty percent and overlapping channel runs sta
   }
 }]);
 
+
+cases.push(['multi-row lane links approach lower rows from above and upper rows from below', () => {
+  const nodes = [
+    { ...node('a', 194, 48), width: 220, height: 72, boundary: 'lane', row: 0 },
+    { ...node('b', 446, 204), width: 220, height: 72, boundary: 'lane', row: 1 },
+    { ...node('c', 698, 48), width: 220, height: 72, boundary: 'lane', row: 0 },
+  ];
+  for (const [source, target] of [['a', 'b'], ['b', 'c']]) {
+    const layout = { config: { layout: 'lanes', nodeGapX: 24, nodeGapY: 24 }, nodes,
+      boundaries: [{ id: 'lane', x: 24, y: 24, width: 918, height: 276, gutterWidth: 150 }],
+      edges: [edge('link', source, target)] };
+    const result = routeOrthogonal(layout, { direction: 'TB' });
+    assert.strictEqual(result.stats.cardCrossings, 0);
+    const route = result.routes.link;
+    assert(route.labelSlot);
+    const from = nodes.find(n => n.id === source), to = nodes.find(n => n.id === target);
+    const sign = Math.sign(to.y - from.y);
+    assert.strictEqual(route.points[0].y, from.y + (sign > 0 ? from.height : 0));
+    assert.strictEqual(route.points.at(-1).y, to.y + (sign > 0 ? 0 : to.height));
+    route.points.slice(1).forEach((p, i) => assert((p.y - route.points[i].y) * sign >= 0, 'route progresses through rows monotonically'));
+    assert.deepStrictEqual(result, routeOrthogonal(layout, { direction: 'TB' }));
+  }
+}]);
+
+
+cases.push(['local links in a packed lane use an internal row channel for their labels', () => {
+  const layout = computeDefaultLayout({ nodes: Array.from({ length: 9 }, (_, i) => ({ id: `n${i}` })),
+    edges: [{ id: 'local', source: 'n0', target: 'n1', label: 'Read inventory' }] });
+  const from = layout.nodes.find(n => n.id === 'n0'), to = layout.nodes.find(n => n.id === 'n1');
+  assert.strictEqual(from.row, to.row);
+  assert.strictEqual(layout.routingStats.cardCrossings, 0);
+  assert(layout.edges[0].labelBounds);
+  assert.strictEqual(layout.edges[0].polyline[0].y, from.y + from.height);
+  const end = layout.edges[0].polyline.at(-1);
+  // The workbench trims the target by ten pixels for its marker.
+  assert(end.y > to.y + to.height);
+}]);
+
 module.exports = { name: 'Orthogonal router', cases };

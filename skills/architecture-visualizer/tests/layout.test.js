@@ -675,6 +675,7 @@ const cases = [
         querySelectorAll: () => [],
         getAttribute: () => '50',
         setAttribute: () => {},
+        toggleAttribute: () => {},
         classList: { add: () => {}, remove: () => {} },
       });
       const runtimeCtx = {
@@ -1072,17 +1073,17 @@ cases.push(['lanes share a full-width grid, keep spec ties, and contain every ca
     assert.strictEqual(layout.config.direction, 'TB');
     assert.deepStrictEqual(layout, computeDefaultLayout(spec));
     assert.strictEqual(JSON.stringify(spec), before, 'input is immutable');
-    const k = Math.min(4, Math.max(...layout.boundaries.map(b => layout.nodes.filter(n => n.boundary === b.id).length)));
+    const k = layout.boundaries[0].slotCount;
     layout.boundaries.forEach((b, i) => {
       assert.strictEqual(b.x, 24);
       assert.strictEqual(b.width, layout.boundaries[0].width);
       if (i) assert.strictEqual(b.y - layout.boundaries[i - 1].y - layout.boundaries[i - 1].height, 56);
       const members = layout.nodes.filter(n => n.boundary === b.id);
-      assert.strictEqual(b.height, Math.max(1, Math.ceil(members.length / k)) * 128 - 8);
+      assert.strictEqual(b.height, Math.max(1, Math.ceil(members.length / k)) * layout.config.nodeHeight + 48 + b.rowGaps.reduce((sum, gap) => sum + gap, 0));
       members.forEach(n => {
         assert.ok(n.x >= b.x + b.gutterWidth);
         assert.ok(n.x + n.width <= b.x + b.width && n.y >= b.y && n.y + n.height <= b.y + b.height);
-        assert.strictEqual((n.x - b.x - 170) % 390, 0);
+        assert.strictEqual(n.x - b.x - 170, n.slot * (n.width + b.slotGap));
         assert.ok(n.slot < k);
       });
     });
@@ -1120,6 +1121,34 @@ cases.push(['saga preserves its three jumps and fourteen bends after label and p
   assert(first.routingStats.crossings <= 3);
   assert.strictEqual(first.routingStats.bends, 14);
   assert.deepStrictEqual(computeDefaultLayout(spec), first);
+}]);
+
+
+cases.push(['lane row width maximizes canvas fit, with smaller widths winning ties', () => {
+  for (const count of [9, 14, 24, 40]) {
+    const spec = { nodes: Array.from({ length: count }, (_, i) => ({ id: `n${i}` })), edges: [] };
+    const layout = computeDefaultLayout(spec);
+    const lane = layout.boundaries[0];
+    const scores = Array.from({ length: 4 }, (_, i) => {
+      const slots = i + 4, rows = Math.ceil(count / slots);
+      return { slots, zoom: Math.min(1040 / (194 + slots * 220 + (slots - 1) * 24 + 48),
+        700 / (rows * 72 + 48 + (rows - 1) * 56 + 48), 1.4) };
+    }).sort((a, b) => b.zoom - a.zoom || a.slots - b.slots);
+    assert.strictEqual(lane.slotCount, scores[0].slots);
+    assert(lane.slotCount >= 4 && lane.slotCount <= 7);
+  }
+}]);
+
+cases.push(['lower rows retain neighbour-pulled slots instead of packing left', () => {
+  const spec = { boundaries: [{ id: 'top', order: 0 }, { id: 'bottom', order: 1 }],
+    nodes: [...Array.from({ length: 5 }, (_, i) => ({ id: `n${i}`, boundary: 'top' })),
+      ...Array.from({ length: 4 }, (_, i) => ({ id: `t${i}`, boundary: 'bottom' }))],
+    edges: [{ id: 'pull', source: 'n4', target: 't3' }] };
+  const layout = computeDefaultLayout(spec);
+  const lower = layout.nodes.find(n => n.id === 'n4'), neighbor = layout.nodes.find(n => n.id === 't3');
+  assert.strictEqual(lower.row, 1);
+  assert.strictEqual(lower.slot, neighbor.slot);
+  assert(lower.slot > 0);
 }]);
 
 module.exports = { name: 'Layout Engine', cases };

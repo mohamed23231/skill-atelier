@@ -94,6 +94,9 @@ function moveDraggedBoundary(clientX, clientY) {
 function syncLabelLeader(edge) {
   const labelGroup = document.getElementById(`label-${edge.id}`);
   if (!labelGroup) return;
+  // A label the router found no clear room for is not drawn over cards or other labels; the
+  // connection's tooltip and sheet still name it.
+  labelGroup.toggleAttribute('data-unplaced', !edge.labelBounds);
   const leader = ArchVizGeometry.labelLeader(edge);
   let line = labelGroup.querySelector('.edge-label-leader');
   if (!leader) {
