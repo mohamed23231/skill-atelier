@@ -456,13 +456,18 @@ function renderWalkTrack() {
     // The idle track also needs clearance, and its lanes can grow or wrap on resize.
     new ResizeObserver(() => {
       document.body.style.setProperty('--walk-track-height', `${track.getBoundingClientRect().height}px`);
+      // The free canvas area changed: a camera from a link is re-applied so it shows the same region.
+      if (typeof holdsLinkedCamera === 'function' && holdsLinkedCamera()) applyLinkedCamera();
     }).observe(track);
   }
   const previousHeight = track.getBoundingClientRect().height;
   const refitTrack = () => {
     document.body.style.setProperty('--walk-track-height', `${track.getBoundingClientRect().height}px`);
-    if (!state.userMovedView && track.getBoundingClientRect().height !== previousHeight) {
-      window.requestAnimationFrame(() => { if (!state.userMovedView) fitToScreen(); });
+    if (track.getBoundingClientRect().height !== previousHeight) {
+      window.requestAnimationFrame(() => {
+        if (typeof holdsLinkedCamera === 'function' && holdsLinkedCamera()) applyLinkedCamera();
+        else if (!state.userMovedView) fitToScreen();
+      });
     }
   };
   const scenario = selectedScenario() || (ARCH_SPEC.scenarios || [])[0];
