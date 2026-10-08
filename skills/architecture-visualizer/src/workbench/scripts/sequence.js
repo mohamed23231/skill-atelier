@@ -61,7 +61,7 @@ function spotlightInteractions(interactions) {
 
 function clearSpotlight() {
   ghostLayer.querySelectorAll('.playback-ghost').forEach(item => item.remove());
-  document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected'));
+  document.querySelectorAll('.node-group').forEach(el2 => el2.classList.remove('selected', 'out-of-focus'));
   document.querySelectorAll('.edge-path').forEach(p => { p.classList.remove('highlighted', 'dimmed'); p.closest('.edge-group')?.classList.remove('out-of-focus'); syncEdgeMarker(p); });
   if (state.selectedNodeId) {
     const selected = document.getElementById(`node-${state.selectedNodeId}`);

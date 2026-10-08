@@ -36,7 +36,9 @@ function updateMinimapViewport() {
   const left = state.panX + bounds.minX * state.zoom;
   const top = state.panY + bounds.minY * state.zoom;
   const idle = left >= -1 && top >= -1 && left + bounds.width * state.zoom <= rect.width + 1 && top + bounds.height * state.zoom <= rect.height + 1;
-  document.querySelector('.workbench-minimap')?.setAttribute('data-idle', idle ? 'true' : 'false');
+  // A walkthrough frames the camera itself, so the minimap stays out of the way while it runs.
+  const walking = typeof walkIsActive === 'function' && walkIsActive();
+  document.querySelector('.workbench-minimap')?.setAttribute('data-idle', idle || walking ? 'true' : 'false');
 }
 
 function handleMinimapClick(event) {

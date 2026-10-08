@@ -186,3 +186,7 @@ body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; rig
 /* Focus changes fade rather than snap. */
 .node-group, .edge-group, .edge-path, .edge-label text { transition: opacity 0.3s ease, stroke 0.2s ease; }
 @media (prefers-reduced-motion: reduce) { .node-group, .edge-group, .edge-path, .edge-label text { transition: none; } }
+/* Components outside the current walkthrough step recede with their connections. */
+.node-group.out-of-focus { opacity: 0.35; }
+/* The step's own connections are never faded by a lens's quiet style. */
+.edge-path.highlighted { opacity: 1; }

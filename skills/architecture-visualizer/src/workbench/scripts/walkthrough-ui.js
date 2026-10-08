@@ -46,7 +46,9 @@ function walkIsActive() {
 function spotlightWalkFocus(focus) {
   const nodes = new Set((focus && focus.primaryNodes) || []);
   document.querySelectorAll('.node-group').forEach((node) => {
-    node.classList.toggle('selected', nodes.has(node.id.replace('node-', '')));
+    const inStep = nodes.has(node.id.replace('node-', ''));
+    node.classList.toggle('selected', inStep);
+    node.classList.toggle('out-of-focus', nodes.size > 0 && !inStep);
   });
   const edges = new Set((focus && focus.primaryEdges) || []);
   document.querySelectorAll('.edge-path').forEach((path) => {
@@ -65,7 +67,16 @@ function walkMarkerPoint(marker) {
     const path = document.getElementById(`path-${marker.edgeId}`);
     if (path && typeof path.getTotalLength === 'function') {
       const length = path.getTotalLength();
-      if (length > 0) return path.getPointAtLength(length / 2);
+      // Sit on the line where no label is, so the number never covers a label's text.
+      const labels = (LAYOUT_DATA.edges || []).filter(edge => edge.labelBounds).map(edge => edge.labelBounds);
+      const clear = point => labels.every(b => point.x < b.left - 14 || point.x > b.left + b.width + 14 || point.y < b.top - 14 || point.y > b.top + b.height + 14);
+      if (length > 0) {
+        for (const t of [0.5, 0.35, 0.65, 0.25, 0.75, 0.18, 0.82]) {
+          const point = path.getPointAtLength(length * t);
+          if (clear(point)) return point;
+        }
+        return path.getPointAtLength(length / 2);
+      }
     }
   }
   const from = nodeById.get(marker.from);
@@ -585,7 +596,10 @@ function walkChapterStep(entry) {
     item.appendChild(tag);
   }
 
-  const narrative = entry.stage?.narrative;
+  // A generated narrative's payload sentences repeat the payload table below; the table says it better.
+  const narrative = entry.stage?.narrativeGenerated
+    ? String(entry.stage?.narrative || '').replace(/ Payload: .*?\.(?=\s|$)/g, '')
+    : entry.stage?.narrative;
   if (narrative) {
     const text = document.createElement('p');
     text.className = 'walk-item-narrative';
@@ -688,10 +702,19 @@ function renderWalkthrough() {
     if (cursorId && entry.id === cursorId) item.classList.add('current');
     list.appendChild(item);
   });
-  if (cursorId) {
-    const current = list.querySelector(`[data-walk-entry="${CSS.escape(cursorId)}"]`);
-    if (current) current.scrollIntoView({ block: 'nearest' });
-  }
+  scrollRailToWalkCursor();
+}
+
+// Keeps the current step's card in view inside the docked rail. Only the rail scrolls: a stacked
+// page is never jumped around under the reader.
+function scrollRailToWalkCursor() {
+  const cursorId = state.scenarioActive ? state.walkCursor : null;
+  const body = document.querySelector('.rail-body');
+  const current = cursorId && document.querySelector(`[data-walk-list] [data-walk-entry="${CSS.escape(cursorId)}"]`);
+  if (!body || !current || isStackedLayout() || body.scrollHeight <= body.clientHeight) return;
+  const top = current.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
+  const target = Math.max(0, top - 24);
+  body.scrollTo({ top: target, behavior: state.prefersReducedMotion ? 'auto' : 'smooth' });
 }
 
 function renderScenarioNavigator() {
@@ -715,6 +738,7 @@ function renderScenarioNavigator() {
     select.appendChild(option);
   });
   select.value = state.scenarioId;
+  select.hidden = scenarios.length < 2;
   select.addEventListener('change', () => startWalkthrough(select.value));
   const list = document.createElement('ol');
   list.className = 'walk-list';

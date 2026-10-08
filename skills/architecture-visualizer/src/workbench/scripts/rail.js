@@ -160,6 +160,7 @@ function openChapter(id) {
 
   // Closes the sheet, keeping the selection
   hideSheetKeepSelection();
+  if (targetId === 'walkthrough' && typeof scrollRailToWalkCursor === 'function') window.requestAnimationFrame(scrollRailToWalkCursor);
 
   // Update back button text in sheet
   const backBtn = document.querySelector('[data-action="sheet-back"]');

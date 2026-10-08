@@ -1553,13 +1553,14 @@ const cases = [
     () => {
       const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(async function () {
         startWalkthrough('scenario_fulfillment_saga_dlq'); walkTo('stage_publish_order_created');
-        await new Promise(resolve => setTimeout(resolve, 250));
+        // Focus changes fade over 0.3s; sample after they settle.
+        await new Promise(resolve => setTimeout(resolve, 450));
         const snapshot = () => [...document.querySelectorAll('.node-group, .edge-path:not(.ghost)')].map(item => [item.id, getComputedStyle(item).opacity]);
         const before = snapshot();
         const visits = [];
         for (const lens of LENSES) {
           selectLens(lens);
-          await new Promise(resolve => setTimeout(resolve, 250));
+          await new Promise(resolve => setTimeout(resolve, 450));
           visits.push(snapshot());
         }
         deactivateScenario();
