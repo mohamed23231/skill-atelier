@@ -62,22 +62,6 @@
 .edge-path.event { stroke-dasharray: 10 4; }
 
 
-.flow-hint {
-  position: absolute;
-  top: 150px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 11px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  z-index: 20;
-  display: none;
-}
-.flow-hint.visible { display: block; }
-
 .export-wrap { position: relative; }
 .export-menu {
   position: absolute;

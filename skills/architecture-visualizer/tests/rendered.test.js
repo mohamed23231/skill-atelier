@@ -1267,6 +1267,15 @@ const cases = [
     assert.strictEqual(values[0], 'true hidden');
     assert.strictEqual(values[values.length - 1], 'false visible');
   }],
+  ['viewer: data flow mode adds no floating banner over the canvas and announces itself', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      ev(`new Promise(r => { switchView(VIEWS.DATA_FLOW); setTimeout(() => r(JSON.stringify({ hint: !!document.getElementById('flow-hint'),
+        view: state.currentView, status: document.getElementById('workbench-status').textContent })), 150); })`)] }]);
+    const m = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(m.hint, false);
+    assert.strictEqual(m.view, 'data_flow');
+    assert.ok(/Data flow/i.test(m.status), m.status);
+  }],
   ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
     const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({
       rail: document.querySelector('[data-region="rail"]').getAttribute('data-open'),

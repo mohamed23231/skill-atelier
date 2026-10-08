@@ -314,7 +314,6 @@ function switchView(viewName) {
   if (viewName !== VIEWS.ARCHITECTURE && viewName !== VIEWS.BEFORE_AFTER) suspendWalkthrough();
   actions.setView(viewName);
   document.getElementById('sequence-bar').classList.toggle('visible', viewName === VIEWS.SEQUENCE);
-  document.getElementById('flow-hint').classList.toggle('visible', viewName === VIEWS.DATA_FLOW);
 
   if (viewName !== VIEWS.SEQUENCE) {
     stopSequencePlayback();
