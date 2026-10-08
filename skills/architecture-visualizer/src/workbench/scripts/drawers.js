@@ -1,4 +1,4 @@
-const PANEL_BREAKPOINT = 1100;
+const PANEL_BREAKPOINT = 900;
 let activeDrawer = null;
 let drawerReturnFocus = null;
 let panelReflowTimer = null;

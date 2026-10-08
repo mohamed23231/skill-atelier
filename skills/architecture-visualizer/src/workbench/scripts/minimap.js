@@ -31,6 +31,12 @@ function updateMinimapViewport() {
   viewportRect.setAttribute('y', -state.panY / state.zoom);
   viewportRect.setAttribute('width', Math.max(rect.width / state.zoom, 1));
   viewportRect.setAttribute('height', Math.max(rect.height / state.zoom, 1));
+  // The minimap only earns its space when part of the diagram is out of view.
+  const bounds = computeTotalVisualBounds();
+  const left = state.panX + bounds.minX * state.zoom;
+  const top = state.panY + bounds.minY * state.zoom;
+  const idle = left >= -1 && top >= -1 && left + bounds.width * state.zoom <= rect.width + 1 && top + bounds.height * state.zoom <= rect.height + 1;
+  document.querySelector('.workbench-minimap')?.setAttribute('data-idle', idle ? 'true' : 'false');
 }
 
 function handleMinimapClick(event) {

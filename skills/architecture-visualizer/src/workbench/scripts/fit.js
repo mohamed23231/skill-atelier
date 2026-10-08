@@ -62,7 +62,8 @@ function computeTotalVisualBounds() {
 // Overlay rectangles are canvas-local and include a 16px breathing room.
 function canvasOverlayRects() {
   const canvas = svg.getBoundingClientRect();
-  return ['.lens-key', '.viewport-controls', '.workbench-minimap', '.walk-track', '#sequence-bar']
+  // The minimap is left out: once the diagram fits it is idle and hidden.
+  return ['.lens-key', '.viewport-controls', '.walk-track', '#sequence-bar']
     .map(selector => document.querySelector(selector))
     .filter(element => element && !element.hidden && getComputedStyle(element).display !== 'none')
     .map(element => ({ rect: element.getBoundingClientRect(), isKey: element.matches('.lens-key') }))

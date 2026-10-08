@@ -991,7 +991,7 @@ function assertDesktopInspectorClose(raw) {
 
 function assertTabletRailOverlay(raw) {
   assert.ok(raw, 'no tablet rail observations returned');
-  assert.strictEqual(raw.innerWidth, 900, `Emulation override not applied: innerWidth=${raw.innerWidth}, expected 900`);
+  assert.strictEqual(raw.innerWidth, 860, `Emulation override not applied: innerWidth=${raw.innerWidth}, expected 860`);
   assert.strictEqual(raw.railInitialOpen, 'false', 'rail should start closed at 900px');
   assert.strictEqual(raw.railInitialVisible, false, 'rail should not be visible at 900px before opening');
 
@@ -1252,10 +1252,35 @@ const cases = [
     })())`);
     assert(probe.widths.length > 0 && probe.widths.every(w => w === probe.widths[0]));
     assert.equal(probe.titles, probe.widths.length);
-    assert(probe.lines.every(n => n >= 1 && n <= 2));
-    assert(probe.lines.includes(2));
+    assert(probe.lines.every(n => n >= 1 && n <= 3));
+    assert(probe.lines.some(n => n >= 2));
     assert.deepStrictEqual(probe.counts, probe.expected);
     assert.equal(probe.overflow, false);
+  }],
+  ['viewer: the minimap hides while the whole diagram is in view and returns once part of it is not', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      ev(`document.querySelector('.workbench-minimap').getAttribute('data-idle') + ' ' + getComputedStyle(document.querySelector('.workbench-minimap')).visibility`),
+      mouse({ action: 'click', selector: '#btn-zoom-in', fx: 0.5, fy: 0.5 }),
+      mouse({ action: 'click', selector: '#btn-zoom-in', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(document.querySelector('.workbench-minimap').getAttribute('data-idle') + ' ' + getComputedStyle(document.querySelector('.workbench-minimap')).visibility), 250))`)] }]);
+    const values = phase.filter(step => step && step.kind === 'eval').map(step => step.value);
+    assert.strictEqual(values[0], 'true hidden');
+    assert.strictEqual(values[values.length - 1], 'false visible');
+  }],
+  ['viewer: the rail docks beside the canvas from 900px and example lane titles are not truncated', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 980, height: 720, steps: [ev(`JSON.stringify({
+      rail: document.querySelector('[data-region="rail"]').getAttribute('data-open'),
+      modal: document.querySelector('[data-region="rail"]').getAttribute('aria-modal'),
+      canvasRight: document.getElementById('canvas-container').getBoundingClientRect().right,
+      railLeft: document.querySelector('[data-region="rail"]').getBoundingClientRect().left,
+      overflow: document.documentElement.scrollWidth > innerWidth,
+      titles: [...document.querySelectorAll('.boundary-header')].map(t => t.textContent) })`)] }]);
+    const m = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(m.rail, 'true');
+    assert.strictEqual(m.modal, 'false');
+    assert.ok(m.canvasRight <= m.railLeft + 1, `canvas ${m.canvasRight} runs under the rail at ${m.railLeft}`);
+    assert.strictEqual(m.overflow, false);
+    assert.ok(m.titles.length > 0 && m.titles.every(t => !t.includes('\u2026')), JSON.stringify(m.titles));
   }],
   ['p2: fit every example at 1440×900 with the rail docked at zoom ≥ 0.75', () => {
     for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
@@ -1722,9 +1747,9 @@ const cases = [
   ],
 
   [
-    'B2b: at 900 the rail is an overlay, dismisses cleanly and never shrinks or overlaps the canvas',
+    'B2b: at 860 the rail is an overlay, dismisses cleanly and never shrinks or overlaps the canvas',
     () => {
-      const results = runPhases(fixtures.VALID_SPEC, [{ width: 900, height: 900, mobile: false, steps: tabletRailOverlaySteps() }]);
+      const results = runPhases(fixtures.VALID_SPEC, [{ width: 860, height: 900, mobile: false, steps: tabletRailOverlaySteps() }]);
       assertTabletRailOverlay(lastEvalValue(results[0]));
     },
   ],
@@ -3222,7 +3247,7 @@ const cases = [
       const probe = ev(`JSON.stringify({ zoom: state.zoom, hits: (() => {
         const overlays = ['.lens-key', '.workbench-minimap', '.viewport-controls', '.walk-track']
           .map(selector => [selector, document.querySelector(selector)])
-          .filter(([, element]) => element && !element.hidden && getComputedStyle(element).display !== 'none')
+          .filter(([, element]) => element && !element.hidden && getComputedStyle(element).display !== 'none' && getComputedStyle(element).visibility !== 'hidden')
           .map(([selector, element]) => [selector, element.getBoundingClientRect()]);
         return [...document.querySelectorAll('.node-group .node-rect, .edge-label-bg')].filter(node => node.getBoundingClientRect().width > 0).flatMap(node => {
           const a = node.getBoundingClientRect();

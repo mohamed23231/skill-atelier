@@ -188,6 +188,7 @@ body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; rig
 .workbench-mobile-toggle { min-width: 32px; display: inline-flex; }
 .workbench-backdrop { display: none; position: fixed; inset: var(--chrome-top) 0 0; z-index: 54; border: 0; background: var(--scrim); }
 .workbench-minimap { position: absolute; left: 16px; bottom: 16px; width: 176px; height: 116px; z-index: 35; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); }
+.workbench-minimap[data-idle="true"] { visibility: hidden; }
 .workbench-minimap svg { width: 100%; height: 100%; display: block; }
 [data-minimap-viewport] { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 [data-selected="true"] { outline: 3px double var(--accent); outline-offset: 3px; }

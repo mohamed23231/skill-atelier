@@ -1006,7 +1006,8 @@ const cases = [
           if (width === 1040) assert.ok(state.zoom >= 0.75, name + ': ' + state.zoom);
           const marks = layout.nodes.concat(layout.edges.filter(edge => edge.labelBounds)
             .map(edge => ({ x: edge.labelBounds.left, y: edge.labelBounds.top, width: edge.labelBounds.width, height: edge.labelBounds.height })));
-          marks.forEach(mark => Object.values(elements).forEach(element => {
+          // The minimap hides once the diagram fits, so fitting may use the space under it.
+          marks.forEach(mark => Object.entries(elements).filter(([selector]) => selector !== '.workbench-minimap').map(([, element]) => element).forEach(element => {
             const b = element.getBoundingClientRect();
             const a = { left: state.panX + mark.x * state.zoom, top: state.panY + mark.y * state.zoom };
             a.right = a.left + mark.width * state.zoom; a.bottom = a.top + mark.height * state.zoom;

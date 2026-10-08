@@ -46,14 +46,15 @@ function renderDiagram() {
     const memberCount = (LAYOUT_DATA.nodes || []).filter(n => n.boundary === b.id).length;
     const headerText = collapsed ? `${b.label || b.id} (${memberCount} hidden)` : (b.label || b.id);
     if (lane && !collapsed) {
-      const available = (b.gutterWidth || 150) - 46;
-      const lines = wrapText(headerText, `600 12px ${cssToken('--sans')}`, available, 2);
+      const available = (b.gutterWidth || 150) - 40;
+      const lines = wrapText(headerText, `600 12px ${cssToken('--sans')}`, available, 3);
+      text.setAttribute('x', b.x + 30);
       lines.forEach((line, index) => {
-        const span = el('tspan', { x: b.x + 34, dy: index ? 16 : 0 });
+        const span = el('tspan', { x: b.x + 30, dy: index ? 16 : 0 });
         span.textContent = fitText(line, `600 12px ${cssToken('--sans')}`, available);
         text.appendChild(span);
       });
-      const count = el('text', { class: 'boundary-count', x: b.x + 34, y: b.y + 26 + lines.length * 16 + 2 });
+      const count = el('text', { class: 'boundary-count', x: b.x + 30, y: b.y + 26 + lines.length * 16 + 2 });
       count.textContent = `${memberCount} component${memberCount === 1 ? '' : 's'}`;
       header.appendChild(count);
       withTooltip(text, headerText);

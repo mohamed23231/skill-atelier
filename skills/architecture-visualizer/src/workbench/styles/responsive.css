@@ -1,4 +1,11 @@
 /* Wide desktop: docked panels reflow the canvas and viewport controls */
+@media (min-width: 900px) and (max-width: 1099px) {
+  .rail { width: 360px; }
+  body:has(.rail[data-open="true"]) { --canvas-right: 360px; }
+  body:has(.rail[data-open="true"]) #canvas-container { width: calc(100% - 360px); }
+  body:has(.rail[data-open="true"]) .viewport-controls { right: 380px; }
+}
+
 @media (min-width: 1100px) and (max-width: 1279px) {
   .rail { width: 340px; }
   body:has(.rail[data-open="true"]) { --canvas-right: 340px; }
@@ -19,7 +26,7 @@
 }
 
 /* Below the workbench breakpoint the rail is an overlay drawer */
-@media (max-width: 1099px) {
+@media (max-width: 899px) {
   body:has(.rail[data-open="true"]) .workbench-backdrop { display: block; }
   .viewport-controls { right: 8px; }
 }
