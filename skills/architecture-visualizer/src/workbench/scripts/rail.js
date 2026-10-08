@@ -224,10 +224,12 @@ function renderOverviewChapter() {
   if (facts) {
     facts.replaceChildren();
     [
-      ['components', (ARCH_SPEC.nodes || []).length],
-      ['layers', (ARCH_SPEC.boundaries || []).length],
-      ['connections', (ARCH_SPEC.edges || []).length],
-    ].forEach(([label, count]) => {
+      ['component', (ARCH_SPEC.nodes || []).length],
+      // A model without boundaries is drawn in one lane, so count the lanes on the canvas.
+      ['layer', (LAYOUT_DATA.boundaries || ARCH_SPEC.boundaries || []).length],
+      ['connection', (ARCH_SPEC.edges || []).length],
+    ].forEach(([word, count]) => {
+      const label = plural(count, word).replace(/^\S+ /, '');
       const item = document.createElement('div');
       item.className = 'overview-fact';
       const term = document.createElement('dt');

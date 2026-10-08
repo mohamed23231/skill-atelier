@@ -74,7 +74,7 @@ Nodes represent discrete actors, services, databases, queues, or client applicat
 | `order` | `number` | Optional explicit ordering integer within its boundary rank. |
 | `description` | `string` | Expanded summary of component purpose and architecture. |
 | `evidenceIds` | `string[]` | References to entries in the top-level `evidence` array. |
-| `details` | `object` | Deep-dive inspector attributes: |
+| `details` | `object` | Deep-dive component-sheet attributes: |
 | `details.responsibilities` | `string[]` | Bullet points of component responsibilities. |
 | `details.files` | `string[]` | File paths or file objects associated with the component. |
 | `details.apis` | `object[]` | Exposed endpoints: `[{ method: "POST", path: "/orders" }]`. |

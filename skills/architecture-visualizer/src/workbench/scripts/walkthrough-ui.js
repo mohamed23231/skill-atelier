@@ -192,7 +192,7 @@ function playWalkPackets(entries, index) {
     const edgeId = walkEdgeId(hop, LAYOUT_DATA.edges || []);
     const edge = edgeById.get(edgeId);
     const path = document.getElementById(`path-${edgeId}`);
-    return edge && path ? { path, reverse: edge.source === hop.to && edge.target === hop.from } : null;
+    return edge && path ? { edge, path, reverse: edge.source === hop.to && edge.target === hop.from } : null;
   }).filter(Boolean);
   if (!hops.length) return;
   const run = walkPacketRun;
@@ -214,7 +214,7 @@ function playWalkPackets(entries, index) {
         const t = Math.max(0, Math.min(1, (now - start) / duration));
         const point = hop.path.getPointAtLength(length * (hop.reverse ? 1 - t : t));
         group.setAttribute('transform', `translate(${point.x},${point.y})`);
-        group.style.opacity = t > 0 && t < 1 ? '1' : '0';
+        group.style.opacity = t > 0 && t < 1 && !insideEdgeLabel(hop.edge, point, 9) ? '1' : '0';
         if (t < 1) window.requestAnimationFrame(tick);
         else group.remove();
       };

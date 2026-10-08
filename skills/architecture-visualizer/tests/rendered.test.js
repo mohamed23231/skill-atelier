@@ -1208,6 +1208,19 @@ const cases = [
     assert.strictEqual(m.view, 'data_flow');
     assert.ok(/Data flow/i.test(m.status), m.status);
   }],
+  ['viewer: moving flow dots and walkthrough packets pass behind connection labels, never over their text', () => {
+    const overLabel = `(x, y) => LAYOUT_DATA.edges.some(e => e.labelBounds && x > e.labelBounds.left && x < e.labelBounds.left + e.labelBounds.width && y > e.labelBounds.top && y < e.labelBounds.top + e.labelBounds.height)`;
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      ev(`new Promise(r => { switchView(VIEWS.DATA_FLOW); const over = ${overLabel}; let seen = 0, bad = 0;
+        const t = setInterval(() => document.querySelectorAll('.flow-particle').forEach(c => { seen++; if (c.style.opacity !== '0' && over(+c.getAttribute('cx'), +c.getAttribute('cy'))) bad++; }), 25);
+        setTimeout(() => { clearInterval(t); r(JSON.stringify({ seen, bad })); }, 1500); })`),
+      ev(`new Promise(r => { switchView(VIEWS.ARCHITECTURE); startWalkthrough(); if (walkEntries()[state.walkCursor]?.kind !== "step") walkNext(); const over = ${overLabel}; let seen = 0, bad = 0;
+        const t = setInterval(() => document.querySelectorAll('.walk-packet').forEach(g => { const m = /translate\\(([-\\d.]+),([-\\d.]+)\\)/.exec(g.getAttribute('transform') || ''); if (!m) return; seen++;
+          if (g.style.opacity === '1' && over(+m[1], +m[2])) bad++; }), 25);
+        setTimeout(() => { clearInterval(t); r(JSON.stringify({ seen, bad })); }, 1500); })`)] }]);
+    const values = phase.filter(step => step && step.kind === 'eval').map(step => JSON.parse(step.value));
+    values.forEach(v => { assert.ok(v.seen > 20, JSON.stringify(v)); assert.strictEqual(v.bad, 0, JSON.stringify(v)); });
+  }],
   ['share: a keyboard-only reader walks every step of example 3 from the first to the outcome end', () => {
     const J = () => key('j', { code: 'KeyJ', windowsVirtualKeyCode: 74 });
     const steps = [ev(`(document.activeElement && document.activeElement.blur && document.activeElement.blur(), window.__visited = [], 0)`), J(),
@@ -3448,6 +3461,17 @@ const cases = [
       assert.deepStrictEqual(obs.stats, obs.expectedStats);
       assert.deepStrictEqual(obs.tabs, obs.expectedTabs);
       assert.strictEqual(obs.lanes, obs.expectedLanes);
+    },
+  ],
+  [
+    'p4: polish the Overview counts read correctly for one of anything and count the lane a model without boundaries gets',
+    () => {
+      const spec = { schemaVersion: 2, meta: { title: 'One service', status: 'PROPOSED', grounding: 'illustrative' }, boundaries: [],
+        nodes: [{ id: 'only', label: 'Only Service', type: 'service' }], edges: [], evidence: [], policies: [], scenarios: [] };
+      const facts = JSON.parse(lastEvalValue(runPhases(spec, [{ width: 1440, height: 900, steps: [ev(`
+        JSON.stringify([...document.querySelectorAll('#overview-facts .overview-fact')].map(item => item.querySelector('dd').textContent + ' ' + item.querySelector('dt').textContent))
+      `)] }])[0]));
+      assert.deepStrictEqual(facts, ['1 component', '1 layer', '0 connections']);
     },
   ],
   [

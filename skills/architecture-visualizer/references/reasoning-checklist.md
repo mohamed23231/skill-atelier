@@ -96,7 +96,7 @@ node bin/arch-viz.js validate <spec.json> --strict          # non-zero exit on a
 | 6 | Readable labels | label 22 / technology 28 / edge 32 character budgets |
 | 7 | Deterministic layout | the layout is computed twice and compared |
 | 8 | Balanced density | nodes per boundary, edge-to-node ratio |
-| 10 | Progressive disclosure | nodes with an empty inspector |
+| 10 | Progressive disclosure | nodes with an empty component sheet |
 | 11 | Explicit assumptions | unjustified `ASSUMED` / `UNKNOWN` |
 | 12 | Evidence-backed claims | `VERIFIED` without file / API / table |
 | 13 | Repository grounding | `VERIFIED` paths resolved on disk (`SKIP` when `meta.grounding` is `illustrative`) |

@@ -10,29 +10,29 @@ Arch-Viz prevents this through **Progressive Disclosure**: revealing details onl
 
 ### Tier 1: Glancable Top-Level Architecture
 - What the user sees upon initial render:
-  - Clear, tidy boundary containers (`Frontend`, `API Gateway`, `Core Services`, `Data Tier`, `External Services`).
+  - Clear, tidy swimlanes (`Frontend`, `API Gateway`, `Core Services`, `Data Tier`, `External Services`).
   - High-level nodes with clear names and technology labels.
   - Directional edges showing the core communication pathways.
 - Result: The user understands system topology in 15 seconds.
 
 ### Tier 2: Interactive Exploration & Drilling In
 - When the user wants to understand relationships:
-  - **Click any node:** The Inspector Drawer slides in, displaying:
+  - **Click any node:** Its component sheet opens in the reading rail and the camera glides to its neighbourhood, displaying:
     - Complete responsibility summary.
     - Upstream and downstream dependencies.
     - Linked repository files and API contracts.
     - DB tables, test suites, and tasks.
-  - **Dependency Highlighting:** Clicking "Highlight Dependency Chain" dims the rest of the canvas and highlights only the upstream and downstream blast radius.
+  - **Dependency Highlighting:** Selection spotlights the neighbourhood; Show neighbours / Show blast radius in the sheet or palette isolates relationships. Back, Escape, the close button, or an empty-canvas click clears selection.
   - **Collapsible Boundaries:** Click a boundary title (or focus it and press Enter) to collapse the whole tier into
     a pill. Its nodes and every edge touching them disappear together, so a collapsed tier never leaves dangling arrows.
 
 ### Tier 3: Coordinated Deep-Dive Views
-- When the user needs a specialized lens, switch view tabs:
-  - **Before vs After:** To examine a migration or refactor blast radius.
-  - **Data Flow:** To follow data transformation with animated particle packets.
-  - **Sequence Flow:** To walk step-by-step through a complex request or saga.
-  - **Database ER:** To view physical tables, foreign keys, and indexes.
-  - **Implementation Plan:** To review phased engineering tasks and PR breakdowns.
+- When the user needs a specialized perspective, use lenses and rail chapters:
+  - **Change lens / Changes chapter:** To examine Current / Proposed / Diff and a migration or refactor blast radius.
+  - **Structure → Filters → Data flow:** To follow data paths with animated particles.
+  - **Walkthrough chapter and track:** To walk numbered steps, decisions, and outcomes through a complex request or saga.
+  - **Data chapter:** To read table and relationship cards, columns, keys, and indexes.
+  - **Plan chapter:** To review phased engineering tasks and PR breakdowns.
 
 ---
 

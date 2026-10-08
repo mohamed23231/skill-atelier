@@ -1,4 +1,10 @@
 // Animated Flow Particles
+
+// Moving dots pass behind their connection's label rather than over its text.
+function insideEdgeLabel(edge, point, pad) {
+  const b = edge && edge.labelBounds;
+  return !!b && point.x > b.left - pad && point.x < b.left + b.width + pad && point.y > b.top - pad && point.y < b.top + b.height + pad;
+}
 function toggleFlowAnimation() {
   if (state.prefersReducedMotion && !state.animatingFlow) {
     announceStatus('Flow animation is disabled by reduced-motion preference.');
@@ -43,6 +49,7 @@ function startFlowParticles() {
     });
     particlesLayer.appendChild(circle);
     return {
+      edge: e,
       element: circle,
       pathEl,
       length,
@@ -63,6 +70,7 @@ function startFlowParticles() {
         const pt = p.pathEl.getPointAtLength(p.progress);
         p.element.setAttribute('cx', pt.x);
         p.element.setAttribute('cy', pt.y);
+        p.element.style.opacity = insideEdgeLabel(p.edge, pt, 4) ? '0' : '';
       }
     });
     particleAnimationId = requestAnimationFrame(animate);

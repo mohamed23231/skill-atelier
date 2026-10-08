@@ -143,7 +143,7 @@ When policies fail or evidence checks detect discrepancies, structured findings 
 
 Findings are surfaced directly in:
 1. **CLI Output**: Formatted warning and error summaries during `arch-viz validate`.
-2. **Offline HTML Workbench**: The interactive Findings & Evidence inspector panel with severity badges and node-highlight links.
+2. **Offline HTML Workbench**: The Review and Evidence rail chapters with severity badges, evidence locators, and links that select components or frame rule endpoints.
 3. **Markdown Architecture Report**: Dedicated `### Findings` and `### Evidence manifest` sections.
 
 ---

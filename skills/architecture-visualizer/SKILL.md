@@ -3,7 +3,7 @@ name: architecture-visualizer
 description: Use when designing, analyzing, refactoring, or documenting non-trivial software systems, distributed services, database migrations, or feature flows that require grounded repository evidence, boundary modeling, policy validation, and interactive offline visual workbenches.
 license: MIT
 metadata:
-  version: "2.0.0"
+  version: "3.0.0"
 ---
 
 # Architecture Visualizer
@@ -68,9 +68,9 @@ Compile the specification into a self-contained, dependency-free HTML workbench 
 arch-viz build <spec.json> -o dist/architecture.html --md dist/architecture.md --strict --repo-root .
 ```
 The output file is completely offline (no CDNs, no external runtime dependencies). It includes:
-- Four-region responsive workbench with navigator, canvas, minimap, and inspector drawers.
+- Responsive header, trust strip, swimlane canvas, and reading rail with chapters and component sheets.
 - Focus-neighbor and affected-path isolation, search, and URL state sharing.
-- Interactive scenario player, Before vs After diff toggle, and data flow animations.
+- Structure, Evidence, Change, and Risk lenses, branching walkthroughs, and data flow animations.
 - Exports for standalone HTML, SVG, PNG (via browser canvas), Markdown, and Mermaid.
 
 ### 7. Obtain Explicit Approval Before Application Changes
