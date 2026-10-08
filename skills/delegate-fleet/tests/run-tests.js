@@ -2177,6 +2177,30 @@ test('opencode gets a private data dir per workspace, stable across attempts, wi
   assert.strictEqual(adapter.isolate({ env }), null, 'no workspace, no isolation');
 });
 
+test('opencode data dir is private to the user and drops auth links whose shared file is gone', () => {
+  const adapter = require('../scripts/adapters/opencode.js');
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'df-xdg-'));
+  fs.mkdirSync(path.join(shared, 'opencode'));
+  fs.writeFileSync(path.join(shared, 'opencode', 'auth.json'), '{}');
+  const env = { XDG_DATA_HOME: shared };
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'df-ws-'));
+  const first = adapter.isolate({ cwd, env });
+  const data = path.join(first.XDG_DATA_HOME, 'opencode');
+  if (process.platform !== 'win32') {
+    assert.strictEqual(fs.statSync(data).mode & 0o777, 0o700, 'session history must not be readable by other users');
+    assert.strictEqual(fs.statSync(first.XDG_DATA_HOME).mode & 0o777, 0o700);
+  }
+  assert.ok(fs.lstatSync(path.join(data, 'auth.json')).isSymbolicLink());
+  fs.rmSync(path.join(shared, 'opencode', 'auth.json'));
+  adapter.isolate({ cwd, env });
+  assert.throws(() => fs.lstatSync(path.join(data, 'auth.json')), /ENOENT/, 'a link to credentials no longer shared is removed');
+  // A dangling link from a moved XDG_DATA_HOME is re-pointed, not kept.
+  fs.symlinkSync(path.join(os.tmpdir(), 'df-gone', 'auth.json'), path.join(data, 'auth.json'));
+  fs.writeFileSync(path.join(shared, 'opencode', 'auth.json'), '{}');
+  adapter.isolate({ cwd, env });
+  assert.strictEqual(fs.readlinkSync(path.join(data, 'auth.json')), path.join(shared, 'opencode', 'auth.json'));
+});
+
 test('quota: a worker whose output says it is out of quota is marked, and routes skip it', () => {
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
   writeConfig(repo, { workers: { claude: { cli: H.STUB }, codex: { cli: H.STUB } }, routes: { mechanical: [{ backend: 'claude' }, { backend: 'codex' }] } });

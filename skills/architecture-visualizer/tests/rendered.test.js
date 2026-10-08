@@ -371,7 +371,12 @@ main();
 `;
 
 const ERROR_PRELOAD =
-  'window.__errors = []; window.onerror = function (msg, url, line, col, err) { window.__errors.push({ msg: String(msg), url: url, line: line, col: col, stack: err && err.stack }); };';
+  'window.__errors = []; window.onerror = function (msg, url, line, col, err) { window.__errors.push({ msg: String(msg), url: url, line: line, col: col, stack: err && err.stack }); };'
+  // macOS overlays scrollbars; Linux and Windows reserve their width. ARCH_VIZ_CLASSIC_SCROLLBARS=1 makes a
+  // macOS run reserve it too, so layout checks see what CI and most readers see.
+  + (process.env.ARCH_VIZ_CLASSIC_SCROLLBARS === '1'
+    ? ' document.addEventListener("DOMContentLoaded", function () { var s = document.createElement("style"); s.textContent = "::-webkit-scrollbar { width: 15px; height: 15px; background: #888; }"; document.head.appendChild(s); });'
+    : '');
 
 const LAUNCH_RETRY_LIMIT = 2;
 
@@ -650,7 +655,8 @@ function regionsScript() {
   return `(async function () {
     ${PAGE_HELPERS}
     await __sleep(120);
-    var out = { innerWidth: window.innerWidth, innerHeight: window.innerHeight, present: {}, rects: {}, visible: {} };
+    // pageWidth excludes a classic (Linux, Windows) scrollbar; innerWidth includes it.
+    var out = { innerWidth: window.innerWidth, pageWidth: document.documentElement.clientWidth, innerHeight: window.innerHeight, present: {}, rects: {}, visible: {} };
     ${q(REGION_NAMES)}.forEach(function (name) {
       var el = __region(name);
       out.present[name] = !!el;
@@ -680,7 +686,7 @@ function stackedRailSteps() {
       __record('scrollBefore', window.scrollY);
       var rail = __region('rail').getBoundingClientRect(), canvas = __region('canvas').getBoundingClientRect();
       __record('railBelowCanvas', rail.top >= canvas.bottom - 1);
-      __record('railFullWidth', Math.abs(rail.width - innerWidth) <= 1);
+      __record('railFullWidth', Math.abs(rail.width - document.documentElement.clientWidth) <= 1);
       openInspectorForNode('api');
       await __sleep(400);
       __record('scrollAfterSelect', window.scrollY);
@@ -814,6 +820,7 @@ function tabletRailOverlaySteps() {
       ${PAGE_HELPERS}
       window.__obs = {};
       __record('innerWidth', window.innerWidth);
+      __record('pageWidth', document.documentElement.clientWidth);
       __record('docScrollWidthInitial', document.documentElement.scrollWidth);
       __record('railInitialOpen', __open('rail'));
       __record('railInitialVisible', __visible(__region('rail')));
@@ -934,7 +941,7 @@ function assertTabletRailStacked(raw) {
     assert.ok(raw[rail].y >= raw[canvas].y + raw[canvas].height - 1, `${rail} is not below the canvas`);
   });
   assert.strictEqual(raw.railOpenAfterClose, 'true', 'the stacked rail stays open');
-  assert.ok(Math.abs(raw.canvasWidthAfterClose - raw.canvasWidthInitial) <= 1 && Math.abs(raw.canvasWidthInitial - raw.innerWidth) <= 1,
+  assert.ok(Math.abs(raw.canvasWidthAfterClose - raw.canvasWidthInitial) <= 1 && Math.abs(raw.canvasWidthInitial - (raw.pageWidth || raw.innerWidth)) <= 1,
     'the stacked canvas spans the page and keeps its width');
   assert.ok(
     raw.docScrollWidthInitial <= raw.innerWidth + 1 && raw.docScrollWidthOpen <= raw.innerWidth + 1 &&
@@ -987,7 +994,7 @@ function assertRegionLayout(raw, width) {
   } else if (raw.rects.rail) {
     // Stacked: the rail is a page section under the canvas, as wide as the page.
     assert.ok(raw.rects.rail.y >= raw.rects.canvas.y + raw.rects.canvas.height - 1, `rail should sit below the canvas at ${width}px`);
-    assert.ok(Math.abs(raw.rects.rail.width - width) <= 1, `stacked rail should span the page at ${width}px`);
+    assert.ok(Math.abs(raw.rects.rail.width - (raw.pageWidth || width)) <= 1, `stacked rail should span the page at ${width}px`);
   }
 
   const visibleNames = REGION_NAMES.filter((name) => raw.visible[name]);
@@ -2750,8 +2757,8 @@ const cases = [
         const mark = document.querySelector('.brand-mark').getBoundingClientRect();
         const palette = document.getElementById('btn-palette').getBoundingClientRect();
         return {
-          scroll: document.documentElement.scrollWidth - innerWidth,
-          offscreen: controls.filter((b) => { const r = b.getBoundingClientRect(); return r.left < 0 || r.right > innerWidth + 0.5; }).map((b) => b.id || b.getAttribute('aria-label')),
+          scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          offscreen: controls.filter((b) => { const r = b.getBoundingClientRect(); return r.left < 0 || r.right > document.documentElement.clientWidth + 0.5; }).map((b) => b.id || b.getAttribute('aria-label')),
           palette: palette.width > 0 && palette.left >= mark.right,
           markWidth: mark.width,
         };

@@ -57,16 +57,24 @@ module.exports = {
     const key = crypto.createHash('sha1').update(path.resolve(cwd)).digest('hex').slice(0, 16);
     const root = path.join(os.tmpdir(), 'delegate-fleet-opencode', key);
     const data = path.join(root, 'opencode');
-    fs.mkdirSync(data, { recursive: true });
+    // The data dir holds session history: only this user may read it, whatever the umask.
+    fs.mkdirSync(data, { recursive: true, mode: 0o700 });
+    for (const dir of [root, data]) { try { fs.chmodSync(dir, 0o700); } catch { /* not ours to tighten */ } }
     for (const name of ['auth.json', 'mcp-auth.json']) {
       const target = path.join(shared, name);
       const link = path.join(data, name);
-      if (!fs.existsSync(target)) continue;
+      if (!fs.existsSync(target)) {
+        // A link to credentials that are no longer shared must not outlive them.
+        // unlinkSync, not rmSync: rmSync follows a dangling link, finds nothing and silently keeps it.
+        try { if (fs.lstatSync(link).isSymbolicLink()) fs.unlinkSync(link); } catch { /* no link */ }
+        continue;
+      }
       // Re-point a link left by an earlier run (a moved or deleted XDG_DATA_HOME leaves it dangling).
       let current = null;
       try { current = fs.readlinkSync(link); } catch { current = null; }
       if (current === target) continue;
-      try { fs.rmSync(link, { force: true }); fs.symlinkSync(target, link); } catch { /* a concurrent run linked it first */ }
+      try { fs.unlinkSync(link); } catch { /* no earlier link */ }
+      try { fs.symlinkSync(target, link); } catch { /* a concurrent run linked it first */ }
     }
     return { XDG_DATA_HOME: root };
   },
