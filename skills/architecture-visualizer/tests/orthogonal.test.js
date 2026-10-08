@@ -69,10 +69,10 @@ function verify(layout, result, margin = layout.config ? 12 : 14, rounded = true
       assert.equal(slot.height, 18);
       assert.equal(slot.orientation, a.y === b.y ? 'horizontal' : 'vertical');
       if (slot.orientation === 'horizontal') {
-        assert.equal(slot.y, a.y);
+        assert.equal((slot.tether || slot).y, a.y);
         assert(slot.x >= Math.min(a.x, b.x) && slot.x <= Math.max(a.x, b.x));
       } else {
-        assert.equal(slot.x, a.x);
+        assert.equal((slot.tether || slot).x, a.x);
         assert(slot.y >= Math.min(a.y, b.y) && slot.y <= Math.max(a.y, b.y));
       }
       const box = slotBox(slot);
@@ -151,13 +151,13 @@ const cases = [
   ['shared source and target faces spread ordered ports', () => {
     const layout = input([node('a', 0, 100), node('b', 300, 0, 1), node('c', 300, 200, 1)], [edge('ac', 'a', 'c'), edge('ab', 'a', 'b')]);
     const result = routeOrthogonal(layout);
-    assert.equal(result.routes.ab.points[0].y, 123);
-    assert.equal(result.routes.ac.points[0].y, 137);
+    assert.equal(result.routes.ab.points[0].y, 112);
+    assert.equal(result.routes.ac.points[0].y, 148);
     verify(layout, result);
     const incoming = input([node('a', 0, 0), node('b', 0, 200), node('c', 300, 100, 1)], [edge('bc', 'b', 'c'), edge('ac', 'a', 'c')]);
     const routes = routeOrthogonal(incoming);
-    assert.equal(routes.routes.ac.points.at(-1).y, 123);
-    assert.equal(routes.routes.bc.points.at(-1).y, 137);
+    assert.equal(routes.routes.ac.points.at(-1).y, 112);
+    assert.equal(routes.routes.bc.points.at(-1).y, 148);
     verify(incoming, routes);
   }],
   ['spanning edge avoids a blocking card and boundary header', () => {
@@ -244,7 +244,7 @@ const cases = [
     const result = routeOrthogonal(layout, { labelWidths: { ab1: 120, ab2: 120 } });
     assert.equal(result.routes.ab1.labelSlot.width, 120);
     assert.equal(result.routes.ab2.labelSlot.width, 120);
-    assert.notEqual(result.routes.ab1.labelSlot.x, result.routes.ab2.labelSlot.x);
+    assert.notDeepEqual([result.routes.ab1.labelSlot.x, result.routes.ab1.labelSlot.y], [result.routes.ab2.labelSlot.x, result.routes.ab2.labelSlot.y]);
     verify(layout, result);
     assert.equal(routeOrthogonal(layout, { labelWidths: { ab1: 1000, ab2: 1000 } }).routes.ab1.labelSlot, null);
   }],
@@ -259,7 +259,7 @@ const cases = [
     assert.equal(slot.orientation, 'vertical');
     verify(layout, result);
   }],
-  ['ports occupy the middle seventy percent with an eight pixel minimum', () => {
+  ['ports span sixty percent with an eight pixel minimum', () => {
     const nodes = [node('a', 0, 200), ...Array.from({ length: 6 }, (_, i) => node(`b${i}`, 300, i * 100, 1))];
     const layout = input(nodes, nodes.slice(1).map(n => edge(`a${n.id}`, 'a', n.id)));
     const result = routeOrthogonal(layout);
@@ -267,7 +267,7 @@ const cases = [
     verify(layout, result);
     const pair = input([node('a', 0, 100), node('b', 300, 0, 1), node('c', 300, 200, 1)], [edge('ab', 'a', 'b'), edge('ac', 'a', 'c')]);
     const routes = routeOrthogonal(pair).routes;
-    assert.equal(routes.ac.points[0].y - routes.ab.points[0].y, 0.7 * 60 / 3);
+    assert.equal(routes.ac.points[0].y - routes.ab.points[0].y, 0.6 * 60);
   }],
   ['backward routing ignores distant columns and uses a free gap between cards', () => {
     const layout = input([
@@ -506,6 +506,61 @@ cases.push(['lane routes clear every card and gutter, pack every label, and stay
       assert(short / layout.edges.length >= 0.6, `${short}/${layout.edges.length} short`);
       assert(straight >= 4, `${straight} straight`);
     }
+  }
+}]);
+
+cases.push(['example and adversarial labels clear every other connection', () => {
+  const specs = Object.entries(fixtures).filter(([name]) => name.startsWith('ADVERSARIAL_'));
+  for (const name of fs.readdirSync(path.join(__dirname, '../examples')).sort()) {
+    specs.push([name, JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8'))]);
+  }
+  for (const [name, spec] of specs) {
+    const layout = computeDefaultLayout(fixtures.clone(spec));
+    for (const edge of layout.edges) {
+      assert(edge.labelSlot, `${name}/${edge.id} needs a label`);
+      for (const other of layout.edges) {
+        if (other.id === edge.id) continue;
+        for (let i = 1; i < other.polyline.length; i++) {
+          assert(!crosses(other.polyline[i - 1], other.polyline[i], edge.labelBounds), `${name}/${edge.id} label crosses ${other.id}`);
+        }
+      }
+    }
+  }
+}]);
+
+cases.push(['lane face ports span sixty percent and overlapping channel runs stay fourteen pixels apart', () => {
+  const specs = Object.entries(fixtures).filter(([name]) => name.startsWith('ADVERSARIAL_'));
+  for (const name of fs.readdirSync(path.join(__dirname, '../examples')).sort()) {
+    specs.push([name, JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8'))]);
+  }
+  for (const [name, spec] of specs) {
+    const layout = computeDefaultLayout(fixtures.clone(spec));
+    const result = routeOrthogonal(layout, { direction: 'TB', labelWidths: Object.fromEntries(layout.edges.map(e => [e.id, e.labelWidth])) });
+    const faces = new Map();
+    const channels = [];
+    for (const edge of layout.edges) {
+      const points = result.routes[edge.id].points;
+      for (const [id, p] of [[edge.source, points[0]], [edge.target, points.at(-1)]]) {
+        const n = layout.nodes.find(n => n.id === id);
+        const horizontalFace = p.y === n.y || p.y === n.y + n.height;
+        const key = `${id}:${horizontalFace ? p.y : p.x}`;
+        if (!faces.has(key)) faces.set(key, { size: horizontalFace ? n.width : n.height, positions: [] });
+        faces.get(key).positions.push(horizontalFace ? p.x : p.y);
+      }
+      for (let i = 1; i < points.length - 2; i++) {
+        const a = points[i], b = points[i + 1];
+        const horizontal = a.y === b.y;
+        channels.push({ id: edge.id, horizontal, fixed: horizontal ? a.y : a.x, low: Math.min(horizontal ? a.x : a.y, horizontal ? b.x : b.y), high: Math.max(horizontal ? a.x : a.y, horizontal ? b.x : b.y) });
+      }
+    }
+    faces.forEach(({ size, positions }) => {
+      if (positions.length >= 2) assert(Math.max(...positions) - Math.min(...positions) >= size * 0.6 - 1e-8, `${name}: port span`);
+    });
+    channels.forEach((a, i) => channels.slice(i + 1).forEach(b => {
+      if (a.id === b.id || a.horizontal !== b.horizontal || Math.max(a.low, b.low) >= Math.min(a.high, b.high)) return;
+      const separation = Math.abs(a.fixed - b.fixed);
+      assert(separation >= 14 - 1e-8, `${name}: parallel channel separation ${separation}`);
+    }));
   }
 }]);
 

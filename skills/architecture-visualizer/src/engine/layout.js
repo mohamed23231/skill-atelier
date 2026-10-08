@@ -427,6 +427,18 @@ function assignLaneSlots(boundaries, edges) {
       neighbors.get(id).push(other);
     }
   });
+  const laneOf = new Map(boundaries.flatMap((b, rank) => b.nodes.map(n => [n.id, rank])));
+  const nodes = new Map(boundaries.flatMap(b => b.nodes.map(n => [n.id, n])));
+  const crossings = () => {
+    const links = edges.filter(e => laneOf.has(e.source) && laneOf.has(e.target) && laneOf.get(e.source) !== laneOf.get(e.target))
+      .map(e => laneOf.get(e.source) < laneOf.get(e.target) ? [e.source, e.target] : [e.target, e.source]);
+    let count = 0;
+    links.forEach(([a, b], i) => links.slice(i + 1).forEach(([c, d]) => {
+      if (laneOf.get(a) === laneOf.get(c) && laneOf.get(b) === laneOf.get(d)
+        && (nodes.get(a).slot - nodes.get(c).slot) * (nodes.get(b).slot - nodes.get(d).slot) < 0) count++;
+    }));
+    return count;
+  };
   const placed = new Map();
   for (const sweep of [boundaries, [...boundaries].reverse()]) {
     sweep.forEach(b => {
@@ -447,6 +459,34 @@ function assignLaneSlots(boundaries, edges) {
       });
     });
   }
+  // Preserve sweep results on ties; compare mirrored and pairwise swapped slots.
+  boundaries.forEach(b => {
+    const movable = b.nodes.filter(n => typeof n.order !== 'number');
+    let best = crossings();
+    const consider = permutation => {
+      const previous = movable.map(n => n.slot);
+      movable.forEach((n, i) => { n.slot = permutation[i]; });
+      const score = crossings();
+      if (score < best) best = score;
+      else movable.forEach((n, i) => { n.slot = previous[i]; });
+    };
+    const mirrored = movable.map(n => n.slot);
+    const rows = [...new Set(movable.map(n => n.row))];
+    rows.forEach(row => {
+      const indexes = movable.map((n, i) => n.row === row ? i : -1).filter(i => i >= 0);
+      const slots = indexes.map(i => mirrored[i]).reverse();
+      indexes.forEach((index, i) => { mirrored[index] = slots[i]; });
+    });
+    consider(mirrored);
+    for (let i = 0; i < movable.length; i++) {
+      for (let j = i + 1; j < movable.length; j++) {
+        if (movable[i].row !== movable[j].row) continue;
+        const slots = movable.map(n => n.slot);
+        [slots[i], slots[j]] = [slots[j], slots[i]];
+        consider(slots);
+      }
+    }
+  });
 }
 
 /**

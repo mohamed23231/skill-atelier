@@ -1101,4 +1101,25 @@ cases.push(['sparse lanes leave gaps that align connected cards', () => {
   assert.strictEqual(layout.edges[0].polyline.length, 2);
 }]);
 
+cases.push(['example labels display in full through the twenty-eight character limit', () => {
+  assert.strictEqual(geometry.labelDisplayText('x'.repeat(28)), 'x'.repeat(28));
+  assert.strictEqual(geometry.labelDisplayText('x'.repeat(29)), 'x'.repeat(27) + '…');
+  for (const name of fs.readdirSync(path.join(__dirname, '../examples')).sort()) {
+    const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8'));
+    for (const edge of spec.edges) {
+      const label = edge.label || edge.packetLabel || '';
+      assert.strictEqual(geometry.labelDisplayText(label), label, `${name}/${edge.id}`);
+    }
+  }
+}]);
+
+cases.push(['saga preserves its three jumps and fourteen bends after label and port spreading', () => {
+  const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '../examples/3-async-event-driven-workflow/architecture.json'), 'utf8'));
+  const first = computeDefaultLayout(spec);
+  assert.strictEqual(first.routingStats.cardCrossings, 0);
+  assert(first.routingStats.crossings <= 3);
+  assert.strictEqual(first.routingStats.bends, 14);
+  assert.deepStrictEqual(computeDefaultLayout(spec), first);
+}]);
+
 module.exports = { name: 'Layout Engine', cases };

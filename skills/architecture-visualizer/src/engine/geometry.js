@@ -11,7 +11,7 @@
   const LABEL_HEIGHT = 18;
   const LABEL_CLEARANCE = 10;
   const EDGE_END_GAP = 10;
-  const LABEL_MAX_CHARS = 20;
+  const LABEL_MAX_CHARS = 28;
   const ROUTE_SAMPLES = 48;
   // Every component uses the same rounded card as nodeShape().
   const DEFAULT_RX = 12;

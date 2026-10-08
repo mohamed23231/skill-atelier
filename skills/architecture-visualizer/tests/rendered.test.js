@@ -3370,4 +3370,17 @@ const cases = [
 
 ];
 
+cases.push(['swimlane example labels render in full and retain desktop fit', () => {
+  for (const name of fs.readdirSync(path.join(__dirname, '../examples')).sort()) {
+    const probe = ev(`JSON.stringify({ zoom: state.zoom, labels: LAYOUT_DATA.edges.map(edge => ({
+      id: edge.id, expected: edge.label || edge.packetLabel || '',
+      actual: [...document.querySelectorAll('#label-' + edge.id + ' text')].map(text => text.textContent).join('')
+    })) })`);
+    const results = runPhases('examples/' + name + '/architecture.json', [{ width: 1440, height: 900, steps: [probe] }]);
+    const obs = JSON.parse(lastEvalValue(results[0]));
+    assert(obs.zoom >= 0.75, `${name}: fit zoom ${obs.zoom}`);
+    obs.labels.forEach(label => assert.strictEqual(label.actual, label.expected, `${name}/${label.id}`));
+  }
+}]);
+
 module.exports = { name: 'Rendered DOM Verification', cases };
