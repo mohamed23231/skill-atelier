@@ -1199,4 +1199,23 @@ cases.push(['gap expansion leaves empty boundaries before the gap in place', () 
   widened.boundaries.slice(1).forEach((b, i) => assert.ok(b.y >= widened.boundaries[i].y + widened.boundaries[i].height, 'boundary order and spacing'));
 }]);
 
+cases.push(['lane slot swaps score only affected crossing pairs on dense graphs', () => {
+  // Exercise the private grid search without paying for orthogonal routing.
+  const source = fs.readFileSync(path.join(__dirname, '../src/engine/layout.js'), 'utf8');
+  const assign = vm.runInNewContext(source.slice(source.indexOf('function assignLaneSlots('),
+    source.indexOf('/**\n * Iterative barycenter')) + ';assignLaneSlots');
+  let reads = 0;
+  const boundaries = [0, 1].map(rank => ({ id: `b${rank}`, nodes: Array.from({ length: 20 }, (_, i) => {
+    let slot;
+    return { id: `n${rank}_${i}`, get slot() { reads++; return slot; }, set slot(value) { slot = value; } };
+  }) }));
+  const edges = boundaries[0].nodes.flatMap(a => boundaries[1].nodes.map(b => ({ source: a.id, target: b.id })));
+  assign(boundaries, edges, 4);
+  assert.ok(reads < 5000000, `${reads} slot reads: unchanged crossing pairs were rescored`);
+  boundaries.forEach(boundary => {
+    const occupied = new Set(boundary.nodes.map(node => `${node.row}:${node.slot}`));
+    assert.strictEqual(occupied.size, boundary.nodes.length);
+  });
+}]);
+
 module.exports = { name: 'Layout Engine', cases };

@@ -33,9 +33,11 @@ function narrateInteraction(interaction, nodeLabel) {
   const from = labelOf(interaction.from, nodeLabel);
   const to = labelOf(interaction.to, nodeLabel);
   const label = interaction.label;
-  let sentence = label == null || label === ''
-    ? `${from} calls ${to}.`
-    : `${from} sends ${label} to ${to}.`;
+  let sentence = !from || !to
+    ? (label == null || label === '' ? 'An interaction occurs.' : `Interaction: ${label}.`)
+    : label == null || label === ''
+      ? `${from} calls ${to}.`
+      : `${from} sends ${label} to ${to}.`;
   const payload = interaction.payload;
   if (payload && typeof payload === 'object') {
     const keys = Object.keys(payload).slice(0, 4);

@@ -72,6 +72,18 @@ function trackContext(stages) {
 }
 
 const cases = [
+  ['walk controls restart the selected scenario after ending', () => {
+    const { context } = trackContext([]);
+    context.ARCH_SPEC.scenarios.push({ id: 'second', stages: [] });
+    context.selectedScenario = () => context.ARCH_SPEC.scenarios[1];
+    const started = [];
+    context.startWalkthrough = id => started.push(id);
+    context.walkNext(); context.walkPrev();
+    assert.deepStrictEqual(started, ['second', 'second']);
+    context.selectedScenario = () => null;
+    context.walkNext(); context.walkPrev();
+    assert.deepStrictEqual(started.slice(2), ['test', 'test']);
+  }],
   ['track: a decision with no outcomes renders its synthetic end in the main lane', () => {
     const { context, track } = trackContext([{ id: 'decision', kind: 'branch', branches: [] }]);
     context.renderWalkTrack();

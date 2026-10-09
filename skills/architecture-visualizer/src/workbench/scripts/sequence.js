@@ -46,6 +46,7 @@ function spotlightInteractions(interactions) {
   });
 
   document.querySelectorAll('.node-group').forEach(el2 => {
+    el2.classList.remove('out-of-focus', 'walk-active');
     el2.classList.toggle('selected', participants.has(el2.id.replace('node-', '')));
   });
   document.querySelectorAll('.edge-path').forEach(p => {

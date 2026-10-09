@@ -1270,6 +1270,47 @@ const cases = [
         assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [], `${spec} at ${[320, 390][i]}px`));
     });
   }],
+  ['review r4: sequence spotlight clears walkthrough node styling', () => {
+    const nodes = ['a', 'b', 'c'].map(id => {
+      const classes = new Set(['out-of-focus', 'walk-active']);
+      return { id: `node-${id}`, classes, classList: {
+        remove(...names) { names.forEach(name => classes.delete(name)); },
+        toggle(name, on) { if (on) classes.add(name); else classes.delete(name); }
+      } };
+    });
+    const context = canvasReviewContext(['sequence'], {
+      edgeById: new Map(), LAYOUT_DATA: { edges: [] },
+      document: { querySelectorAll: selector => selector === '.node-group' ? nodes : [] }
+    });
+    context.drawGhostSteps = () => {};
+    context.spotlightInteractions([{ from: 'a', to: 'b' }]);
+    assert.deepStrictEqual(nodes.map(node => [...node.classes]), [['selected'], ['selected'], []]);
+  }],
+  ['review r4: inspector stores only decisions before its entry', () => {
+    const step = id => ({ id, kind: 'interaction', interactions: [{ from: 'a', to: 'b' }] });
+    const scenario = { id: 's', stages: [step('shared'), { id: 'first', kind: 'branch', branches: [
+      { stages: [step('alternate')] }, { default: true, stages: [step('preferred')] }
+    ] }, { id: 'later', kind: 'branch', branches: [
+      { stages: [step('later-alt')] }, { default: true, stages: [step('later-preferred')] }
+    ] }] };
+    let rows, choices, cursor;
+    const context = canvasReviewContext(['walkthrough', 'inspector'], {
+      ARCH_SPEC: { scenarios: [scenario] }, selectedScenario: () => scenario,
+      document: { getElementById: id => id === 'ins-walk' ? { replaceChildren(...items) { rows = items; } } : {},
+        querySelector: () => null },
+      startWalkthrough(id, value) { choices = value; }, walkTo(id) { cursor = id; }, openChapter() {}
+    });
+    context.sheetListItem = (number, name, note, click) => ({ name, click });
+    context.renderSheetWalkthrough('a');
+    rows.find(row => row.name === 'shared').click();
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(choices)), {});
+    assert.strictEqual(cursor, 'shared');
+    assert(context.linearizeScenario(scenario, choices).some(entry => entry.id === 'preferred'));
+    rows.find(row => row.name === 'alternate').click();
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(choices)), { first: 0 });
+    assert.strictEqual(cursor, 'alternate');
+    assert(context.linearizeScenario(scenario, choices).some(entry => entry.id === 'later-preferred'));
+  }],
   ['review r3: stacked trust pills focus the selected chapter tab', () => {
     const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 390, height: 844, steps: [ev(`(() => {
       const pill = document.querySelector('.trust-pill[data-trust="evidence"]');
@@ -4452,7 +4493,7 @@ cases.push(['r2: dense fit bounds collision probes and falls back safely', () =>
 cases.push(['r2: motion preference cancels in-flight walkthrough packets', () => {
   let listener, stopped = 0;
   const ctx = canvasReviewContext(['boot'], { state: {}, window: { matchMedia: () => ({ matches: false, addEventListener: (name, fn) => { listener = fn; } }) },
-    stopFlowParticles() {}, stopScenarioPlayback() {}, stopWalkPackets() { stopped++; } });
+    stopFlowParticles() {}, stopSequencePlayback() {}, stopScenarioPlayback() {}, stopWalkPackets() { stopped++; } });
   ctx.initMotionPreference(); listener({ matches: true });
   assert.strictEqual(stopped, 1);
 }]);
@@ -4698,6 +4739,134 @@ cases.push(['r3: fit cache distinguishes colliding weighted node geometry', () =
   ctx.fitCamera(); ctx.fitCamera(); node.x = 70; node.y = -30;
   assert.strictEqual(ctx.fitCamera().panX, 70); assert.strictEqual(calls, 2);
   node.width = 200; ctx.fitCamera(); assert.strictEqual(calls, 3);
+}]);
+
+// Fourth review regressions: canvas interaction and shared-link correctness.
+cases.push(['r4: curved obstacle drags reroute every connection', () => {
+  let routes = 0;
+  const ctx = canvasReviewContext(['drag'], { LAYOUT_DATA: { config: { router: 'curved' } },
+    requestAnimationFrame: () => 1, cancelAnimationFrame() {}, renderMinimap() {} });
+  ctx.recomputeAllEdges = () => routes++;
+  ctx.recalculateNodeEdges = () => { throw new Error('incident-only routing leaves other obstacle routes stale'); };
+  ctx.scheduleDragRoutes(['obstacle']); ctx.flushDragRoutes();
+  ctx.scheduleDragRoutes([]); ctx.flushDragRoutes();
+  assert.strictEqual(routes, 2);
+}]);
+
+cases.push(['r4: two-finger translation and scaling preserve the midpoint world point', () => {
+  const state = { zoom: 1, panX: 10, panY: 20 };
+  const ctx = canvasReviewContext(['camera'], { state, svg: { getBoundingClientRect: () => ({ left: 10, top: 20 }) },
+    actions: { setCamera: value => Object.assign(state, value) } });
+  ctx.updateTransform = () => {};
+  const touches = (x, y, gap) => [{ clientX: x - gap / 2, clientY: y }, { clientX: x + gap / 2, clientY: y }];
+  ctx.handleTouchStart({ touches: touches(110, 120, 100) });
+  ctx.handleTouchMove({ touches: touches(140, 160, 100), preventDefault() {} });
+  assert.strictEqual(state.panX, 40); assert.strictEqual(state.panY, 60); assert.strictEqual(state.zoom, 1);
+  ctx.handleTouchMove({ touches: touches(160, 180, 200), preventDefault() {} });
+  assert.strictEqual(state.panX, -30); assert.strictEqual(state.panY, 0); assert.strictEqual(state.zoom, 2);
+}]);
+
+cases.push(['r4: canvas connections are named keyboard buttons', () => {
+  const rendered = [], opened = [];
+  const ctx = canvasReviewContext(['canvas'], { LAYOUT_DATA: { edges: [{ id: 'e', source: 'a', target: 'b', path: 'M0 0L10 10', label: 'Calls' }] },
+    nodeById: new Map([['a', { label: 'Client' }], ['b', { label: 'Server' }]]), state: {},
+    boundariesLayer: {}, nodesLayer: {}, edgesLayer: { appendChild: g => rendered.push(g) }, invalidateMinimapBounds() {},
+    el: (tag, attrs) => ({ attrs, handlers: {}, appendChild() {}, setAttribute(k, v) { this.attrs[k] = v; }, addEventListener(k, f) { this.handlers[k] = f; } }),
+    withTooltip() {}, applyLens() {}, syncLabelLeader() {}, estimateLabelWidth: () => 40, labelDisplayText: x => x, openInspectorForEdge: id => opened.push(id) });
+  ctx.renderDiagram(); const g = rendered.find(g => g.attrs.id === 'edge-e');
+  assert.strictEqual(g.attrs.role, 'button'); assert.strictEqual(g.attrs.tabindex, '0');
+  assert.match(g.attrs['aria-label'], /Client.*Server.*Calls/);
+  for (const key of ['Enter', ' ']) {
+    let prevented = false, stopped = false;
+    g.handlers.keydown({ key, preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } });
+    assert(prevented && stopped);
+  }
+  assert.deepStrictEqual(opened, ['e', 'e']);
+}]);
+
+cases.push(['r4: phone presentation keeps zoom controls inside the viewport', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 390, height: 844, steps: [ev(`(() => {
+    document.body.dataset.presentation = 'true';
+    const rect = document.querySelector('.viewport-controls').getBoundingClientRect();
+    return JSON.stringify({ top: rect.top, bottom: rect.bottom });
+  })()`)] }])[0]));
+  assert(obs.top >= 0 && obs.bottom <= 844, JSON.stringify(obs));
+}]);
+
+cases.push(['r4: flow particles never intercept connection clicks', () => {
+  let attrs;
+  const ctx = canvasReviewContext(['flow'], { state: {}, LAYOUT_DATA: { edges: [{ id: 'e' }] }, VIEWS: {},
+    computeTotalVisualBounds: () => null, document: { getElementById: id => id === 'edge-e' ? { classList: { contains: () => false } } : null },
+    particlesLayer: { appendChild() {} }, el: (tag, value) => { attrs = value; return {}; },
+    performance: { now: () => 0 }, requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
+  ctx.startFlowParticles(); assert.strictEqual(attrs['pointer-events'], 'none');
+}]);
+
+cases.push(['r4: arrowheads inherit the owning edge stroke in every lens', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/workbench/styles/canvas.css'), 'utf8');
+  assert.match(css, /\.arrowhead\s*\{\s*fill:\s*context-stroke;/);
+  assert.match(css, /\.arrowhead-active\s*\{\s*fill:\s*context-stroke;/);
+}]);
+
+cases.push(['r4: mixed sequence numbering shares an unambiguous position', () => {
+  const state = { currentView: 'sequence', sequenceIndex: 1 };
+  const steps = [{ step: 2 }, {}, { step: 9 }];
+  const ctx = canvasReviewContext(['url', 'view-state'], { state, nodeById: new Map(), VIEWS: { SEQUENCE: 'sequence' }, sequenceSteps: () => steps });
+  for (const index of [1, 2]) {
+    state.sequenceIndex = index;
+    const snapshot = ctx.viewSnapshot(), link = ctx.parseViewHash(ctx.encodeViewHash(snapshot));
+    assert.strictEqual(snapshot.step, undefined); assert.strictEqual(link.stepIndex, index);
+  }
+  const restoredState = { zoom: 1, panX: 0, panY: 0 };
+  const restore = canvasReviewContext(['store', 'url', 'view-state'], { state: restoredState,
+    nodeById: new Map(), edgeById: new Map(), ARCH_SPEC: {}, LAYOUT_DATA: {}, sequenceSteps: () => steps,
+    VIEWS: { ARCHITECTURE: 'architecture', BEFORE_AFTER: 'before_after', SEQUENCE: 'sequence' },
+    LENSES: ['structure'], window: { location: { hash: '' } }, document: { body: { setAttribute() {} } },
+    endWalkthrough() {}, closeInspector() {}, fitToScreen() {} });
+  const actions = require('node:vm').runInContext('actions', restore);
+  restore.openChapter = actions.setChapter; restore.switchView = actions.setView; restore.selectLens = actions.setLens;
+  restore.goToSequenceStep = actions.setSequenceIndex;
+  for (const index of [1, 2]) {
+    state.sequenceIndex = index;
+    restore.window.location.hash = '#' + ctx.encodeViewHash(ctx.viewSnapshot());
+    restore.restoreUrlState(); assert.strictEqual(restoredState.sequenceIndex, index);
+  }
+  steps[1].step = 7; state.sequenceIndex = 1;
+  assert.strictEqual(ctx.viewSnapshot().step, 7); assert.strictEqual(ctx.sequenceIndexForStep(7), 1);
+}]);
+
+cases.push(['r4: canvas resize refits untouched views and preserves moved cameras', () => {
+  let observer, fits = 0, linked = 0, maps = 0, hasLink = false;
+  const state = { userMovedView: false };
+  const noops = ['restorePersistedLayout', 'initTheme', 'applyEmbeddedMode', 'initMotionPreference', 'setupEventListeners', 'renderDiagram', 'renderReviewNavigator', 'renderScenarioNavigator', 'renderMinimap', 'renderERView', 'renderImplementationPlanView', 'renderQualityGate', 'renderTrustStrip', 'initRail', 'renderOverviewChapter', 'renderChangesChapter', 'renderEvidenceChapter', 'renderReviewChapter', 'applyVisibility', 'applyFocusMode', 'announceStatus'];
+  const ctx = canvasReviewContext(['boot'], { state, ARCH_SPEC: {}, embeddedViewer: false, container: {}, viewStateReady: false,
+    document: { querySelector: () => null, body: { setAttribute() {} } }, performance: { now: () => 0 }, isStackedLayout: () => false,
+    window: { ResizeObserver: function(fn) { observer = fn; this.observe = () => {}; } },
+    ResizeObserver: function(fn) { observer = fn; this.observe = () => {}; },
+    fitToScreen: () => fits++, restoreUrlState: () => [], holdsLinkedCamera: () => hasLink,
+    applyLinkedCamera: () => linked++, updateMinimapViewport: () => maps++, ...Object.fromEntries(noops.map(n => [n, () => {}])) });
+  noops.forEach(n => { ctx[n] = () => {}; });
+  ctx.init(); assert.strictEqual(fits, 1); observer(); assert.strictEqual(fits, 2);
+  state.userMovedView = true; observer(); assert.strictEqual(fits, 2); assert.strictEqual(maps, 1);
+  hasLink = true; observer(); assert.strictEqual(linked, 1); assert.strictEqual(fits, 2);
+}]);
+
+cases.push(['r4: reduced motion stops sequence and walkthrough playback', () => {
+  let listener, sequence = 0, scenario = 0;
+  const ctx = canvasReviewContext(['boot'], { state: {}, window: { matchMedia: () => ({ matches: false, addEventListener: (name, fn) => { listener = fn; } }) },
+    stopFlowParticles() {}, stopWalkPackets() {}, stopSequencePlayback: () => sequence++, stopScenarioPlayback: () => scenario++ });
+  ctx.initMotionPreference(); listener({ matches: true });
+  assert.strictEqual(sequence, 1); assert.strictEqual(scenario, 1);
+}]);
+
+cases.push(['r4: camera links reject blank and overflowing coordinates', () => {
+  const ctx = canvasReviewContext(['url']);
+  for (const camera of [',,100', '1, ,100', '1e308,0,100', '0,-1e308,100', '1,2,']) {
+    assert.strictEqual(ctx.urlParseCamera(camera), null, camera);
+    assert.strictEqual(ctx.parseViewHash('#v=2&cam=' + camera).camera, undefined, camera);
+  }
+  const valid = ctx.urlParseCamera('-123.5,456,100');
+  assert.strictEqual(valid.x, -123.5); assert.strictEqual(valid.y, 456);
 }]);
 
 // Any model: generated specs of every shape get the same real-interaction sweep the examples get.

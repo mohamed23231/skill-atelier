@@ -661,8 +661,8 @@ text-anchor: middle;
 dominant-baseline: central;
 }
 
-.arrowhead { fill: var(--edge); }
-.arrowhead-active { fill: var(--accent); }
+.arrowhead { fill: context-stroke; }
+.arrowhead-active { fill: context-stroke; }
 
 .flow-particle {
 fill: var(--accent);
@@ -1692,6 +1692,7 @@ border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
 [data-action="rail-close"], [data-action="rail-toggle"] { display: none; }
 body .viewport-controls, body .sequence-controls { right: 8px; bottom: auto; transform: translateY(-100%);
 top: calc(var(--chrome-top) + var(--stack-canvas) - var(--walk-track-height, 0px) - 12px); }
+body[data-presentation="true"] .viewport-controls { transform: none; }
 body .sequence-controls { right: auto; transform: translate(-50%, -100%); }
 }
 
@@ -4154,7 +4155,8 @@ if (keys.has(key)) return;
 keys.add(key);
 locators.push(record);
 });
-const state = trustEvidenceState(source, node, records);
+const missingClaim = evidenceIds.some(id => !trustArray(source.evidence).some(record => record && record.id === id));
+const state = missingClaim ? { state: 'missing', label: 'Missing' } : trustEvidenceState(source, node, records);
 return { records, locators, state: state.state, label: state.label };
 }
 
@@ -4951,11 +4953,11 @@ return Number.isInteger(value) && value >= 0 ? value : null;
 function urlParseCamera(raw) {
 if (!urlSet(raw)) return null;
 const parts = String(raw).split(',');
-if (parts.length !== 3) return null;
+if (parts.length !== 3 || parts.some(part => part.trim() === '')) return null;
 const numbers = parts.map((part) => Number(part));
 if (!numbers.every(Number.isFinite)) return null;
 const [x, y, w] = numbers;
-if (!(w > 0)) return null;
+if (!(w > 0) || Math.abs(x) > Number.MAX_SAFE_INTEGER || Math.abs(y) > Number.MAX_SAFE_INTEGER) return null;
 return { x, y, w };
 }
 
@@ -5037,6 +5039,8 @@ const outcomes = urlParseOutcomes(params.get('o'));
 if (outcomes) result.outcomes = outcomes;
 const step = urlIndexOf(params.get('step'));
 if (step !== null) result.step = step;
+const stepIndex = urlIndexOf(params.get('stepIndex'));
+if (stepIndex !== null) { result.stepIndex = stepIndex; delete result.step; }
 const filter = params.get('filter');
 if (urlSet(filter)) result.filter = filter;
 const focus = params.get('focus');
@@ -5063,7 +5067,9 @@ if (urlSet(source.stage)) params.set('at', String(source.stage));
 const outcomes = urlEncodeOutcomes(source.outcomes);
 if (outcomes) params.set('o', outcomes);
 const step = urlIndexOf(source.step);
-if (step !== null) params.set('step', String(step));
+const stepIndex = urlIndexOf(source.stepIndex);
+if (stepIndex !== null) params.set('stepIndex', String(stepIndex));
+else if (step !== null) params.set('step', String(step));
 if (urlSet(source.filter)) params.set('filter', String(source.filter));
 if (urlSet(source.focus)) params.set('focus', String(source.focus));
 if (source.present === true) params.set('present', '1');
@@ -5328,8 +5334,9 @@ focus: nodeById.has(state.selectedNodeId) ? state.focusMode : null,
 present: state.presentation
 };
 if (state.currentView === VIEWS.SEQUENCE && state.sequenceIndex) {
-const step = sequenceSteps()[state.sequenceIndex];
-snapshot.step = Number.isInteger(step?.step) ? step.step : state.sequenceIndex + 1;
+const steps = sequenceSteps();
+if (steps.every(step => Number.isInteger(step.step))) snapshot.step = steps[state.sequenceIndex]?.step;
+else snapshot.stepIndex = state.sequenceIndex;
 }
 if (state.scenarioActive && state.scenarioId) {
 snapshot.scenario = state.scenarioId;
@@ -5879,7 +5886,7 @@ renderWalkthrough();
 
 function walkNext() {
 if (!walkIsActive()) {
-startWalkthrough((ARCH_SPEC.scenarios || [])[0]?.id);
+startWalkthrough(selectedScenario()?.id || (ARCH_SPEC.scenarios || [])[0]?.id);
 return;
 }
 const current = walkCurrent();
@@ -5890,7 +5897,7 @@ if (next) walkTo(next.id);
 
 function walkPrev() {
 if (!walkIsActive()) {
-startWalkthrough((ARCH_SPEC.scenarios || [])[0]?.id);
+startWalkthrough(selectedScenario()?.id || (ARCH_SPEC.scenarios || [])[0]?.id);
 return;
 }
 const current = walkCurrent();
@@ -6406,6 +6413,7 @@ state.prefersReducedMotion = event.matches;
 if (event.matches) {
 state.animatingFlow = false;
 stopFlowParticles();
+stopSequencePlayback();
 stopScenarioPlayback();
 stopWalkPackets();
 }
@@ -6454,7 +6462,11 @@ applyVisibility();
 fitToScreen();
 const linkNotices = restoreUrlState();
 viewStateReady = true;
-if (window.ResizeObserver) new ResizeObserver(() => { if (holdsLinkedCamera()) applyLinkedCamera(); }).observe(container);
+if (window.ResizeObserver) new ResizeObserver(() => {
+if (holdsLinkedCamera()) applyLinkedCamera();
+else if (!state.userMovedView) fitToScreen();
+else updateMinimapViewport();
+}).observe(container);
 applyFocusMode();
 document.body.setAttribute('data-ready-ms', String(Math.round(performance.now())));
 announceStatus(['Architecture workbench ready.', ...linkNotices].join(' '));
@@ -6832,7 +6844,7 @@ boundariesLayer.appendChild(g);
 });
 
 (LAYOUT_DATA.edges || []).forEach(e => {
-const g = el('g', { class: 'edge-group', id: `edge-${e.id}` });
+const g = el('g', { class: 'edge-group', id: `edge-${e.id}`, role: 'button', tabindex: '0' });
 const path = el('path', {
 id: `path-${e.id}`,
 class: `edge-path ${e.communication === 'async' ? 'async' : ''} ${e.pathType || ''}`,
@@ -6841,12 +6853,20 @@ d: e.path,
 });
 const sourceLabel = nodeById.get(e.source)?.label || e.source;
 const targetLabel = nodeById.get(e.target)?.label || e.target;
+g.setAttribute('aria-label', `${sourceLabel} → ${targetLabel}: ${e.label || e.packetLabel || 'unlabeled'} · ${e.communication || 'sync'}`);
 withTooltip(path, `${sourceLabel} → ${targetLabel}\n${e.label || e.packetLabel || 'unlabeled'} · ${e.communication || 'sync'}${e.pathType ? ` · ${e.pathType}` : ''}`);
 g.appendChild(path);
 g.appendChild(el('path', { id: `hit-${e.id}`, class: 'edge-hit', d: e.path }));
 g.addEventListener('click', ev => {
 ev.stopPropagation();
 if (!state.dragMoved) openInspectorForEdge(e.id);
+});
+g.addEventListener('keydown', ev => {
+if (ev.key === 'Enter' || ev.key === ' ') {
+ev.preventDefault();
+ev.stopPropagation();
+openInspectorForEdge(e.id);
+}
 });
 
 const labelText = e.label || e.packetLabel;
@@ -7201,8 +7221,17 @@ Boolean(ghost[side] || ghost[`${side}Type`] || ghost[`${side}Boundary`]) &&
 (!ghost[side] || node.id === ghost[side]) &&
 (!ghost[`${side}Type`] || node.type === ghost[`${side}Type`]) &&
 (!ghost[`${side}Boundary`] || node.boundary === ghost[`${side}Boundary`]));
-const resolved = ghosts.flatMap(ghost => candidates(ghost, 'from').flatMap(from =>
-candidates(ghost, 'to').map(to => ({ ...ghost, from: from.id, to: to.id }))));
+const resolved = [];
+const maxGhosts = 100;
+expansion: for (const ghost of ghosts) {
+const targets = candidates(ghost, 'to');
+for (const from of candidates(ghost, 'from')) {
+for (const to of targets) {
+resolved.push({ ...ghost, from: from.id, to: to.id });
+if (resolved.length >= maxGhosts) break expansion;
+}
+}
+}
 const edges = resolved.map((ghost, index) => ({ ...ghost, id: `policy-ghost-${index}`, source: ghost.from, target: ghost.to }));
 if (!edges.length) return;
 let routes = {};
@@ -7506,7 +7535,9 @@ const decision = entries.slice(0, entries.indexOf(entry)).findLast(item => item.
 const branch = decision?.branches[decision.chosen];
 const shared = paths.every(path => path.entries.some(item => item.id === entry.id));
 const afterDecision = Boolean(decision) && !shared;
-rows.push({ entry, choices, note: afterDecision && branch?.status === 'recovery' ? 'Recovery path' : afterDecision ? `If ${branch?.name || 'outcome'}` : '' });
+const priorChoices = Object.fromEntries(entries.slice(0, entries.indexOf(entry))
+.filter(item => item.kind === 'decision').map(item => [item.id, choices[item.id]]));
+rows.push({ entry, choices: priorChoices, note: afterDecision && branch?.status === 'recovery' ? 'Recovery path' : afterDecision ? `If ${branch?.name || 'outcome'}` : '' });
 }));
 }
 rows.sort((a, b) => a.entry.number - b.entry.number);
@@ -8384,6 +8415,7 @@ const length = pathEl ? pathEl.getTotalLength() : 0;
 const circle = el('circle', {
 r: '4',
 class: 'flow-particle',
+'pointer-events': 'none',
 fill: 'var(--accent)'
 });
 particlesLayer.appendChild(circle);
@@ -8477,6 +8509,7 @@ else unmatched.push(item);
 });
 
 document.querySelectorAll('.node-group').forEach(el2 => {
+el2.classList.remove('out-of-focus', 'walk-active');
 el2.classList.toggle('selected', participants.has(el2.id.replace('node-', '')));
 });
 document.querySelectorAll('.edge-path').forEach(p => {
@@ -8737,7 +8770,9 @@ return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - 
 function handleTouchStart(e) {
 if (e.touches.length === 2) {
 state.isDraggingCanvas = false;
-pinch = { distance: touchDistance(e.touches), zoom: state.zoom };
+pinch = { distance: touchDistance(e.touches), zoom: state.zoom,
+midX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+midY: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
 return;
 }
 if (e.touches.length !== 1) return;
@@ -8756,7 +8791,15 @@ e.preventDefault();
 const rect = svg.getBoundingClientRect();
 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
-zoomAround(pinch.zoom * touchDistance(e.touches) / Math.max(1, pinch.distance), midX, midY);
+const zoom = clampZoom(pinch.zoom * touchDistance(e.touches) / Math.max(1, pinch.distance));
+const ratio = zoom / state.zoom;
+actions.setCamera({ zoom,
+panX: midX - (pinch.midX - rect.left - state.panX) * ratio,
+panY: midY - (pinch.midY - rect.top - state.panY) * ratio,
+userMoved: true });
+pinch.midX = midX + rect.left;
+pinch.midY = midY + rect.top;
+updateTransform();
 state.dragMoved = true;
 return;
 }
@@ -8801,8 +8844,7 @@ function flushDragRoutes() {
 if (dragRouteFrame !== null) cancelAnimationFrame(dragRouteFrame);
 dragRouteFrame = null;
 if (!pendingDragNodes.size) return;
-if (LAYOUT_DATA.config.router === 'orthogonal') recomputeAllEdges();
-else pendingDragNodes.forEach(id => { if (id !== null) recalculateNodeEdges(id); });
+recomputeAllEdges();
 pendingDragNodes.clear();
 renderMinimap();
 }

@@ -219,8 +219,9 @@ function viewSnapshot() {
     present: state.presentation
   };
   if (state.currentView === VIEWS.SEQUENCE && state.sequenceIndex) {
-    const step = sequenceSteps()[state.sequenceIndex];
-    snapshot.step = Number.isInteger(step?.step) ? step.step : state.sequenceIndex + 1;
+    const steps = sequenceSteps();
+    if (steps.every(step => Number.isInteger(step.step))) snapshot.step = steps[state.sequenceIndex]?.step;
+    else snapshot.stepIndex = state.sequenceIndex;
   }
   if (state.scenarioActive && state.scenarioId) {
     snapshot.scenario = state.scenarioId;

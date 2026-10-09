@@ -116,6 +116,25 @@ function assertEdgeTokens(encoding, where) {
 }
 
 const cases = [
+  ['policy ghosts bound broad selector expansion before routing', () => {
+    const nodes = Array.from({ length: 100 }, (_, i) => ({ id: `n${i}`, type: 'service', x: i * 50, y: 0, width: 40, height: 40 }));
+    const routed = [];
+    const context = { LAYOUT_DATA: { nodes, config: { direction: 'LR' } },
+      ArchVizOrthogonal: { routeOrthogonal({ edges }) { routed.push(...edges); return { routes: {} }; } },
+      estimateLabelWidth: () => 20, ghostLayer: { getCTM: () => ({ inverse: () => ({}) }) },
+      document: { querySelectorAll: () => [] } };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/lens-canvas.js'), 'utf8'), context);
+    const ghost = { fromType: 'service', toType: 'service', label: 'Forbidden', policyId: 'p' };
+    context.renderPolicyGhosts([ghost, ghost]);
+    assert.strictEqual(routed.length, 100);
+    assert.strictEqual(new Set(routed.map(edge => edge.id)).size, 100);
+    assert.deepStrictEqual([routed[0].source, routed[0].target, routed[99].target], ['n0', 'n0', 'n99']);
+    routed.length = 0;
+    context.renderPolicyGhosts([{ from: 'n0', to: 'n1', label: 'Forbidden', policyId: 'exact' }]);
+    assert.strictEqual(routed.length, 1);
+    assert.strictEqual(routed[0].policyId, 'exact');
+  }],
   ['policy ghosts omit failed or missing routes instead of crossing cards', () => {
     const nodes = [{ id: 'a', x: 0, y: 0, width: 40, height: 40 }, { id: 'b', x: 100, y: 100, width: 40, height: 40 }];
     let drawn = 0;

@@ -488,16 +488,23 @@ function assignLaneSlots(boundaries, edges, k) {
   });
   const laneOf = new Map(boundaries.flatMap((b, rank) => b.nodes.map(n => [n.id, rank])));
   const nodes = new Map(boundaries.flatMap(b => b.nodes.map(n => [n.id, n])));
-  const crossings = () => {
-    const links = edges.filter(e => laneOf.has(e.source) && laneOf.has(e.target) && laneOf.get(e.source) !== laneOf.get(e.target))
-      .map(e => laneOf.get(e.source) < laneOf.get(e.target) ? [e.source, e.target] : [e.target, e.source]);
-    let count = 0;
-    links.forEach(([a, b], i) => links.slice(i + 1).forEach(([c, d]) => {
-      if (laneOf.get(a) === laneOf.get(c) && laneOf.get(b) === laneOf.get(d)
-        && (nodes.get(a).slot - nodes.get(c).slot) * (nodes.get(b).slot - nodes.get(d).slot) < 0) count++;
-    }));
-    return count;
-  };
+  // Only pairs incident to a moved node can change their crossing status.
+  // Index comparable pairs once, then score the exact delta for each permutation.
+  const links = edges.filter(e => laneOf.has(e.source) && laneOf.has(e.target) && laneOf.get(e.source) !== laneOf.get(e.target))
+    .map(e => laneOf.get(e.source) < laneOf.get(e.target) ? [e.source, e.target] : [e.target, e.source]);
+  const pairsByNode = new Map();
+  links.forEach(([a, b], i) => {
+    for (let j = i + 1; j < links.length; j++) {
+      const [c, d] = links[j];
+      if (a === c || b === d || laneOf.get(a) !== laneOf.get(c) || laneOf.get(b) !== laneOf.get(d)) continue;
+      const pair = [nodes.get(a), nodes.get(b), nodes.get(c), nodes.get(d)];
+      for (const id of [a, b, c, d]) {
+        if (!pairsByNode.has(id)) pairsByNode.set(id, []);
+        pairsByNode.get(id).push(pair);
+      }
+    }
+  });
+  const crosses = ([a, b, c, d]) => (a.slot - c.slot) * (b.slot - d.slot) < 0;
   const placed = new Map();
   for (const sweep of [boundaries, [...boundaries].reverse()]) {
     sweep.forEach(b => {
@@ -518,16 +525,29 @@ function assignLaneSlots(boundaries, edges, k) {
       });
     });
   }
+  for (const pair of new Set([...pairsByNode.values()].flat())) pair.crossing = crosses(pair);
   // Preserve sweep results on ties; compare mirrored and pairwise swapped slots.
   boundaries.forEach(b => {
     const movable = b.nodes.filter(n => typeof n.order !== 'number');
-    let best = crossings();
     const consider = permutation => {
       const previous = movable.map(n => n.slot);
+      const affected = new Set();
+      movable.forEach((n, i) => {
+        if (previous[i] !== permutation[i]) {
+          for (const pair of pairsByNode.get(n.id) || []) affected.add(pair);
+        }
+      });
+      let before = 0;
+      for (const pair of affected) if (pair.crossing) before++;
       movable.forEach((n, i) => { n.slot = permutation[i]; });
-      const score = crossings();
-      if (score < best) best = score;
-      else movable.forEach((n, i) => { n.slot = previous[i]; });
+      let after = 0;
+      for (const pair of affected) {
+        pair.nextCrossing = crosses(pair);
+        if (pair.nextCrossing) after++;
+      }
+      if (after < before) {
+        for (const pair of affected) pair.crossing = pair.nextCrossing;
+      } else movable.forEach((n, i) => { n.slot = previous[i]; });
     };
     const mirrored = movable.map(n => n.slot);
     const rows = [...new Set(movable.map(n => n.row))];

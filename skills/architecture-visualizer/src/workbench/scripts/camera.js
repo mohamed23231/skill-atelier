@@ -99,7 +99,9 @@ function touchDistance(touches) {
 function handleTouchStart(e) {
   if (e.touches.length === 2) {
     state.isDraggingCanvas = false;
-    pinch = { distance: touchDistance(e.touches), zoom: state.zoom };
+    pinch = { distance: touchDistance(e.touches), zoom: state.zoom,
+      midX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      midY: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
     return;
   }
   if (e.touches.length !== 1) return;
@@ -118,7 +120,15 @@ function handleTouchMove(e) {
     const rect = svg.getBoundingClientRect();
     const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
     const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
-    zoomAround(pinch.zoom * touchDistance(e.touches) / Math.max(1, pinch.distance), midX, midY);
+    const zoom = clampZoom(pinch.zoom * touchDistance(e.touches) / Math.max(1, pinch.distance));
+    const ratio = zoom / state.zoom;
+    actions.setCamera({ zoom,
+      panX: midX - (pinch.midX - rect.left - state.panX) * ratio,
+      panY: midY - (pinch.midY - rect.top - state.panY) * ratio,
+      userMoved: true });
+    pinch.midX = midX + rect.left;
+    pinch.midY = midY + rect.top;
+    updateTransform();
     state.dragMoved = true;
     return;
   }

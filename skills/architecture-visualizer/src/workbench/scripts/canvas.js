@@ -100,7 +100,7 @@ function renderDiagram() {
   });
 
   (LAYOUT_DATA.edges || []).forEach(e => {
-    const g = el('g', { class: 'edge-group', id: `edge-${e.id}` });
+    const g = el('g', { class: 'edge-group', id: `edge-${e.id}`, role: 'button', tabindex: '0' });
     const path = el('path', {
       id: `path-${e.id}`,
       class: `edge-path ${e.communication === 'async' ? 'async' : ''} ${e.pathType || ''}`,
@@ -109,6 +109,7 @@ function renderDiagram() {
     });
     const sourceLabel = nodeById.get(e.source)?.label || e.source;
     const targetLabel = nodeById.get(e.target)?.label || e.target;
+    g.setAttribute('aria-label', `${sourceLabel} → ${targetLabel}: ${e.label || e.packetLabel || 'unlabeled'} · ${e.communication || 'sync'}`);
     withTooltip(path, `${sourceLabel} → ${targetLabel}\n${e.label || e.packetLabel || 'unlabeled'} · ${e.communication || 'sync'}${e.pathType ? ` · ${e.pathType}` : ''}`);
     g.appendChild(path);
     // A thin line is hard to hit: a wide invisible twin takes the pointer, and a click or the label
@@ -117,6 +118,13 @@ function renderDiagram() {
     g.addEventListener('click', ev => {
       ev.stopPropagation();
       if (!state.dragMoved) openInspectorForEdge(e.id);
+    });
+    g.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openInspectorForEdge(e.id);
+      }
     });
 
     const labelText = e.label || e.packetLabel;

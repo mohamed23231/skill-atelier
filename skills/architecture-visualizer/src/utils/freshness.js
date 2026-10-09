@@ -45,7 +45,7 @@ function changedFilesSince(root, sha, cited = []) {
   const diffOut = runGit(root, ['diff', '--name-only', '--no-renames', '-z', '--relative', sha]);
   // Untracked files count as changed. Ignored files are listed only when the spec cites them: listing
   // every ignored file would walk node_modules and build output in a large repository.
-  const ignoredCited = cited.length ? runGit(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', ...cited]) : '';
+  const ignoredCited = cited.length ? runGit(root, ['--literal-pathspecs', 'ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', ...cited]) : '';
   const untrackedOut = runGit(root, ['ls-files', '-z', '--others', '--exclude-standard']);
   const files = new Set();
   // NUL delimiters preserve Git paths literally, including whitespace, newlines and non-ASCII text.

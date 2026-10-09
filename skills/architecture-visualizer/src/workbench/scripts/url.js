@@ -25,11 +25,11 @@ function urlIndexOf(raw) {
 function urlParseCamera(raw) {
   if (!urlSet(raw)) return null;
   const parts = String(raw).split(',');
-  if (parts.length !== 3) return null;
+  if (parts.length !== 3 || parts.some(part => part.trim() === '')) return null;
   const numbers = parts.map((part) => Number(part));
   if (!numbers.every(Number.isFinite)) return null;
   const [x, y, w] = numbers;
-  if (!(w > 0)) return null;
+  if (!(w > 0) || Math.abs(x) > Number.MAX_SAFE_INTEGER || Math.abs(y) > Number.MAX_SAFE_INTEGER) return null;
   return { x, y, w };
 }
 
@@ -116,6 +116,8 @@ function urlParseV2(params) {
   if (outcomes) result.outcomes = outcomes;
   const step = urlIndexOf(params.get('step'));
   if (step !== null) result.step = step;
+  const stepIndex = urlIndexOf(params.get('stepIndex'));
+  if (stepIndex !== null) { result.stepIndex = stepIndex; delete result.step; }
   const filter = params.get('filter');
   if (urlSet(filter)) result.filter = filter;
   const focus = params.get('focus');
@@ -142,7 +144,9 @@ function encodeViewHash(snapshot) {
   const outcomes = urlEncodeOutcomes(source.outcomes);
   if (outcomes) params.set('o', outcomes);
   const step = urlIndexOf(source.step);
-  if (step !== null) params.set('step', String(step));
+  const stepIndex = urlIndexOf(source.stepIndex);
+  if (stepIndex !== null) params.set('stepIndex', String(stepIndex));
+  else if (step !== null) params.set('step', String(step));
   if (urlSet(source.filter)) params.set('filter', String(source.filter));
   if (urlSet(source.focus)) params.set('focus', String(source.focus));
   if (source.present === true) params.set('present', '1');

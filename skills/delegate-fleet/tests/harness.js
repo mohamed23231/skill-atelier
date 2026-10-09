@@ -6,6 +6,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+// Workers keep per-workspace state in the user's cache; tests (and every relay they spawn) use a
+// throwaway one so a test run never writes into the developer's home directory.
+process.env.XDG_CACHE_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'df-test-cache-'));
+
 const SKILL = path.resolve(__dirname, '..');
 const RELAY = path.join(SKILL, 'scripts', 'relay.js');
 const FLEET = path.join(SKILL, 'scripts', 'fleet.js');

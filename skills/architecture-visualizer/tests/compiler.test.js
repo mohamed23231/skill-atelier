@@ -680,4 +680,14 @@ cases.push(['multi-hop interaction narratives include every hop in HTML and Mark
   assert.ok(result.markdown.includes(stage.narrative));
 }]);
 
+cases.push(['missing interaction endpoints generate neutral narration and preserve payloads', () => {
+  const { narrateInteraction } = require('../src/engine/narrative.js');
+  for (const endpoints of [{}, { from: 'api' }, { to: 'db' }, { from: '', to: 'db' }]) {
+    assert.strictEqual(narrateInteraction({ ...endpoints, label: 'Write', payload: 0 }), 'Interaction: Write. Payload: 0.');
+    assert.strictEqual(narrateInteraction(endpoints), 'An interaction occurs.');
+    assert.strictEqual(narrateInteraction({ ...endpoints, narrative: 'Authored.' }), 'Authored.');
+  }
+  assert.strictEqual(narrateInteraction({ from: 'api', to: 'db', label: 'Write' }), 'api sends Write to db.');
+}]);
+
 module.exports = { name: 'Compiler & Exporter', cases };

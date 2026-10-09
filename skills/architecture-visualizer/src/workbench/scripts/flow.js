@@ -46,6 +46,7 @@ function startFlowParticles() {
     const circle = el('circle', {
       r: '4',
       class: 'flow-particle',
+      'pointer-events': 'none',
       fill: 'var(--accent)'
     });
     particlesLayer.appendChild(circle);

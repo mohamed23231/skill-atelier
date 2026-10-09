@@ -262,7 +262,7 @@ function walkTo(entryId) {
 
 function walkNext() {
   if (!walkIsActive()) {
-    startWalkthrough((ARCH_SPEC.scenarios || [])[0]?.id);
+    startWalkthrough(selectedScenario()?.id || (ARCH_SPEC.scenarios || [])[0]?.id);
     return;
   }
   const current = walkCurrent();
@@ -273,7 +273,7 @@ function walkNext() {
 
 function walkPrev() {
   if (!walkIsActive()) {
-    startWalkthrough((ARCH_SPEC.scenarios || [])[0]?.id);
+    startWalkthrough(selectedScenario()?.id || (ARCH_SPEC.scenarios || [])[0]?.id);
     return;
   }
   const current = walkCurrent();

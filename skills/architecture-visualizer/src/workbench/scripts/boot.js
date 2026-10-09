@@ -7,6 +7,7 @@ function initMotionPreference() {
     if (event.matches) {
       state.animatingFlow = false;
       stopFlowParticles();
+      stopSequencePlayback();
       stopScenarioPlayback();
       stopWalkPackets();
     }
@@ -57,7 +58,11 @@ function init() {
   fitToScreen();
   const linkNotices = restoreUrlState();
   viewStateReady = true;
-  if (window.ResizeObserver) new ResizeObserver(() => { if (holdsLinkedCamera()) applyLinkedCamera(); }).observe(container);
+  if (window.ResizeObserver) new ResizeObserver(() => {
+    if (holdsLinkedCamera()) applyLinkedCamera();
+    else if (!state.userMovedView) fitToScreen();
+    else updateMinimapViewport();
+  }).observe(container);
   applyFocusMode();
   document.body.setAttribute('data-ready-ms', String(Math.round(performance.now())));
   announceStatus(['Architecture workbench ready.', ...linkNotices].join(' '));

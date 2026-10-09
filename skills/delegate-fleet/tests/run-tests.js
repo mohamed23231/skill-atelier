@@ -2164,17 +2164,13 @@ test('quota: agy\'s "Individual quota reached" / RESOURCE_EXHAUSTED counts as ou
 const CAN_SYMLINK = (() => {
   try { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'df-ln-')); fs.symlinkSync(path.join(d, 'x'), path.join(d, 'l')); return true; } catch { return false; }
 })();
-// Mirrors the adapter: a uid with no passwd entry falls back to a fixed name.
-function opencodeUserKey() {
-  try { return String(os.userInfo().uid >= 0 ? os.userInfo().uid : os.userInfo().username); } catch { return 'user'; }
-}
 
 test('opencode gets a private data dir per workspace, stable across attempts, with auth linked in', () => {
   const adapter = require('../scripts/adapters/opencode.js');
   const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'df-xdg-'));
   fs.mkdirSync(path.join(shared, 'opencode'));
   fs.writeFileSync(path.join(shared, 'opencode', 'auth.json'), '{}');
-  const env = { XDG_DATA_HOME: shared };
+  const env = { XDG_DATA_HOME: shared, XDG_CACHE_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'df-cache-')) };
   const a1 = adapter.isolate({ cwd: '/tmp/worktree-a', env });
   const a2 = adapter.isolate({ cwd: '/tmp/worktree-a', env });
   const b = adapter.isolate({ cwd: '/tmp/worktree-b', env });
@@ -2191,7 +2187,7 @@ test('opencode data dir is private to the user and drops auth links whose shared
   const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'df-xdg-'));
   fs.mkdirSync(path.join(shared, 'opencode'));
   fs.writeFileSync(path.join(shared, 'opencode', 'auth.json'), '{}');
-  const env = { XDG_DATA_HOME: shared };
+  const env = { XDG_DATA_HOME: shared, XDG_CACHE_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'df-cache-')) };
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'df-ws-'));
   const first = adapter.isolate({ cwd, env });
   const data = path.join(first.XDG_DATA_HOME, 'opencode');
@@ -2199,8 +2195,8 @@ test('opencode data dir is private to the user and drops auth links whose shared
     assert.strictEqual(fs.statSync(data).mode & 0o777, 0o700, 'session history must not be readable by other users');
     assert.strictEqual(fs.statSync(first.XDG_DATA_HOME).mode & 0o777, 0o700);
   }
-  // Another user on the machine gets their own namespace, not a 0700 directory they cannot enter.
-  assert.strictEqual(path.basename(path.dirname(first.XDG_DATA_HOME)), `delegate-fleet-opencode-${opencodeUserKey()}`);
+  // The workspace lives in this user's cache, not a shared /tmp another user could pre-create or redirect.
+  assert.ok(first.XDG_DATA_HOME.startsWith(path.join(env.XDG_CACHE_HOME, 'delegate-fleet', 'opencode') + path.sep), first.XDG_DATA_HOME);
   if (!CAN_SYMLINK) return;
   assert.ok(fs.lstatSync(path.join(data, 'auth.json')).isSymbolicLink());
   fs.rmSync(path.join(shared, 'opencode', 'auth.json'));

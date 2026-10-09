@@ -259,8 +259,8 @@ svg#arch-svg {
   dominant-baseline: central;
 }
 
-.arrowhead { fill: var(--edge); }
-.arrowhead-active { fill: var(--accent); }
+.arrowhead { fill: context-stroke; }
+.arrowhead-active { fill: context-stroke; }
 
 /* Flow Particles */
 .flow-particle {

@@ -37,6 +37,7 @@
   [data-action="rail-close"], [data-action="rail-toggle"] { display: none; }
   body .viewport-controls, body .sequence-controls { right: 8px; bottom: auto; transform: translateY(-100%);
     top: calc(var(--chrome-top) + var(--stack-canvas) - var(--walk-track-height, 0px) - 12px); }
+  body[data-presentation="true"] .viewport-controls { transform: none; }
   body .sequence-controls { right: auto; transform: translate(-50%, -100%); }
 }
 

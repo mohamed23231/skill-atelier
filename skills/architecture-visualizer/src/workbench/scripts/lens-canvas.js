@@ -116,8 +116,18 @@ function renderPolicyGhosts(ghosts) {
     (!ghost[side] || node.id === ghost[side]) &&
     (!ghost[`${side}Type`] || node.type === ghost[`${side}Type`]) &&
     (!ghost[`${side}Boundary`] || node.boundary === ghost[`${side}Boundary`]));
-  const resolved = ghosts.flatMap(ghost => candidates(ghost, 'from').flatMap(from =>
-    candidates(ghost, 'to').map(to => ({ ...ghost, from: from.id, to: to.id }))));
+  // Bound the total before allocating the Cartesian product or invoking the synchronous router.
+  const resolved = [];
+  const maxGhosts = 100;
+  expansion: for (const ghost of ghosts) {
+    const targets = candidates(ghost, 'to');
+    for (const from of candidates(ghost, 'from')) {
+      for (const to of targets) {
+        resolved.push({ ...ghost, from: from.id, to: to.id });
+        if (resolved.length >= maxGhosts) break expansion;
+      }
+    }
+  }
   const edges = resolved.map((ghost, index) => ({ ...ghost, id: `policy-ghost-${index}`, source: ghost.from, target: ghost.to }));
   if (!edges.length) return;
   let routes = {};

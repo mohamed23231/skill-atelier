@@ -66,7 +66,8 @@ function nodeEvidence(spec, nodeId) {
     keys.add(key);
     locators.push(record);
   });
-  const state = trustEvidenceState(source, node, records);
+  const missingClaim = evidenceIds.some(id => !trustArray(source.evidence).some(record => record && record.id === id));
+  const state = missingClaim ? { state: 'missing', label: 'Missing' } : trustEvidenceState(source, node, records);
   return { records, locators, state: state.state, label: state.label };
 }
 

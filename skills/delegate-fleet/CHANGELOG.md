@@ -13,7 +13,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **An isolated OpenCode workspace kept stale credentials and was readable by other users.** Its data directory (session history) is now created and kept at mode 0700 under a per-user temporary namespace, a link to a shared auth file that no longer exists is removed, and a dangling link is re-pointed: `rmSync` silently kept dangling links, so the earlier re-point never happened.
+- **An isolated OpenCode workspace kept stale credentials and was readable by other users.** Its data directory (session history) now lives in the user's cache (`XDG_CACHE_HOME`, else `~/.cache`) rather than a shared `/tmp`, at mode 0700, a link to a shared auth file that no longer exists is removed, and a dangling link is re-pointed: `rmSync` silently kept dangling links, so the earlier re-point never happened.
 - **agy's quota errors were reported as plain process failures.** "Individual quota reached" and `RESOURCE_EXHAUSTED` now mark agy out of quota, so routes skip it for 60 minutes (or until a time set with `--until`) instead of failing every dispatch.
 
 ## [2.4.0] - 2026-09-26

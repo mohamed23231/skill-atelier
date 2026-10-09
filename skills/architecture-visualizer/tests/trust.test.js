@@ -38,6 +38,12 @@ function evidenceRecord(id, nodeId, overrides) {
 }
 
 const cases = [
+  ['evidence: a missing claimed ID overrides verified records', () => {
+    const spec = baseSpec({ nodes: [{ id: 'a', evidenceIds: ['good', 'ghost'] }],
+      evidence: [evidenceRecord('good', 'a')] });
+    assert.strictEqual(nodeEvidence(spec, 'a').state, 'missing');
+    assert.strictEqual(trustSummary(spec, []).evidence.label, '0/1 backed · 1 missing evidence');
+  }],
   ['trust navigation focuses the tab for outside or hidden chapter openers', () => {
     const context = { state: { chapter: 'overview' }, document: { getElementById: () => ({ focus() { focused = true; } }) } };
     let focused;

@@ -105,7 +105,9 @@ function renderSheetWalkthrough(nodeId) {
       const branch = decision?.branches[decision.chosen];
       const shared = paths.every(path => path.entries.some(item => item.id === entry.id));
       const afterDecision = Boolean(decision) && !shared;
-      rows.push({ entry, choices, note: afterDecision && branch?.status === 'recovery' ? 'Recovery path' : afterDecision ? `If ${branch?.name || 'outcome'}` : '' });
+      const priorChoices = Object.fromEntries(entries.slice(0, entries.indexOf(entry))
+        .filter(item => item.kind === 'decision').map(item => [item.id, choices[item.id]]));
+      rows.push({ entry, choices: priorChoices, note: afterDecision && branch?.status === 'recovery' ? 'Recovery path' : afterDecision ? `If ${branch?.name || 'outcome'}` : '' });
     }));
   }
   rows.sort((a, b) => a.entry.number - b.entry.number);

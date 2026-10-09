@@ -15,8 +15,8 @@ function flushDragRoutes() {
   if (dragRouteFrame !== null) cancelAnimationFrame(dragRouteFrame);
   dragRouteFrame = null;
   if (!pendingDragNodes.size) return;
-  if (LAYOUT_DATA.config.router === 'orthogonal') recomputeAllEdges();
-  else pendingDragNodes.forEach(id => { if (id !== null) recalculateNodeEdges(id); });
+  // Every moved card or boundary header is an obstacle for non-incident routes too.
+  recomputeAllEdges();
   pendingDragNodes.clear();
   renderMinimap();
 }

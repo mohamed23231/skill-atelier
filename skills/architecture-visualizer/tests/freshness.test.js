@@ -340,14 +340,16 @@ cases.push(['already-stale changed evidence remains reported without changing it
 cases.push(['freshness preserves literal tracked, untracked and ignored Git paths', () => {
   const { dir, git, cleanup } = makeTempRepo();
   try {
-    const names = ['café.js', ' leading and trailing .js ', 'line\nbreak.js', 'ignored café.js'];
+    const names = process.platform === 'win32'
+      ? ['café.js', 'leading and trailing.js', 'line-break.js', 'ignored café.js']
+      : ['café.js', ' leading and trailing .js ', 'line\nbreak.js', 'ignored café.js'];
     fs.writeFileSync(path.join(dir, '.gitignore'), 'ignored*\n');
     names.slice(0, 3).forEach(name => fs.writeFileSync(path.join(dir, name), 'initial\n'));
     git(['add', '--', '.gitignore', ...names.slice(0, 3)]);
     git(['commit', '-qm', 'literal paths']);
     const sha = currentCommit(dir);
     names.forEach(name => fs.writeFileSync(path.join(dir, name), 'changed\n'));
-    const untracked = 'untracked café\n.js ';
+    const untracked = process.platform === 'win32' ? 'untracked café.js' : 'untracked café\n.js ';
     fs.writeFileSync(path.join(dir, untracked), 'new\n');
     const paths = [...names, untracked];
     const spec = { meta: { groundedAt: sha }, evidence: paths.map((name, index) => ({
@@ -368,6 +370,43 @@ cases.push(['staged renames mark both source and destination citations stale', (
     })) };
     assert.deepStrictEqual(applyFreshness(spec, dir).stale, ['rename0', 'rename1']);
   } finally { cleanup(); }
+}]);
+
+cases.push(['ignored citations beginning with Git pathspec magic become stale', () => {
+  // Colons are forbidden in Windows filenames.
+  if (process.platform === 'win32') return;
+  const { dir, headSha, cleanup } = makeTempRepo();
+  try {
+    const name = ':(literal)secret.js';
+    fs.writeFileSync(path.join(dir, '.gitignore'), '*.js\n');
+    fs.writeFileSync(path.join(dir, name), 'ignored\n');
+    const spec = { meta: { groundedAt: headSha }, evidence: [{
+      id: 'magic', type: 'file', locator: { path: name }, verification: 'verified',
+    }] };
+    assert.ok(changedFilesSince(dir, headSha, [name]).has(name));
+    assert.deepStrictEqual(applyFreshness(spec, dir).stale, ['magic']);
+    assert.strictEqual(spec.evidence[0].verification, 'stale');
+  } finally { cleanup(); }
+}]);
+
+cases.push(['literal Git path fixture uses Windows-compatible filenames on Windows', () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const writeFile = fs.writeFileSync;
+  let checked = 0;
+  try {
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    fs.writeFileSync = (file, ...args) => {
+      const name = path.basename(file);
+      assert.ok(!/[<>:"|?*\x00-\x1f]/.test(name) && !/[ .]$/.test(name), `Windows rejects ${JSON.stringify(name)}`);
+      checked++;
+      return writeFile(file, ...args);
+    };
+    cases.find(([name]) => name === 'freshness preserves literal tracked, untracked and ignored Git paths')[1]();
+    assert.ok(checked >= 6);
+  } finally {
+    fs.writeFileSync = writeFile;
+    Object.defineProperty(process, 'platform', platform);
+  }
 }]);
 
 module.exports = { name: 'Freshness', cases };
