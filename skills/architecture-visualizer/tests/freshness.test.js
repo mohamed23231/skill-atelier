@@ -337,4 +337,37 @@ cases.push(['already-stale changed evidence remains reported without changing it
   } finally { cleanup(); }
 }]);
 
+cases.push(['freshness preserves literal tracked, untracked and ignored Git paths', () => {
+  const { dir, git, cleanup } = makeTempRepo();
+  try {
+    const names = ['café.js', ' leading and trailing .js ', 'line\nbreak.js', 'ignored café.js'];
+    fs.writeFileSync(path.join(dir, '.gitignore'), 'ignored*\n');
+    names.slice(0, 3).forEach(name => fs.writeFileSync(path.join(dir, name), 'initial\n'));
+    git(['add', '--', '.gitignore', ...names.slice(0, 3)]);
+    git(['commit', '-qm', 'literal paths']);
+    const sha = currentCommit(dir);
+    names.forEach(name => fs.writeFileSync(path.join(dir, name), 'changed\n'));
+    const untracked = 'untracked café\n.js ';
+    fs.writeFileSync(path.join(dir, untracked), 'new\n');
+    const paths = [...names, untracked];
+    const spec = { meta: { groundedAt: sha }, evidence: paths.map((name, index) => ({
+      id: `path${index}`, type: 'file', locator: { path: name }, verification: 'verified',
+    })) };
+    assert.deepStrictEqual(applyFreshness(spec, dir).stale, paths.map((_, index) => `path${index}`));
+    const changed = changedFilesSince(dir, sha, [names[3]]);
+    paths.forEach(name => assert.ok(changed.has(name), JSON.stringify(name)));
+  } finally { cleanup(); }
+}]);
+
+cases.push(['staged renames mark both source and destination citations stale', () => {
+  const { dir, git, headSha, cleanup } = makeTempRepo();
+  try {
+    git(['mv', 'file.txt', 'renamed.txt']);
+    const spec = { meta: { groundedAt: headSha }, evidence: ['file.txt', 'renamed.txt'].map((name, index) => ({
+      id: `rename${index}`, type: 'file', locator: { path: name }, verification: 'verified',
+    })) };
+    assert.deepStrictEqual(applyFreshness(spec, dir).stale, ['rename0', 'rename1']);
+  } finally { cleanup(); }
+}]);
+
 module.exports = { name: 'Freshness', cases };

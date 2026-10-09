@@ -146,21 +146,24 @@ function trustRulesEntry(spec) {
   const findings = trustArray(source.findings).concat(trustArray(trustObject(source.review).policyFindings));
   const known = new Set();
   policies.forEach((policy) => {
-    if (policy && policy.id != null) known.add(policy.id);
+    if (policy && policy.id) known.add(policy.id);
   });
   const violated = new Set();
   findings.forEach((finding) => {
     if (finding && finding.policyId != null && known.has(finding.policyId)) violated.add(finding.policyId);
   });
-  const total = policies.length;
-  if (total === 0) {
+  const total = policies.filter(policy => policy && policy.id).length;
+  const skipped = policies.length - total;
+  const unchecked = skipped ? ` · ${skipped} unchecked` : '';
+  if (policies.length === 0) {
     return trustEntry('neutral', 'No rules', 'The specification declares no policies.', 'review');
   }
   if (violated.size === 0) {
-    return trustEntry('ok', `${total}/${total} rules pass`, 'Every declared policy passed.', 'review');
+    return trustEntry(skipped ? 'unchecked' : 'ok', `${total}/${total} rules pass${unchecked}`,
+      skipped ? `${skipped} policies were skipped because they lack a stable id.` : 'Every declared policy passed.', 'review');
   }
   const count = violated.size;
-  return trustEntry('risk', `${count} violation${count === 1 ? '' : 's'} of ${total}`, `${count} of ${total} policies were violated by findings.`, 'review');
+  return trustEntry('risk', `${count} violation${count === 1 ? '' : 's'} of ${total}${unchecked}`, `${count} of ${total} policies were violated by findings.`, 'review');
 }
 
 function trustOpenItemsEntry(spec) {

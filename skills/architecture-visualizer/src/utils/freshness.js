@@ -42,26 +42,21 @@ function normalizePath(filePath) {
 
 function changedFilesSince(root, sha, cited = []) {
   // --relative: locators are relative to the repo root, which may be a subfolder of the git toplevel.
-  const diffOut = runGit(root, ['diff', '--name-only', '--relative', sha]);
+  const diffOut = runGit(root, ['diff', '--name-only', '--no-renames', '-z', '--relative', sha]);
   // Untracked files count as changed. Ignored files are listed only when the spec cites them: listing
   // every ignored file would walk node_modules and build output in a large repository.
-  const ignoredCited = cited.length ? runGit(root, ['ls-files', '--others', '--ignored', '--exclude-standard', '--', ...cited]) : '';
-  const untrackedOut = runGit(root, ['ls-files', '--others', '--exclude-standard']) + '\n' + ignoredCited;
+  const ignoredCited = cited.length ? runGit(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', ...cited]) : '';
+  const untrackedOut = runGit(root, ['ls-files', '-z', '--others', '--exclude-standard']);
   const files = new Set();
-  diffOut.split(/\r?\n/).forEach((line) => {
-    const trimmed = line.trim();
-    if (trimmed) {
-      files.add(trimmed);
-      files.add(normalizePath(trimmed));
-    }
-  });
-  untrackedOut.split(/\r?\n/).forEach((line) => {
-    const trimmed = line.trim();
-    if (trimmed) {
-      files.add(trimmed);
-      files.add(normalizePath(trimmed));
-    }
-  });
+  // NUL delimiters preserve Git paths literally, including whitespace, newlines and non-ASCII text.
+  for (const output of [diffOut, untrackedOut, ignoredCited]) {
+    output.split('\0').forEach((file) => {
+      if (file) {
+        files.add(file);
+        files.add(normalizePath(file));
+      }
+    });
+  }
   return files;
 }
 

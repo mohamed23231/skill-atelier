@@ -4,6 +4,7 @@ function nodeShape(node) {
 }
 
 function renderDiagram() {
+  invalidateMinimapBounds();
   boundariesLayer.innerHTML = '';
   edgesLayer.innerHTML = '';
   nodesLayer.innerHTML = '';
@@ -147,7 +148,7 @@ function renderDiagram() {
       transform: `translate(${n.x}, ${n.y})`,
       tabindex: '0',
       role: 'button',
-      'aria-label': `${n.label}. ${n.type}. ${n.status || 'VERIFIED'}. ${n.delta || DELTA.UNCHANGED}.`
+      'aria-label': `${n.label}. ${n.type}. ${n.status || 'UNKNOWN'}. ${n.delta || DELTA.UNCHANGED}.`
     });
 
     g.appendChild(nodeShape(n));
@@ -358,5 +359,6 @@ function applyVisibility() {
     }
   });
 
+  renderMinimap();
   if (state.animatingFlow) startFlowParticles();
 }

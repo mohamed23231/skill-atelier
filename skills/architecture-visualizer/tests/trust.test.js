@@ -38,6 +38,32 @@ function evidenceRecord(id, nodeId, overrides) {
 }
 
 const cases = [
+  ['trust navigation focuses the tab for outside or hidden chapter openers', () => {
+    const context = { state: { chapter: 'overview' }, document: { getElementById: () => ({ focus() { focused = true; } }) } };
+    let focused;
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/trust-strip.js'), 'utf8'), context);
+    context.openChapter = chapter => { context.state.chapter = chapter; };
+    context.setDrawerOpen = () => {};
+    for (const panel of [null, { hidden: true }, { hidden: false }]) {
+      focused = false;
+      context.openTrustChapter('evidence', { closest: () => panel });
+      assert.strictEqual(focused, !panel || panel.hidden);
+      assert.strictEqual(context.state.chapter, 'evidence');
+    }
+  }],
+  ['rules: policies without stable IDs are unchecked, never passing', () => {
+    const skipped = [{ kind: 'required_dependency' }, { id: '' }, null];
+    const only = trustSummary(baseSpec({ policies: skipped }), []).rules;
+    assert.strictEqual(only.state, 'unchecked');
+    assert.strictEqual(only.label, '0/0 rules pass · 3 unchecked');
+    const mixed = trustSummary(baseSpec({ policies: [{ id: 'ok' }, ...skipped] }), []).rules;
+    assert.strictEqual(mixed.state, 'unchecked');
+    assert.strictEqual(mixed.label, '1/1 rules pass · 3 unchecked');
+    const violated = trustSummary(baseSpec({ policies: [{ id: 'bad' }, ...skipped], findings: [{ policyId: 'bad' }] }), []).rules;
+    assert.strictEqual(violated.state, 'risk');
+    assert.strictEqual(violated.label, '1 violation of 1 · 3 unchecked');
+  }],
   // --- nodeEvidence: matching and de-duplication ---
 
   [
@@ -47,7 +73,7 @@ const cases = [
         nodes: [{ id: 'a', status: 'VERIFIED', delta: 'UNCHANGED', evidenceIds: ['e2'] }],
         evidence: [
           evidenceRecord('e1', 'a'),
-          evidenceRecord('e2', 'a', { type: 'table', locator: 'orders' }),
+          evidenceRecord('e2', 'b', { type: 'table', locator: 'orders' }),
           evidenceRecord('e3', 'b'),
         ],
       });

@@ -277,4 +277,11 @@ const cases = [
   ],
 ];
 
+cases.push(['the Change lens mode round trips and Diff, the default, is omitted', () => {
+  ['current', 'proposed'].forEach(delta => {
+    assert.deepStrictEqual(camp(encodeViewHash({ lens: 'change', delta })), { version: 2, lens: 'change', delta });
+  });
+  assert.strictEqual(encodeViewHash({ lens: 'change', delta: 'diff' }), 'v=2&l=change');
+}]);
+
 module.exports = { name: 'URL codec', cases };

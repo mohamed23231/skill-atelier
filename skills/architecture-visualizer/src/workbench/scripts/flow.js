@@ -54,6 +54,7 @@ function startFlowParticles() {
       element: circle,
       pathEl,
       length,
+      path: e.path,
       // deterministic stagger, never Math.random
       progress: length > 0 ? (index / Math.max(visibleEdges.length, 1)) * length : 0,
       speed: e.communication === 'async' ? 90 : 150
@@ -66,6 +67,12 @@ function startFlowParticles() {
     const dt = Math.min((now - particleLastFrame) / 1000, 0.1);
     particleLastFrame = now;
     particles.forEach(p => {
+      if (p.pathEl && p.path !== p.edge.path) {
+        const length = p.pathEl.getTotalLength();
+        p.progress = p.length > 0 ? p.progress / p.length * length : 0;
+        p.length = length;
+        p.path = p.edge.path;
+      }
       if (p.length > 0 && p.pathEl) {
         p.progress = (p.progress + p.speed * dt) % p.length;
         const pt = p.pathEl.getPointAtLength(p.progress);

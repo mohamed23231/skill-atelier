@@ -1,8 +1,11 @@
+let minimapBounds = null;
+function invalidateMinimapBounds() { minimapBounds = null; }
+
 function renderMinimap() {
   const minimap = document.getElementById('minimap-svg');
   const content = document.getElementById('minimap-content');
   if (!minimap || !content) return;
-  const bounds = computeTotalVisualBounds();
+  const bounds = minimapBounds = computeTotalVisualBounds();
   const width = Math.max(bounds.width, 1);
   const height = Math.max(bounds.height, 1);
   minimap.setAttribute('viewBox', `${bounds.minX} ${bounds.minY} ${width} ${height}`);
@@ -36,7 +39,7 @@ function updateMinimapViewport() {
   viewportRect.setAttribute('width', Math.max(rect.width / state.zoom, 1));
   viewportRect.setAttribute('height', Math.max(rect.height / state.zoom, 1));
   // The minimap only earns its space when part of the diagram is out of view.
-  const bounds = computeTotalVisualBounds();
+  const bounds = minimapBounds || (minimapBounds = computeTotalVisualBounds());
   const left = state.panX + bounds.minX * state.zoom;
   const top = state.panY + bounds.minY * state.zoom;
   const idle = left >= -1 && top >= -1 && left + bounds.width * state.zoom <= rect.width + 1 && top + bounds.height * state.zoom <= rect.height + 1;
@@ -56,4 +59,22 @@ function handleMinimapClick(event) {
   point.x = event.clientX; point.y = event.clientY;
   const world = point.matrixTransform(matrix.inverse());
   focusModelPoint(world.x, world.y);
+}
+
+// Arrow keys move the viewport by a tenth of its size; Enter/Space center the model.
+function handleMinimapKeyDown(event) {
+  const directions = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  const direction = directions[event.key];
+  if (!direction && event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = svg.getBoundingClientRect();
+  if (direction) {
+    actions.setCamera({ panX: state.panX - direction[0] * rect.width / 10,
+      panY: state.panY - direction[1] * rect.height / 10, userMoved: true });
+    updateTransform();
+  } else {
+    const bounds = minimapBounds || (minimapBounds = computeTotalVisualBounds());
+    focusModelPoint(bounds.minX + bounds.width / 2, bounds.minY + bounds.height / 2);
+  }
 }

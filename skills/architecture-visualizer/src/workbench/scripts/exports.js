@@ -120,6 +120,11 @@ function exportPng() {
     canvas.width = width * scale;
     canvas.height = height * scale;
     const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      URL.revokeObjectURL(url);
+      openModal('PNG export failed', 'The browser could not create the PNG. Use the SVG export instead.');
+      return;
+    }
     ctx.scale(scale, scale);
     ctx.drawImage(image, 0, 0);
     URL.revokeObjectURL(url);

@@ -454,7 +454,7 @@ function renderWalkTrack() {
   // The track sits over the canvas, whose pointer handlers must not start a pan when it is used.
   if (!walkTrackBound) {
     walkTrackBound = true;
-    ['mousedown', 'touchstart'].forEach((type) => track.addEventListener(type, (event) => event.stopPropagation()));
+    ['mousedown', 'touchstart', 'wheel'].forEach((type) => track.addEventListener(type, (event) => event.stopPropagation()));
     // The idle track also needs clearance, and its lanes can grow or wrap on resize.
     new ResizeObserver(() => {
       document.body.style.setProperty('--walk-track-height', `${track.getBoundingClientRect().height}px`);
@@ -563,9 +563,10 @@ function renderWalkTrack() {
     return row;
   };
   const decisionIndex = entries.findIndex(entry => entry.kind === 'decision');
-  lane('Main path', decisionIndex < 0 ? entries : entries.slice(0, decisionIndex + 1));
+  const hasOutcomes = decisionIndex >= 0 && entries[decisionIndex].branches.length > 0;
+  lane('Main path', hasOutcomes ? entries.slice(0, decisionIndex + 1) : entries);
   // Every outcome lane shows, idle or not, so a reader sees where the story can go before starting.
-  if (decisionIndex >= 0) {
+  if (hasOutcomes) {
     const decision = entries[decisionIndex];
     decision.branches.forEach((branch, index) => {
       const branchEntries = [];

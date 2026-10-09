@@ -81,7 +81,7 @@ function lensParts(spec) {
 
 // Every lens that leaves edges alone reads them the structure way: a request is solid, an event dashed.
 function lensStructureEdges(parts) {
-  const edges = {};
+  const edges = Object.create(null);
   let hasSync = false;
   let hasAsync = false;
   parts.edges.forEach((edge) => {
@@ -96,7 +96,7 @@ function lensStructureEdges(parts) {
 
 function lensStructure(spec) {
   const parts = lensParts(spec);
-  const nodes = {};
+  const nodes = Object.create(null);
   let hasRing = false;
   parts.nodes.forEach((node) => {
     if (!node || node.id == null) return;
@@ -125,7 +125,7 @@ function lensEvidenceBadge(state, label, count) {
 
 function lensEvidence(spec) {
   const parts = lensParts(spec);
-  const nodes = {};
+  const nodes = Object.create(null);
   const seen = {};
   parts.nodes.forEach((node) => {
     if (!node || node.id == null) return;
@@ -173,14 +173,14 @@ function lensChangeEdge(edge) {
 
 function lensChange(spec) {
   const parts = lensParts(spec);
-  const nodes = {};
+  const nodes = Object.create(null);
   const present = {};
   parts.nodes.forEach((node) => {
     if (!node || node.id == null) return;
     nodes[node.id] = lensChangeNode(node);
     present[node.delta || 'UNCHANGED'] = true;
   });
-  const edges = {};
+  const edges = Object.create(null);
   parts.edges.forEach((edge) => {
     if (!edge || edge.id == null) return;
     edges[edge.id] = lensChangeEdge(edge);
@@ -205,7 +205,7 @@ function lensFirstFinding(findings, key, id) {
 }
 
 function lensPolicyIdsWithFindings(findings) {
-  const found = {};
+  const found = Object.create(null);
   findings.forEach((finding) => {
     if (finding && finding.policyId != null) found[finding.policyId] = true;
   });
@@ -213,7 +213,7 @@ function lensPolicyIdsWithFindings(findings) {
 }
 
 function lensPolicyMap(parts) {
-  const byId = {};
+  const byId = Object.create(null);
   parts.policies.forEach((policy) => {
     if (policy && policy.id != null) byId[policy.id] = policy;
   });
@@ -238,7 +238,7 @@ function lensRiskNodeCounts(parts, nodeId, key) {
 
 function lensRiskNodes(parts, options) {
   const byId = lensPolicyMap(parts);
-  const nodes = {};
+  const nodes = Object.create(null);
   let hasFailure = false;
   let hasViolation = false;
   let hasFanLimit = false;
@@ -302,7 +302,7 @@ function lensRiskNodes(parts, options) {
 // Both are addressed by the finding that names them, so the canvas needs no policy knowledge.
 function lensRiskEdgeMarks(parts) {
   const byId = lensPolicyMap(parts);
-  const marks = {};
+  const marks = Object.create(null);
   parts.findings.forEach((finding) => {
     if (!finding) return;
     const kind = lensFindingKind(byId, finding);
@@ -317,7 +317,7 @@ function lensRiskEdgeMarks(parts) {
     }
     if (kind !== 'cycle') return;
     const cycleNodes = lensArray(finding.nodeIds);
-    const order = {};
+    const order = Object.create(null);
     cycleNodes.forEach((from, index) => {
       const to = cycleNodes[(index + 1) % cycleNodes.length];
       order[`${from}->${to}`] = index + 1;
@@ -334,7 +334,7 @@ function lensRiskEdgeMarks(parts) {
 }
 
 function lensRiskEdges(parts) {
-  const edges = {};
+  const edges = Object.create(null);
   const select = (policy, side) => parts.nodes.filter(node =>
     Boolean(policy[side] || policy[`${side}Type`] || policy[`${side}Boundary`]) &&
     (!policy[side] || node.id === policy[side]) &&

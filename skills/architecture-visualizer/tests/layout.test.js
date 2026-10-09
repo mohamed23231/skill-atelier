@@ -1161,10 +1161,8 @@ cases.push(['dense orthogonal hubs fall back to curved routing in LR, auto and l
     const result = computeDefaultLayout(spec);
     assert.strictEqual(result.edges.length, count);
     assert(result.edges.every(e => e.path && !/NaN|Infinity/.test(e.path)));
-    if (direction !== 'auto') {
-      assert.strictEqual(result.config.router, 'curved');
-      assert.match(result.routingFallback, /Too many ports/);
-    }
+    assert.strictEqual(result.config.router, 'curved');
+    assert.match(result.routingFallback, /Too many ports/);
   }
 }]);
 

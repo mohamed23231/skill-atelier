@@ -71,7 +71,7 @@ Run `arch-viz validate <spec.json> --stamp` after clean validation to record the
 
 The generated HTML viewer is an offline single-page application built on standard HTML5, CSS3, and vanilla ES6.
 
-- **Workbench regions**: Header, trust strip, canvas, and reading rail. The rail contains Overview, Walkthrough, Changes, Review, Evidence, Data, and Plan chapters plus a component sheet. See [`workbench-guide.md`](workbench-guide.md) for chapter, lens, key, and link details.
+- **Workbench regions**: Header, trust strip, canvas, and reading rail. The rail contains Overview, Walkthrough, Changes, Review and Evidence chapters, Data when the spec has tables, Plan when it has plan phases, and a component sheet. See [`workbench-guide.md`](workbench-guide.md) for chapter, lens, key, and link details.
 - **Responsive Reading Rail**: The rail docks from 900px; below 900px the page stacks canvas, walkthrough track, then the always-open rail. Component selection scrolls its sheet into view.
 - **Search & Highlighting**: Search opens the Cmd/Ctrl+K palette for components, connections, stages, and commands. Selection spotlights neighbours; the sheet and palette offer Show neighbours / Show blast radius.
 - **Canvas Controls**: Fullscreen presentation mode, URL state synchronization for shareable view anchors, and model- and layout-specific `localStorage` persistence for custom node layout positions.

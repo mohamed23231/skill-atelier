@@ -213,7 +213,8 @@ function fitCamera() {
   const rect = svg.getBoundingClientRect();
   const key = [Math.round(rect.width), Math.round(rect.height), JSON.stringify([...state.collapsedBoundaries].sort()), state.activeFilter, state.lens, state.currentView, state.deltaMode,
     document.querySelector('.walk-track')?.getBoundingClientRect().height || 0,
-    (LAYOUT_DATA.nodes || []).reduce((sum, node) => sum + node.x * 3 + node.y * 7, 0)].join(':');
+    JSON.stringify([(LAYOUT_DATA.nodes || []).map(node => [node.id, node.x, node.y, node.width, node.height]),
+      (LAYOUT_DATA.boundaries || []).map(boundary => [boundary.id, boundary.x, boundary.y, boundary.width, boundary.height])])].join(':');
   if (fitCameraCache?.key === key) return { ...fitCameraCache.camera };
   const current = { zoom: state.zoom, panX: state.panX, panY: state.panY };
   fitToScreen();

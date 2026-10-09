@@ -152,6 +152,7 @@ function setupEventListeners() {
   container.addEventListener('touchstart', handleTouchStart, { passive: false });
   container.addEventListener('touchmove', handleTouchMove, { passive: false });
   container.addEventListener('touchend', handleTouchEnd);
+  container.addEventListener('touchcancel', handleTouchCancel);
 
   const railToggle = document.querySelector('[data-action="rail-toggle"]');
   if (railToggle) railToggle.addEventListener('click', () => toggleDrawer('rail', railToggle));
@@ -160,6 +161,7 @@ function setupEventListeners() {
   document.querySelector('[data-action="inspector-close"]').addEventListener('click', closeInspector);
   document.querySelector('[data-region="minimap"]').addEventListener('mousedown', event => event.stopPropagation());
   document.querySelector('[data-region="minimap"]').addEventListener('click', handleMinimapClick);
+  document.querySelector('[data-region="minimap"]').addEventListener('keydown', handleMinimapKeyDown);
   document.getElementById('btn-focus-neighbors').addEventListener('click', () => setFocusMode(FOCUS_MODES.NEIGHBORS));
   document.getElementById('btn-focus-affected').addEventListener('click', () => setFocusMode(FOCUS_MODES.AFFECTED));
   document.addEventListener('fullscreenchange', () => {

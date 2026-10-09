@@ -652,4 +652,32 @@ cases.push(['nested parallel child narratives survive compilation', () => {
   assert.ok(!result.validation.notices.some(n => n.includes('no authored narrative')));
 }]);
 
+cases.push(['branch narratives summarize outcome predicates in HTML and Markdown', () => {
+  const spec = clone(VALID_SPEC);
+  spec.scenarios = [{ id: 'decision', stages: [{ id: 'choose', kind: 'branch', branches: [
+    { name: 'Success', condition: 'write succeeds', stages: [] },
+    { name: 'Retry', condition: 'write fails', stages: [] },
+  ] }] }];
+  const result = compileArchitecture(spec, {});
+  const narrative = readEmbeddedSpec(result.html).scenarios[0].stages[0].narrative;
+  assert.ok(narrative.startsWith('Decision: write succeeds or write fails.'));
+  assert.ok(!narrative.includes('unspecified condition'));
+  assert.ok(result.markdown.includes(narrative));
+  spec.scenarios[0].stages[0].condition = 'write result';
+  assert.ok(readEmbeddedSpec(compileArchitecture(spec, {}).html).scenarios[0].stages[0].narrative.startsWith('Decision: write result.'));
+}]);
+
+cases.push(['multi-hop interaction narratives include every hop in HTML and Markdown', () => {
+  const spec = clone(VALID_SPEC);
+  spec.scenarios = [{ id: 'multi', stages: [{ id: 'hops', kind: 'interaction', interactions: [
+    { from: 'api', to: 'db', label: 'Insert' },
+    { from: 'db', to: 'api', narrative: 'Return the saved order.' },
+  ] }] }];
+  const result = compileArchitecture(spec, {});
+  const stage = readEmbeddedSpec(result.html).scenarios[0].stages[0];
+  assert.strictEqual(stage.narrative, stage.interactions.map(hop => hop.narrative).join(' '));
+  assert.ok(stage.narrative.includes('Return the saved order.'));
+  assert.ok(result.markdown.includes(stage.narrative));
+}]);
+
 module.exports = { name: 'Compiler & Exporter', cases };

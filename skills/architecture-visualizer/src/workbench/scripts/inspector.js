@@ -41,8 +41,17 @@ function selectNode(nodeId) {
 
   renderSheetConnections(nodeId);
 
-  renderDetailList('ins-files', [...(node.details?.files || []).map(f => ({ path: typeof f === 'string' ? f : f.path })),
-    ...evidence.locators.filter(record => record.type !== 'file').map(record => ({ record }))], item => item.path
+  const filePaths = new Set();
+  const files = [...(node.details?.files || []).map(f => ({ path: typeof f === 'string' ? f : f.path })),
+    ...evidence.locators.map(record => record.type === 'file'
+      ? { path: typeof record.locator === 'string' ? record.locator : record.locator?.path || record.locator?.file, record }
+      : { record })].filter(item => {
+        if (!item.path) return true;
+        if (filePaths.has(item.path)) return false;
+        filePaths.add(item.path);
+        return true;
+      });
+  renderDetailList('ins-files', files, item => item.path
     ? `<div class="sheet-row">${iconMarkup('ui-file')}<span class="voice-mono">${escapeHtml(item.path)}</span></div>`
     : `<div class="sheet-row"><span class="sheet-row-key">${escapeHtml(item.record.type)}</span><span class="voice-mono">${escapeHtml(typeof item.record.locator === 'string' ? item.record.locator : JSON.stringify(item.record.locator))}</span></div>`,
   null, 'files');

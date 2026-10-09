@@ -39,7 +39,72 @@ function branchScenario() {
   };
 }
 
+// Small DOM surface for testing the track without launching a browser.
+function trackContext(stages) {
+  function element() {
+    return {
+      children: [], attributes: {}, listeners: {}, style: {}, dataset: {},
+      getBoundingClientRect() { return { height: 0 }; },
+      classList: { toggle() {} },
+      append(...items) { this.children.push(...items); },
+      appendChild(item) { this.children.push(item); },
+      replaceChildren(...items) { this.children = items; },
+      setAttribute(key, value) { this.attributes[key] = String(value); },
+      addEventListener(key, fn) { this.listeners[key] = fn; },
+      contains() { return false; }, querySelector() { return null; },
+    };
+  }
+  const track = element();
+  const context = {
+    state: { walkChoices: {}, prefersReducedMotion: false },
+    document: { querySelector: () => track, createElement: element, body: { style: { setProperty() {} } } },
+    window: { requestAnimationFrame() {} },
+    ResizeObserver: class { observe() {} },
+    iconMarkup: () => '', plural: (n, noun) => n + ' ' + noun,
+    ARCH_SPEC: { scenarios: [{ id: 'test', stages }] },
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/walkthrough-ui.js'), 'utf8'), context);
+  context.selectedScenario = () => context.ARCH_SPEC.scenarios[0];
+  context.walkIsActive = () => false;
+  return { context, track };
+}
+
 const cases = [
+  ['track: a decision with no outcomes renders its synthetic end in the main lane', () => {
+    const { context, track } = trackContext([{ id: 'decision', kind: 'branch', branches: [] }]);
+    context.renderWalkTrack();
+    const entries = plain(context.linearizeScenario(context.selectedScenario(), {}));
+    const lanes = track.children[1].children;
+    assert.strictEqual(lanes.length, 1);
+    assert.deepStrictEqual(lanes[0].children.slice(1).map(bead => bead.attributes['data-walk-entry']), entries.map(entry => entry.id));
+    assert.strictEqual(entries[1].kind, 'end');
+  }],
+  ['track: wheel bubbling stops without preventing lane scrolling', () => {
+    const { context, track } = trackContext([]);
+    context.renderWalkTrack();
+    let stopped = false;
+    let prevented = false;
+    assert.strictEqual(typeof track.listeners.wheel, 'function');
+    track.listeners.wheel({ stopPropagation() { stopped = true; }, preventDefault() { prevented = true; } });
+    assert.ok(stopped);
+    assert.strictEqual(prevented, false);
+  }],
+  ['chapter tabs: handled arrows stop before walkthrough shortcuts', () => {
+    const context = { document: { getElementById: () => ({ focus() {} }) } };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/rail.js'), 'utf8'), context);
+    context.availableChapters = () => [{ id: 'overview' }, { id: 'walkthrough' }];
+    let chapter;
+    context.openChapter = id => { chapter = id; };
+    for (const key of ['ArrowRight', 'ArrowLeft', 'Home', 'End']) {
+      let stopped = false;
+      context.handleChapterTabKeyDown({ key, preventDefault() {}, stopPropagation() { stopped = true; } }, 'overview');
+      assert.ok(stopped, key);
+      assert.ok(chapter);
+    }
+  }],
   [
     'plain stages become numbered steps in order',
     () => {

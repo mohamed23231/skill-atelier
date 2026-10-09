@@ -200,3 +200,5 @@ body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; rig
 #canvas-container { background-image: radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size: 22px 22px; }
 .edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
 .edge-label { cursor: pointer; }
+
+.workbench-minimap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

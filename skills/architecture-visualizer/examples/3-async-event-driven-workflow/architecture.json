@@ -1060,7 +1060,7 @@
           "name": "Warehouse Dispatch & DLQ Failure Recovery",
           "type": "branch",
           "description": "Branching based on physical package condition at retrieval time",
-          "condition": "Physical items intact in warehouse bin",
+          "condition": "Physical items intact in warehouse bin?",
           "branches": [
             {
               "name": "Dispatch Successful",

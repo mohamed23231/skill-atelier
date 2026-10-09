@@ -1270,6 +1270,136 @@ const cases = [
         assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [], `${spec} at ${[320, 390][i]}px`));
     });
   }],
+  ['review r3: stacked trust pills focus the selected chapter tab', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 390, height: 844, steps: [ev(`(() => {
+      const pill = document.querySelector('.trust-pill[data-trust="evidence"]');
+      pill.focus(); pill.click();
+      return JSON.stringify({ chapter: state.chapter, focus: document.activeElement.id });
+    })()`)] }]);
+    assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), { chapter: 'evidence', focus: 'chapter-tab-evidence' });
+  }],
+  ['review r3: unroutable policy ghosts are omitted', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const original = ArchVizOrthogonal.routeOrthogonal;
+      const ghosts = [{ from: LAYOUT_DATA.nodes[0].id, to: LAYOUT_DATA.nodes[1].id, policyId: 'blocked', label: 'Forbidden' }];
+      const counts = [];
+      try {
+        for (const route of [() => { throw new Error('blocked'); }, () => ({ routes: {} })]) {
+          ghostLayer.querySelectorAll('.policy-ghost').forEach(item => item.remove());
+          ArchVizOrthogonal.routeOrthogonal = route;
+          renderPolicyGhosts(ghosts);
+          counts.push(ghostLayer.querySelectorAll('.policy-ghost').length);
+        }
+      } finally { ArchVizOrthogonal.routeOrthogonal = original; }
+      return JSON.stringify(counts);
+    })()`)] }]);
+    assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [0, 0]);
+  }],
+  ['review r3: filter dismissal preserves outside focus and Escape restores Filters', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const filters = document.querySelector('[data-action="lens-filters"]');
+      filters.click();
+      const outside = document.getElementById('chapter-tab-overview');
+      outside.focus(); outside.click();
+      const outsideFocus = document.activeElement.id;
+      const hidden = document.querySelector('.lens-filters').hidden;
+      document.querySelector('[data-action="lens-filters"]').click();
+      const filter = document.querySelector('.lens-filters button');
+      filter.focus(); filter.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return JSON.stringify({ outsideFocus, hidden, escapeFocus: document.activeElement.dataset.action, escapeHidden: document.querySelector('.lens-filters').hidden });
+    })()`)] }]);
+    assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), { outsideFocus: 'chapter-tab-overview', hidden: true, escapeFocus: 'lens-filters', escapeHidden: true });
+  }],
+  ['review r3: component sheets show referenced file evidence without duplicate paths', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const node = ARCH_SPEC.nodes.find(n => n.type !== 'actor');
+      node.evidenceIds = ['file-only', 'file-object', 'file-duplicate'];
+      ARCH_SPEC.evidence = [
+        { id: 'file-only', type: 'file', locator: 'src/referenced-only.ts', verification: 'verified' },
+        { id: 'file-object', type: 'file', locator: { path: 'src/object-only.ts' }, verification: 'verified' },
+        { id: 'file-duplicate', type: 'file', locator: 'src/referenced-only.ts', verification: 'verified' }];
+      selectNode(node.id);
+      return JSON.stringify([...document.querySelectorAll('#ins-files .sheet-row')].map(row => row.textContent));
+    })()`)] }]);
+    const rows = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(rows.filter(text => text === 'src/referenced-only.ts').length, 1);
+    assert.ok(rows.includes('src/object-only.ts'));
+  }],
+  ['review r3: open questions navigate to their section', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`new Promise(resolve => {
+      let target = null;
+      document.getElementById('section-questions').scrollIntoView = () => { target = 'questions'; };
+      document.getElementById('assumptions').scrollIntoView = () => { target = 'assumptions'; };
+      renderOverviewChapter();
+      document.querySelector('#overview-open li:last-child button').click();
+      requestAnimationFrame(() => resolve(target));
+    })`)] }]);
+    assert.strictEqual(lastEvalValue(phase), 'questions');
+  }],
+  ['review r3: collapsed quality gate includes warnings', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      QUALITY_GATE.splice(0, QUALITY_GATE.length, { status: 'PASS' }, { status: 'WARN' });
+      const gate = document.getElementById('gate');
+      const section = document.getElementById('section-gate');
+      section.prepend(document.createElement('h3'));
+      gate.replaceWith(section);
+      renderReviewChapter();
+      return document.querySelector('#gate summary .chapter-aside').textContent;
+    })()`)] }]);
+    assert.strictEqual(lastEvalValue(phase), '1 of 2 pass · 1 warning');
+  }],
+  ['review r3: Rules trust controls scroll to the policy list', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const targets = [];
+      document.getElementById('section-rules').scrollIntoView = () => targets.push('rules');
+      document.getElementById('section-gate').scrollIntoView = () => targets.push('gate');
+      const gate = document.getElementById('gate');
+      const opened = [];
+      gate.open = false;
+      document.querySelector('.trust-pill[data-trust="rules"]').click();
+      opened.push(gate.open);
+      openChapter('overview');
+      gate.open = false;
+      document.querySelector('.ov-trust-row[data-trust-key="rules"]').click();
+      opened.push(gate.open);
+      return JSON.stringify({ targets, opened });
+    })()`)] }]);
+    assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), { targets: ['rules', 'rules'], opened: [true, true] });
+  }],
+  ['review r3: outcome-free decisions retain their synthetic end bead', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      ARCH_SPEC.scenarios = [{ id: 'empty-branch', stages: [{ id: 'empty-decision', kind: 'branch', branches: [] }] }];
+      startWalkthrough('empty-branch');
+      return JSON.stringify({ entries: walkEntries().map(entry => entry.id), beads: [...document.querySelectorAll('.walk-bead')].map(bead => bead.dataset.walkEntry) });
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(obs.entries.length, 2);
+    assert.deepStrictEqual(obs.beads, obs.entries);
+  }],
+  ['review r3: chapter arrows do not advance an active walkthrough', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      startWalkthrough(ARCH_SPEC.scenarios[0].id);
+      openChapter('overview');
+      const before = state.walkCursor;
+      const tab = document.getElementById('chapter-tab-overview');
+      tab.focus(); tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      return JSON.stringify({ before, after: state.walkCursor, chapter: state.chapter });
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(obs.after, obs.before);
+    assert.strictEqual(obs.chapter, 'walkthrough');
+  }],
+  ['review r3: walkthrough lanes keep wheel events away from canvas zoom', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 390, height: 844, steps: [ev(`(() => {
+      const before = state.zoom;
+      const wheel = new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true });
+      document.querySelector('.walk-beads').dispatchEvent(wheel);
+      return JSON.stringify({ before, after: state.zoom, prevented: wheel.defaultPrevented });
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(obs.after, obs.before);
+    assert.strictEqual(obs.prevented, false);
+  }],
   ['review r2: Overview trust navigation focuses the visible chapter tab', () => {
     const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
       openChapter('overview');
@@ -1486,6 +1616,32 @@ const cases = [
     assert.ok(m.visited >= 10, `visited only ${m.visited} entries`);
     assert.deepStrictEqual(m.problems, []);
     assert.deepStrictEqual(m.resources, [], 'the page fetched something; it must be fully self-contained');
+  }],
+  ['viewer: lens marks sample the real routed path the page embeds, not the label point', () => {
+    // The page drops `polyline` from its embedded layout; marks must still follow the route.
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      ev(`JSON.stringify(LAYOUT_DATA.edges.filter(edge => (edge.segments || []).length >= 3).map(edge => {
+        const first = edge.segments[0], last = edge.segments[edge.segments.length - 1];
+        const a = lensEdgePoint(edge, 0), b = lensEdgePoint(edge, 1), mid = lensEdgePoint(edge, 0.5);
+        const onRoute = edge.segments.slice(1).some((s, i) => { const p = edge.segments[i];
+          return Math.abs((s.x - p.x) * (mid.y - p.y) - (s.y - p.y) * (mid.x - p.x)) < 0.5 && mid.x >= Math.min(p.x, s.x) - 0.5 && mid.x <= Math.max(p.x, s.x) + 0.5 && mid.y >= Math.min(p.y, s.y) - 0.5 && mid.y <= Math.max(p.y, s.y) + 0.5; });
+        return { id: edge.id, start: a.x === first.x && a.y === first.y, end: b.x === last.x && b.y === last.y, onRoute, embeddedPolyline: Boolean(edge.polyline) };
+      }))`)] }]);
+    const edges = JSON.parse(lastEvalValue(phase));
+    assert.ok(edges.length >= 3, 'example 3 has bent routes');
+    edges.forEach(edge => assert.deepStrictEqual(edge, { id: edge.id, start: true, end: true, onRoute: true, embeddedPolyline: false }));
+  }],
+  ['share: a link keeps the Change lens on Current or Proposed', () => {
+    const SAGA_SPEC = 'examples/3-async-event-driven-workflow/architecture.json';
+    const [before] = runPhases(SAGA_SPEC, [{ width: 1440, height: 900, steps: [
+      ev(`(selectLens('change', { explicit: true }), 0)`),
+      mouse({ action: 'click', selector: '[data-delta-mode="current"]', fx: 0.5, fy: 0.5 }),
+      ev(`new Promise(r => setTimeout(() => r(location.hash), 300))`)] }]);
+    const hash = lastEvalValue(before);
+    assert.ok(/[#&]d=current(&|$)/.test(hash), hash);
+    const [restored] = runPhases(SAGA_SPEC, [{ width: 1440, height: 900, steps: [
+      ev(`JSON.stringify({ lens: state.lens, delta: state.deltaMode, pressed: document.querySelector('[data-delta-mode="current"]')?.getAttribute('aria-pressed') })`)] }], undefined, { hash: hash.slice(1) });
+    assert.deepStrictEqual(JSON.parse(lastEvalValue(restored)), { lens: 'change', delta: 'current', pressed: 'true' });
   }],
   ['share: a copied link opens in a fresh browser on the same lens, walkthrough step, outcome and camera', () => {
     const SAGA = 'examples/3-async-event-driven-workflow/architecture.json';
@@ -2493,7 +2649,7 @@ const cases = [
       assert.ok(obs.firstNarrative && obs.firstNarrative.length > 0, 'the step shows its narrative');
       assert.strictEqual(obs.generated, true, 'generated narratives are marked');
       assert.strictEqual(obs.currentFirst, true, 'the current step is highlighted');
-      assert.strictEqual(obs.condition, 'Decision: Physical items intact in warehouse bin');
+      assert.strictEqual(obs.condition, 'Decision: Physical items intact in warehouse bin?');
       assert.strictEqual(obs.outcomeCount, 2);
       assert.strictEqual(obs.endName, 'Outcome: Dispatch Successful');
       assert.strictEqual(obs.playDisabled, true, 'reduced motion disables play');
@@ -4005,10 +4161,12 @@ cases.push(['review: reduced motion blocks visibility particle restarts', () => 
 }]);
 
 cases.push(['review: collision sync preserves unplaced orthogonal labels', () => {
-  const edge = { id: 'e', polyline: [{ x: 0, y: 0 }], controls: null, points: {}, labelSlot: null, labelWidth: 80, labelX: 0, labelY: 0, labelBounds: null };
+  // The shape the page embeds: no `polyline` or `labelSlot`, an orthogonal router, and no label bounds.
+  const edge = { id: 'e', segments: [{ type: 'M', x: 0, y: 0 }, { type: 'L', x: 0, y: 40 }], controls: null, points: {}, labelWidth: 80, labelX: 0, labelY: 0, labelBounds: null };
   let unplaced;
   const group = { toggleAttribute: (name, value) => { if (name === 'data-unplaced') unplaced = value; }, querySelector: () => null };
-  const ctx = canvasReviewContext(['drag'], { ArchVizGeometry: { resolveLabelCollisions() {}, labelLeader: () => null }, document: { getElementById: () => group } });
+  const ctx = canvasReviewContext(['drag'], { ArchVizGeometry: { resolveLabelCollisions() {}, labelLeader: () => null }, document: { getElementById: () => group },
+    LAYOUT_DATA: { config: { router: 'orthogonal' } } });
   ctx.resolveLabelCollisions([edge], [], []);
   assert.strictEqual(edge.labelBounds, null);
   assert.strictEqual(unplaced, true);
@@ -4383,6 +4541,163 @@ cases.push(['r2: sequence steps are scoped to Sequence links', () => {
   assert.strictEqual(selected, 2);
   const source = fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/view-state.js'), 'utf8');
   assert.doesNotMatch(source, /function canvasSize\(/);
+}]);
+
+// Third review regressions: reroutes, minimap geometry and accessibility.
+cases.push(['r3: flow refreshes length and proportional progress after rerouting', () => {
+  let frame, length = 100, reads = 0, distance;
+  const edge = { id: 'e', path: 'old' };
+  const ctx = canvasReviewContext(['flow'], { state: {}, LAYOUT_DATA: { edges: [edge] }, VIEWS: {},
+    particlesLayer: { appendChild() {} }, el: () => ({ style: {}, setAttribute() {} }), performance: { now: () => 0 },
+    requestAnimationFrame: fn => { frame = fn; return 1; }, cancelAnimationFrame() {},
+    document: { getElementById: id => id === 'edge-e' ? { classList: { contains: () => false } } : {
+      getTotalLength: () => { reads++; return length; }, getPointAtLength: d => { distance = d; return { x: d, y: 0 }; }
+    } }, computeTotalVisualBounds: () => ({}) });
+  ctx.startFlowParticles(); frame(100); assert.strictEqual(distance, 15);
+  length = 400; edge.path = 'new'; frame(200);
+  assert.strictEqual(distance, 75, '15% progress transfers to the new length before advancing');
+  frame(300); assert.strictEqual(distance, 90); assert.strictEqual(reads, 2, 'unchanged paths keep their cached length');
+  length = 0; edge.path = 'empty'; frame(400);
+  length = 200; edge.path = 'resumed'; frame(500); assert.strictEqual(distance, 15);
+}]);
+
+cases.push(['r3: focus membership fades labels and resets them with paths', () => {
+  const nodes = ['a', 'b', 'c', 'd'].map(id => ({ id })), attrs = {};
+  const state = { selectedNodeId: 'a', focusMode: 'neighbors' };
+  const ctx = canvasReviewContext(['view-state'], { state, nodeById: new Map(nodes.map(n => [n.id, n])),
+    LAYOUT_DATA: { nodes, edges: [{ id: 'ab', source: 'a', target: 'b' }, { id: 'cd', source: 'c', target: 'd' }] },
+    document: { body: { toggleAttribute() {}, setAttribute() {} }, getElementById: id => ({ setAttribute: (key, value) => { attrs[id + ':' + key] = value; } }) } });
+  ctx.applyFocusMode();
+  assert.strictEqual(attrs['label-cd:data-focus-member'], 'false');
+  assert.strictEqual(attrs['label-ab:data-focus-member'], 'true');
+  state.focusMode = null; ctx.applyFocusMode(); assert.strictEqual(attrs['label-cd:data-focus-member'], 'true');
+}]);
+
+cases.push(['r3: PNG unavailable context reports failure and releases blob URL', () => {
+  let image, modal, revoked = 0;
+  const ctx = canvasReviewContext(['exports'], { window: {}, Blob, URL: { createObjectURL: () => 'blob:test', revokeObjectURL: () => revoked++ },
+    Image: function () { image = this; }, document: { createElement: () => ({ getContext: () => null, toBlob() { throw Error('encoding attempted'); } }) } });
+  ctx.buildExportSvg = () => ({ markup: '<svg/>', width: 100, height: 100 });
+  ctx.openModal = (title, message) => { modal = { title, message }; };
+  ctx.exportPng(); image.onload();
+  assert.strictEqual(modal.title, 'PNG export failed'); assert.match(modal.message, /SVG/); assert.strictEqual(revoked, 1);
+}]);
+
+cases.push(['r3: node and boundary drag reroutes coalesce and release flushes the final position', () => {
+  let frame, routes = 0, canceled = 0, maps = 0;
+  const node = { id: 'n', x: 0, y: 0 }, boundary = { id: 'b', x: 0, y: 0 };
+  const state = { zoom: 1, panX: 0, panY: 0, draggingNodeId: 'n', nodeDragOffset: { x: 0, y: 0 }, boundaryDragOffset: { x: 0, y: 0 }, boundaryInitialNodes: [{ node, relX: 0, relY: 0 }] };
+  const ctx = canvasReviewContext(['drag', 'camera'], { state, nodeById: new Map([['n', node]]), boundaryById: new Map([['b', boundary]]),
+    LAYOUT_DATA: { config: { router: 'orthogonal' }, boundaries: [boundary], nodes: [node], edges: [] },
+    svg: { getBoundingClientRect: () => ({ left: 0, top: 0 }) }, document: { getElementById: () => null },
+    requestAnimationFrame: fn => { frame = fn; return 1; }, cancelAnimationFrame: () => canceled++,
+    renderMinimap: () => maps++, container: { classList: { remove() {} } }, window: { setTimeout() {} }, persistLayoutOverrides() {} });
+  ctx.recomputeAllEdges = () => { routes++; }; ctx.resolveLabelCollisions = () => {};
+  ctx.computeTotalVisualBounds = () => ({ width: 100, height: 100 });
+  ctx.moveDraggedNode(10, 20); ctx.moveDraggedNode(30, 40);
+  assert.strictEqual(routes, 0); frame(); assert.strictEqual(routes, 1); assert.strictEqual(node.x, 30);
+  state.draggingNodeId = null; state.draggingBoundaryId = 'b';
+  ctx.moveDraggedBoundary(50, 60); ctx.moveDraggedBoundary(70, 80);
+  assert.strictEqual(routes, 1); ctx.handleMouseUp();
+  assert.strictEqual(routes, 2); assert.strictEqual(canceled, 1); assert.strictEqual(node.x, 70); assert(maps >= 2);
+}]);
+
+cases.push(['r3: minimap caches bounds across camera updates and refreshes after render', () => {
+  let reads = 0; const attrs = {};
+  const ctx = canvasReviewContext(['minimap'], { state: { zoom: 1, panX: 0, panY: 0, userMovedView: true, collapsedBoundaries: new Set() },
+    LAYOUT_DATA: {}, svg: { getBoundingClientRect: () => ({ width: 100, height: 100 }) },
+    computeTotalVisualBounds: () => { reads++; return { minX: reads, minY: 0, width: 200, height: 200 }; },
+    document: { getElementById: id => id === 'minimap-svg' ? { setAttribute() {} } : { replaceChildren() {} },
+      querySelector: () => ({ setAttribute: (key, value) => { attrs[key] = value; } }) } });
+  ctx.renderMinimap(); ctx.updateMinimapViewport(); ctx.state.panX = -20; ctx.updateMinimapViewport();
+  assert.strictEqual(reads, 1); assert.strictEqual(attrs.x, 20);
+  ctx.renderMinimap(); ctx.updateMinimapViewport(); assert.strictEqual(reads, 2);
+  ctx.invalidateMinimapBounds(); ctx.updateMinimapViewport(); assert.strictEqual(reads, 3);
+}]);
+
+cases.push(['r3: Change visibility refreshes minimap marks for Current and Proposed', () => {
+  const nodes = [{ id: 'added', delta: 'ADDED', x: 1 }, { id: 'removed', delta: 'REMOVED', x: 2 }], marks = [];
+  const state = { currentView: 'before_after', deltaMode: 'current', collapsedBoundaries: new Set() };
+  const ctx = canvasReviewContext(['canvas', 'minimap'], { state, LAYOUT_DATA: { nodes }, VIEWS: { BEFORE_AFTER: 'before_after' },
+    DELTA: { ADDED: 'ADDED', REMOVED: 'REMOVED' }, DELTA_MODES: { CURRENT: 'current', PROPOSED: 'proposed' }, ARCH_SPEC: {},
+    applyFocusMode() {}, renderLensKey() {}, lensEncoding: () => ({ keyItems: [] }),
+    el: (tag, attrs) => ({ attrs, setAttribute() {} }), computeTotalVisualBounds: () => ({ minX: 0, minY: 0, width: 100, height: 100 }),
+    document: { querySelector: () => null, getElementById: id => id === 'minimap-svg' ? { setAttribute() {} } : id === 'minimap-content' ?
+      { replaceChildren() { marks.length = 0; }, appendChild: mark => marks.push(mark) } : { classList: { toggle() {} }, setAttribute() {} } } });
+  ctx.applyVisibility(); assert.strictEqual(marks.length, 1); assert.strictEqual(marks[0].attrs.x, 2);
+  assert.strictEqual(ctx.isNodeHidden(nodes[0]), true); assert.strictEqual(ctx.isNodeHidden(nodes[1]), false);
+  state.deltaMode = 'proposed'; ctx.applyVisibility(); assert.strictEqual(marks.length, 1); assert.strictEqual(marks[0].attrs.x, 1);
+  assert.strictEqual(ctx.isNodeHidden(nodes[0]), false); assert.strictEqual(ctx.isNodeHidden(nodes[1]), true);
+}]);
+
+cases.push(['r3: solid lens encoding preserves sync read dots and async dashes', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/workbench/styles/canvas.css'), 'utf8');
+  const selector = css.match(/(\.edge-path\[data-lens-stroke\]\[data-lens-style="solid"\][^{]*)\{\s*stroke-dasharray:\s*none;/)[1];
+  assert.match(selector, /:not\(\.read\)/, 'solid lens rule must exclude read paths');
+  assert.match(selector, /:not\(\.async\)/, 'solid lens rule must exclude async paths');
+  assert.match(css, /\.edge-path\.read\s*\{\s*stroke-dasharray:\s*2 3;/);
+  assert.match(css, /\.edge-path\.async(?:\.read)?\s*\{\s*stroke-dasharray:\s*5 4;/);
+}]);
+
+cases.push(['r3: minimap is focusable and keyboard pans without zooming and can center', () => {
+  const shell = fs.readFileSync(path.join(__dirname, '../src/workbench/shell.html'), 'utf8');
+  assert.match(shell, /data-region="minimap"[^>]*tabindex="0"[^>]*role="button"/);
+  const boot = fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/boot.js'), 'utf8');
+  assert.match(boot, /addEventListener\('keydown', handleMinimapKeyDown\)/);
+  const state = { zoom: 2, panX: 0, panY: 0 }; let center, updates = 0, prevented = 0;
+  const ctx = canvasReviewContext(['minimap'], { state, svg: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
+    actions: { setCamera: value => Object.assign(state, value) }, updateTransform: () => updates++,
+    focusModelPoint: (x, y) => { center = [x, y]; }, computeTotalVisualBounds: () => ({ minX: -10, minY: 20, width: 100, height: 80 }) });
+  for (const key of ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp']) ctx.handleMinimapKeyDown({ key, preventDefault: () => prevented++, stopPropagation() {} });
+  assert.strictEqual(state.panX, 0); assert.strictEqual(state.panY, 0); assert.strictEqual(state.zoom, 2); assert.strictEqual(updates, 4);
+  ctx.handleMinimapKeyDown({ key: 'Enter', preventDefault: () => prevented++, stopPropagation() {} }); assert.deepStrictEqual(center, [40, 60]);
+  ctx.handleMinimapKeyDown({ key: ' ', preventDefault: () => prevented++, stopPropagation() {} }); assert.strictEqual(prevented, 6);
+}]);
+
+cases.push(['r3: touchcancel clears pan and pinch even with remaining touches', () => {
+  const boot = fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/boot.js'), 'utf8');
+  assert.match(boot, /addEventListener\('touchcancel', handleTouchCancel\)/);
+  const state = { panX: 0, panY: 0, zoom: 1 }; let cameras = 0;
+  const ctx = canvasReviewContext(['camera'], { state, window: { setTimeout: fn => fn() }, actions: { setCamera: () => cameras++ } });
+  const touches = [{ clientX: 0, clientY: 0 }, { clientX: 100, clientY: 0 }];
+  ctx.handleTouchStart({ touches: [touches[0]] }); assert.strictEqual(state.isDraggingCanvas, true);
+  ctx.handleTouchCancel({ touches: [touches[0]] }); assert.strictEqual(state.isDraggingCanvas, false);
+  ctx.handleTouchMove({ touches: [{ clientX: 50, clientY: 50 }], preventDefault() {} }); assert.strictEqual(cameras, 0);
+  ctx.handleTouchStart({ touches }); ctx.handleTouchCancel({ touches });
+  ctx.handleTouchMove({ touches, preventDefault() {} }); assert.strictEqual(cameras, 0);
+}]);
+
+cases.push(['r3: nodes without status announce UNKNOWN', () => {
+  const rendered = [];
+  const ctx = canvasReviewContext(['canvas'], { LAYOUT_DATA: { nodes: [{ id: 'n', label: 'Node', type: 'service' }] }, DELTA: { UNCHANGED: 'UNCHANGED' },
+    boundariesLayer: {}, edgesLayer: {}, nodesLayer: { appendChild: g => rendered.push(g) }, invalidateMinimapBounds() {},
+    el: (tag, attrs) => ({ attrs, appendChild() {}, addEventListener() {} }), withTooltip() {}, applyLens() {} });
+  ctx.renderNodeCard = () => {}; ctx.renderDiagram();
+  assert.match(rendered[0].attrs['aria-label'], /\. UNKNOWN\./);
+}]);
+
+cases.push(['r3: restored boundary headers follow positions and roll back on route failure', () => {
+  for (const failure of [false, true]) {
+    const boundary = { id: 'b', x: 0, y: 0 }, header = { x: 12, y: 8 }; let routed;
+    const ctx = canvasReviewContext(['view-state'], { ARCH_SPEC: { meta: { id: 'test' } },
+      LAYOUT_DATA: { config: { router: 'orthogonal', layout: 'columns' }, boundaries: [boundary], boundaryHeaderBoxes: [header] },
+      window: { localStorage: { getItem: () => JSON.stringify({ boundaries: { b: { x: 300, y: 400 } } }), removeItem() {} } },
+      recomputeAllEdges: () => { routed = { ...header }; return failure ? 'curved' : 'columns'; } });
+    ctx.restorePersistedLayout();
+    assert.deepStrictEqual(routed, failure ? { x: 12, y: 8 } : { x: 312, y: 408 });
+    assert.deepStrictEqual(header, failure ? { x: 12, y: 8 } : { x: 312, y: 408 });
+    assert.strictEqual(boundary.x, failure ? 0 : 300);
+  }
+}]);
+
+cases.push(['r3: fit cache distinguishes colliding weighted node geometry', () => {
+  const state = { collapsedBoundaries: new Set(), zoom: 1, panX: 0, panY: 0 }, node = { id: 'n', x: 0, y: 0, width: 100, height: 50 };
+  const ctx = canvasReviewContext(['fit'], { state, LAYOUT_DATA: { nodes: [node] }, svg: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
+    document: { querySelector: () => null }, actions: { setCamera: value => Object.assign(state, value) }, updateTransform() {} });
+  let calls = 0; ctx.fitToScreen = () => { calls++; state.panX = node.x; };
+  ctx.fitCamera(); ctx.fitCamera(); node.x = 70; node.y = -30;
+  assert.strictEqual(ctx.fitCamera().panX, 70); assert.strictEqual(calls, 2);
+  node.width = 200; ctx.fitCamera(); assert.strictEqual(calls, 3);
 }]);
 
 // Any model: generated specs of every shape get the same real-interaction sweep the examples get.

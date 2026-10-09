@@ -2160,6 +2160,15 @@ test('quota: agy\'s "Individual quota reached" / RESOURCE_EXHAUSTED counts as ou
   assert.ok(!ledger.matchesQuota('Error: database is locked'));
 });
 
+// Some platforms (Windows without the privilege) cannot create symlinks; isolate() then runs without auth links.
+const CAN_SYMLINK = (() => {
+  try { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'df-ln-')); fs.symlinkSync(path.join(d, 'x'), path.join(d, 'l')); return true; } catch { return false; }
+})();
+// Mirrors the adapter: a uid with no passwd entry falls back to a fixed name.
+function opencodeUserKey() {
+  try { return String(os.userInfo().uid >= 0 ? os.userInfo().uid : os.userInfo().username); } catch { return 'user'; }
+}
+
 test('opencode gets a private data dir per workspace, stable across attempts, with auth linked in', () => {
   const adapter = require('../scripts/adapters/opencode.js');
   const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'df-xdg-'));
@@ -2173,7 +2182,7 @@ test('opencode gets a private data dir per workspace, stable across attempts, wi
   assert.notStrictEqual(a1.XDG_DATA_HOME, b.XDG_DATA_HOME, 'two worktrees must not share an opencode database');
   assert.notStrictEqual(a1.XDG_DATA_HOME, shared, 'the user\'s own opencode database is never used by a worker');
   const link = path.join(a1.XDG_DATA_HOME, 'opencode', 'auth.json');
-  assert.strictEqual(fs.realpathSync(link), fs.realpathSync(path.join(shared, 'opencode', 'auth.json')), 'auth is linked, not copied');
+  if (CAN_SYMLINK) assert.strictEqual(fs.realpathSync(link), fs.realpathSync(path.join(shared, 'opencode', 'auth.json')), 'auth is linked, not copied');
   assert.strictEqual(adapter.isolate({ env }), null, 'no workspace, no isolation');
 });
 
@@ -2190,9 +2199,10 @@ test('opencode data dir is private to the user and drops auth links whose shared
     assert.strictEqual(fs.statSync(data).mode & 0o777, 0o700, 'session history must not be readable by other users');
     assert.strictEqual(fs.statSync(first.XDG_DATA_HOME).mode & 0o777, 0o700);
   }
-  assert.ok(fs.lstatSync(path.join(data, 'auth.json')).isSymbolicLink());
   // Another user on the machine gets their own namespace, not a 0700 directory they cannot enter.
-  assert.match(path.basename(path.dirname(first.XDG_DATA_HOME)), new RegExp(`^delegate-fleet-opencode-${os.userInfo().uid >= 0 ? os.userInfo().uid : os.userInfo().username}$`));
+  assert.strictEqual(path.basename(path.dirname(first.XDG_DATA_HOME)), `delegate-fleet-opencode-${opencodeUserKey()}`);
+  if (!CAN_SYMLINK) return;
+  assert.ok(fs.lstatSync(path.join(data, 'auth.json')).isSymbolicLink());
   fs.rmSync(path.join(shared, 'opencode', 'auth.json'));
   adapter.isolate({ cwd, env });
   assert.throws(() => fs.lstatSync(path.join(data, 'auth.json')), /ENOENT/, 'a link to credentials no longer shared is removed');

@@ -67,6 +67,7 @@ function handleMouseMove(e) {
 }
 
 function handleMouseUp() {
+  if (state.draggingNodeId || state.draggingBoundaryId) flushDragRoutes();
   if (state.dragMoved && (state.draggingNodeId || state.draggingBoundaryId)) {
     resolveLabelCollisions(LAYOUT_DATA.edges || [], LAYOUT_DATA.nodes || [], LAYOUT_DATA.boundaryHeaderBoxes || []);
     const totalBounds = computeTotalVisualBounds();
@@ -132,6 +133,10 @@ function handleTouchMove(e) {
     userMoved: true
   });
   updateTransform();
+}
+
+function handleTouchCancel() {
+  handleTouchEnd();
 }
 
 function handleTouchEnd(e) {

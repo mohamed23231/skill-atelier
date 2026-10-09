@@ -18,8 +18,8 @@
 | Changes | Added, changed, removed, and moved components, blast radius, and traceability gaps. |
 | Review | Rules, findings, failure modes, assumptions, open questions, and folded decisions; the quality gate is folded at the end and opened by its trust pill. |
 | Evidence | Component evidence states and all evidence locators. |
-| Data | Table and relationship cards, columns, keys, indexes, and related details. |
-| Plan | Implementation plan and tasks. |
+| Data (when the spec has tables) | Table and relationship cards, columns, keys, indexes, and related details. |
+| Plan (when the spec has plan phases) | Implementation plan and tasks. |
 
 ## Lenses
 
@@ -86,7 +86,7 @@ The hash uses version 2 state parameters. Parameters are optional and describe t
 Example:
 
 ```text
-architecture.html#v=2&c=walkthrough&l=risk&n=order-service&s=order-flow&at=publish&step=2
+architecture.html#v=2&c=walkthrough&l=risk&n=order-service&s=order-flow&at=publish
 ```
 
 Version 1 links using `view`, `node`, `scenario`, `stage`, `z`, `x`, and `y` continue to work. Missing model items in a link are dropped with a brief explanation; links from a newer version are not partly applied.

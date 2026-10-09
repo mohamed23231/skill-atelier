@@ -388,6 +388,14 @@ function stageAsInteraction(stage, edges) {
   return interaction;
 }
 
+// The canonical parallel stage plays a flat list of hops, including every nested branch outcome.
+function collectStageInteractions(stage) {
+  if (!stage || typeof stage !== 'object') return [];
+  return (Array.isArray(stage.interactions) ? stage.interactions : []).concat(
+    (stage.branches || []).flatMap((branch) => (branch.stages || []).flatMap(collectStageInteractions))
+  );
+}
+
 function normalizeStage(stage, edges) {
   if (!stage || typeof stage !== 'object') return stage;
   if (!stage.kind && typeof stage.type === 'string') stage.kind = stage.type;
@@ -395,7 +403,7 @@ function normalizeStage(stage, edges) {
     if (stage.kind === STAGE_KIND.PARALLEL && Array.isArray(stage.stages)) {
       stage.interactions = stage.stages
         .map((child) => normalizeStage(child, edges))
-        .flatMap((child) => (child && Array.isArray(child.interactions) ? child.interactions : []));
+        .flatMap(collectStageInteractions);
     } else if (stage.kind !== STAGE_KIND.BRANCH) {
       const interaction = stageAsInteraction(stage, edges);
       if (interaction) stage.interactions = [interaction];

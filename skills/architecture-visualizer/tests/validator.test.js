@@ -954,4 +954,27 @@ const cases = [
   ],
 ];
 
+cases.push(['parallel normalization collects recursively nested branch interactions', () => {
+  const spec = clone(VALID_SPEC);
+  spec.scenarios = [{ id: 'nested', stages: [{ id: 'p', type: 'parallel', stages: [
+    { id: 'decision', type: 'branch', branches: [
+      { name: 'success', stages: [{ id: 'write', type: 'interaction', from: 'api', to: 'db', label: 'Write' }] },
+      { name: 'retry', stages: [{ id: 'nested-decision', type: 'branch', branches: [
+        { name: 'recover', stages: [{ id: 'read', type: 'interaction', from: 'db', to: 'api', label: 'Recover', recovery: 'retry' }] },
+      ] }] },
+    ] },
+    { id: 'last', type: 'interaction', from: 'api', to: 'db', label: 'Finish' },
+  ] }] }];
+  const result = validateArchitecture(spec);
+  assert.deepStrictEqual(result.errors, []);
+  const interactions = result.model.scenarios[0].stages[0].interactions;
+  assert.deepStrictEqual(interactions.map(hop => hop.label), ['Write', 'Recover', 'Finish']);
+  assert.ok(interactions.every(hop => hop.edgeId === 'e1'));
+  assert.strictEqual(interactions[1].recovery, 'retry');
+  assert.strictEqual(spec.scenarios[0].stages[0].interactions, undefined);
+  assert.deepStrictEqual(validateArchitecture(result.model).model.scenarios, result.model.scenarios, 'scenario normalization stays idempotent');
+  spec.scenarios[0].stages[0].stages[0].branches[0].stages[0].to = 'ghost';
+  assert.ok(validateArchitecture(spec).errors.some(error => error.includes('invalid "to" node "ghost"')));
+}]);
+
 module.exports = { name: 'Validator', cases };

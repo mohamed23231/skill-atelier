@@ -6,13 +6,23 @@ function selectLayerFilter(layer) {
   updateUrlState();
 }
 
+// An orthogonal route's corners. The page does not embed `polyline` (it repeats the straight-line
+// `segments`), so read those when the polyline is absent.
+function edgeRoutePoints(edge) {
+  if (edge?.polyline?.length > 1) return edge.polyline;
+  const segments = Array.isArray(edge?.segments) ? edge.segments : [];
+  if (segments.length < 2 || !segments.every(segment => segment && (segment.type === 'M' || segment.type === 'L'))) return null;
+  return segments.map(({ x, y }) => ({ x, y }));
+}
+
 // Lens encoding changes marks, never visibility or spotlight state.
 function lensEdgePoint(edge, t) {
   if (edge && edge.points && edge.controls && typeof ArchVizGeometry !== 'undefined') {
     return ArchVizGeometry.cubicPointAt(t, edge.points, edge.controls);
   }
-  if (edge?.polyline?.length > 1) {
-    const points = edge.polyline;
+  const route = edgeRoutePoints(edge);
+  if (route) {
+    const points = route;
     const lengths = points.slice(1).map((point, index) => Math.hypot(point.x - points[index].x, point.y - points[index].y));
     let remaining = lengths.reduce((sum, length) => sum + length, 0) * Math.max(0, Math.min(1, t));
     for (let i = 0; i < lengths.length; i++) {
@@ -119,7 +129,7 @@ function renderPolicyGhosts(ghosts) {
     }).routes;
   } catch {
     // A crowded or manually dragged layout can make a route impossible.
-    // Preserve the previous drawing as a fallback rather than breaking lens switching.
+    // Omit ghosts without an obstacle-free route.
   }
   const occupied = LAYOUT_DATA.nodes.map(node => ({
     left: node.x - 4, right: node.x + node.width + 4,
@@ -134,11 +144,8 @@ function renderPolicyGhosts(ghosts) {
     occupied.push({ left: a.x - 4, right: b.x + 4, top: a.y - 4, bottom: b.y + 4 });
   });
   edges.forEach(ghost => {
-    const from = nodeById.get(ghost.from), to = nodeById.get(ghost.to);
-    const points = routes[ghost.id]?.points || [
-      { x: from.x + from.width / 2, y: from.y + from.height / 2 },
-      { x: to.x + to.width / 2, y: to.y + to.height / 2 },
-    ];
+    const points = routes[ghost.id]?.points;
+    if (!points || points.length < 2) return;
     const group = el('g', { class: 'policy-ghost', 'data-policy-id': ghost.policyId });
     group.appendChild(el('path', {
       class: 'policy-ghost-line',
@@ -191,13 +198,15 @@ function renderPolicyGhosts(ghosts) {
 
 let lensFiltersBound = false;
 
-function closeLensFilters() {
+function closeLensFilters(restoreFocus = false) {
   const key = document.querySelector('.lens-key');
   const popover = key?.querySelector('.lens-filters');
   if (!popover || popover.hidden) return;
+  // A focusable outside target keeps focus; otherwise avoid hiding the focused control.
+  restoreFocus = restoreFocus || popover.contains(document.activeElement);
   popover.hidden = true;
   key.querySelector('[data-action="lens-filters"]')?.setAttribute('aria-expanded', 'false');
-  key.querySelector('[data-action="lens-filters"]')?.focus();
+  if (restoreFocus) key.querySelector('[data-action="lens-filters"]')?.focus();
 }
 
 function renderLensKey(items) {
@@ -221,7 +230,7 @@ function renderLensKey(items) {
       if (event.key === 'Escape' && document.querySelector('.lens-filters')?.hidden === false) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        closeLensFilters();
+        closeLensFilters(true);
       }
     }, true);
   }
@@ -293,6 +302,7 @@ function renderLensKey(items) {
       button.addEventListener('click', () => {
         actions.setDeltaMode(mode);
         applyVisibility();
+        updateUrlState();
       });
       modes.appendChild(button);
     });

@@ -614,7 +614,7 @@ stroke-width: 1.25;
 }
 
 .node-group[data-lens-style="solid"] .node-rect,
-.edge-path[data-lens-stroke][data-lens-style="solid"] { stroke-dasharray: none; }
+.edge-path[data-lens-stroke][data-lens-style="solid"]:not(.read):not(.async) { stroke-dasharray: none; }
 .node-group[data-lens-style="dashed"] .node-rect,
 .edge-path[data-lens-stroke][data-lens-style="dashed"] { stroke-dasharray: 6 4; }
 .node-group[data-lens-style="dotted"] .node-rect,
@@ -1652,6 +1652,8 @@ drawn in ink on its own shape (canvas.css) and a connection darkens with its con
 .edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
 .edge-label { cursor: pointer; }
 
+.workbench-minimap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 @media (min-width: 900px) and (max-width: 1099px) {
 .rail { width: 360px; }
 body:has(.rail[data-open="true"]) { --canvas-right: 360px; }
@@ -2064,7 +2066,7 @@ margin-left: 2px;
 <g id="nodes-layer"></g>
 </g>
 </svg>
-<div class="workbench-minimap" data-region="minimap" aria-label="Architecture minimap">
+<div class="workbench-minimap" data-region="minimap" tabindex="0" role="button" aria-label="Architecture minimap. Arrow keys pan; Enter or Space centers the diagram.">
 <svg id="minimap-svg" aria-hidden="true"><g id="minimap-content"></g><rect data-minimap-viewport></rect></svg>
 </div>
 <div class="walk-track" role="listbox" aria-label="Walkthrough steps" hidden></div>
@@ -4012,11 +4014,14 @@ applyFocusMode();
 updateUrlState();
 }
 
+let minimapBounds = null;
+function invalidateMinimapBounds() { minimapBounds = null; }
+
 function renderMinimap() {
 const minimap = document.getElementById('minimap-svg');
 const content = document.getElementById('minimap-content');
 if (!minimap || !content) return;
-const bounds = computeTotalVisualBounds();
+const bounds = minimapBounds = computeTotalVisualBounds();
 const width = Math.max(bounds.width, 1);
 const height = Math.max(bounds.height, 1);
 minimap.setAttribute('viewBox', `${bounds.minX} ${bounds.minY} ${width} ${height}`);
@@ -4049,7 +4054,7 @@ viewportRect.setAttribute('x', -state.panX / state.zoom);
 viewportRect.setAttribute('y', -state.panY / state.zoom);
 viewportRect.setAttribute('width', Math.max(rect.width / state.zoom, 1));
 viewportRect.setAttribute('height', Math.max(rect.height / state.zoom, 1));
-const bounds = computeTotalVisualBounds();
+const bounds = minimapBounds || (minimapBounds = computeTotalVisualBounds());
 const left = state.panX + bounds.minX * state.zoom;
 const top = state.panY + bounds.minY * state.zoom;
 const idle = left >= -1 && top >= -1 && left + bounds.width * state.zoom <= rect.width + 1 && top + bounds.height * state.zoom <= rect.height + 1;
@@ -4067,6 +4072,23 @@ const point = minimap.createSVGPoint();
 point.x = event.clientX; point.y = event.clientY;
 const world = point.matrixTransform(matrix.inverse());
 focusModelPoint(world.x, world.y);
+}
+
+function handleMinimapKeyDown(event) {
+const directions = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+const direction = directions[event.key];
+if (!direction && event.key !== 'Enter' && event.key !== ' ') return;
+event.preventDefault();
+event.stopPropagation();
+const rect = svg.getBoundingClientRect();
+if (direction) {
+actions.setCamera({ panX: state.panX - direction[0] * rect.width / 10,
+panY: state.panY - direction[1] * rect.height / 10, userMoved: true });
+updateTransform();
+} else {
+const bounds = minimapBounds || (minimapBounds = computeTotalVisualBounds());
+focusModelPoint(bounds.minX + bounds.width / 2, bounds.minY + bounds.height / 2);
+}
 }
 
 
@@ -4207,21 +4229,24 @@ const policies = trustArray(source.policies);
 const findings = trustArray(source.findings).concat(trustArray(trustObject(source.review).policyFindings));
 const known = new Set();
 policies.forEach((policy) => {
-if (policy && policy.id != null) known.add(policy.id);
+if (policy && policy.id) known.add(policy.id);
 });
 const violated = new Set();
 findings.forEach((finding) => {
 if (finding && finding.policyId != null && known.has(finding.policyId)) violated.add(finding.policyId);
 });
-const total = policies.length;
-if (total === 0) {
+const total = policies.filter(policy => policy && policy.id).length;
+const skipped = policies.length - total;
+const unchecked = skipped ? ` · ${skipped} unchecked` : '';
+if (policies.length === 0) {
 return trustEntry('neutral', 'No rules', 'The specification declares no policies.', 'review');
 }
 if (violated.size === 0) {
-return trustEntry('ok', `${total}/${total} rules pass`, 'Every declared policy passed.', 'review');
+return trustEntry(skipped ? 'unchecked' : 'ok', `${total}/${total} rules pass${unchecked}`,
+skipped ? `${skipped} policies were skipped because they lack a stable id.` : 'Every declared policy passed.', 'review');
 }
 const count = violated.size;
-return trustEntry('risk', `${count} violation${count === 1 ? '' : 's'} of ${total}`, `${count} of ${total} policies were violated by findings.`, 'review');
+return trustEntry('risk', `${count} violation${count === 1 ? '' : 's'} of ${total}${unchecked}`, `${count} of ${total} policies were violated by findings.`, 'review');
 }
 
 function trustOpenItemsEntry(spec) {
@@ -4356,7 +4381,7 @@ findings: lensFindings(source),
 }
 
 function lensStructureEdges(parts) {
-const edges = {};
+const edges = Object.create(null);
 let hasSync = false;
 let hasAsync = false;
 parts.edges.forEach((edge) => {
@@ -4371,7 +4396,7 @@ return { edges: edges, hasSync: hasSync, hasAsync: hasAsync };
 
 function lensStructure(spec) {
 const parts = lensParts(spec);
-const nodes = {};
+const nodes = Object.create(null);
 let hasRing = false;
 parts.nodes.forEach((node) => {
 if (!node || node.id == null) return;
@@ -4400,7 +4425,7 @@ return lensBadge(label, 'warn');
 
 function lensEvidence(spec) {
 const parts = lensParts(spec);
-const nodes = {};
+const nodes = Object.create(null);
 const seen = {};
 parts.nodes.forEach((node) => {
 if (!node || node.id == null) return;
@@ -4448,14 +4473,14 @@ return lensEdgeEncoding('edge', edge.communication !== 'async' ? 'solid' : 'dash
 
 function lensChange(spec) {
 const parts = lensParts(spec);
-const nodes = {};
+const nodes = Object.create(null);
 const present = {};
 parts.nodes.forEach((node) => {
 if (!node || node.id == null) return;
 nodes[node.id] = lensChangeNode(node);
 present[node.delta || 'UNCHANGED'] = true;
 });
-const edges = {};
+const edges = Object.create(null);
 parts.edges.forEach((edge) => {
 if (!edge || edge.id == null) return;
 edges[edge.id] = lensChangeEdge(edge);
@@ -4480,7 +4505,7 @@ return found;
 }
 
 function lensPolicyIdsWithFindings(findings) {
-const found = {};
+const found = Object.create(null);
 findings.forEach((finding) => {
 if (finding && finding.policyId != null) found[finding.policyId] = true;
 });
@@ -4488,7 +4513,7 @@ return found;
 }
 
 function lensPolicyMap(parts) {
-const byId = {};
+const byId = Object.create(null);
 parts.policies.forEach((policy) => {
 if (policy && policy.id != null) byId[policy.id] = policy;
 });
@@ -4511,7 +4536,7 @@ return parts.edges.filter((edge) => edge && edge[key] === nodeId).length;
 
 function lensRiskNodes(parts, options) {
 const byId = lensPolicyMap(parts);
-const nodes = {};
+const nodes = Object.create(null);
 let hasFailure = false;
 let hasViolation = false;
 let hasFanLimit = false;
@@ -4573,7 +4598,7 @@ hasRequiredEvidence: hasRequiredEvidence,
 
 function lensRiskEdgeMarks(parts) {
 const byId = lensPolicyMap(parts);
-const marks = {};
+const marks = Object.create(null);
 parts.findings.forEach((finding) => {
 if (!finding) return;
 const kind = lensFindingKind(byId, finding);
@@ -4588,7 +4613,7 @@ return;
 }
 if (kind !== 'cycle') return;
 const cycleNodes = lensArray(finding.nodeIds);
-const order = {};
+const order = Object.create(null);
 cycleNodes.forEach((from, index) => {
 const to = cycleNodes[(index + 1) % cycleNodes.length];
 order[`${from}->${to}`] = index + 1;
@@ -4605,7 +4630,7 @@ return marks;
 }
 
 function lensRiskEdges(parts) {
-const edges = {};
+const edges = Object.create(null);
 const select = (policy, side) => parts.nodes.filter(node =>
 Boolean(policy[side] || policy[`${side}Type`] || policy[`${side}Boundary`]) &&
 (!policy[side] || node.id === policy[side]) &&
@@ -4996,6 +5021,8 @@ const chapter = params.get('c');
 if (urlSet(chapter)) result.chapter = chapter;
 const lens = params.get('l');
 if (urlSet(lens)) result.lens = lens;
+const delta = params.get('d');
+if (urlSet(delta)) result.delta = delta;
 const view = params.get('view');
 if (urlSet(view)) result.view = view;
 const node = params.get('n');
@@ -5027,6 +5054,7 @@ let camSuffix = '';
 params.set('v', '2');
 if (urlSet(source.chapter) && source.chapter !== 'overview') params.set('c', String(source.chapter));
 if (urlSet(source.lens) && source.lens !== 'structure') params.set('l', String(source.lens));
+if (urlSet(source.delta) && source.delta !== 'diff') params.set('d', String(source.delta));
 if (urlSet(source.view) && source.view !== URL_CODEC_DEFAULT_VIEW) params.set('view', String(source.view));
 if (urlSet(source.node)) params.set('n', String(source.node));
 if (urlSet(source.edge)) params.set('e', String(source.edge));
@@ -5108,6 +5136,7 @@ if (lens === 'change') switchView(VIEWS.BEFORE_AFTER);
 else if (state.currentView === VIEWS.BEFORE_AFTER) switchView(VIEWS.ARCHITECTURE);
 if (scenarioActive && state.walkCursor) walkTo(state.walkCursor);
 applyLens();
+renderMinimap();
 announceStatus(`${lens.charAt(0).toUpperCase() + lens.slice(1)} lens`);
 updateUrlState();
 }
@@ -5154,6 +5183,7 @@ layoutFingerprint();
 const original = {
 nodes: (LAYOUT_DATA.nodes || []).map(node => [node, node.x, node.y]),
 boundaries: (LAYOUT_DATA.boundaries || []).map(boundary => [boundary, boundary.x, boundary.y]),
+headers: (LAYOUT_DATA.boundaryHeaderBoxes || []).map(header => [header, header.x, header.y]),
 };
 try {
 const raw = window.localStorage.getItem(layoutStorageKey());
@@ -5169,6 +5199,8 @@ node.y = point.y;
 (LAYOUT_DATA.boundaries || []).forEach(boundary => {
 const point = saved?.boundaries?.[boundary.id];
 if (Number.isFinite(point?.x) && Number.isFinite(point?.y)) {
+const header = LAYOUT_DATA.boundaryHeaderBoxes?.[(LAYOUT_DATA.boundaries || []).indexOf(boundary)];
+if (header) { header.x += point.x - boundary.x; header.y += point.y - boundary.y; }
 boundary.x = point.x;
 boundary.y = point.y;
 }
@@ -5177,6 +5209,7 @@ if (recomputeAllEdges() !== (LAYOUT_DATA.config.layout === 'lanes' ? 'lanes' : '
 throw new Error('saved layout no longer routes');
 }
 } catch (error) {
+original.headers.forEach(([header, x, y]) => { header.x = x; header.y = y; });
 original.nodes.forEach(([node, x, y]) => { node.x = x; node.y = y; });
 original.boundaries.forEach(([boundary, x, y]) => { boundary.x = x; boundary.y = y; });
 try { window.localStorage.removeItem(layoutStorageKey()); } catch (storageError) { /* storage unavailable */ }
@@ -5219,8 +5252,10 @@ const item = document.getElementById(`node-${node.id}`);
 if (item) item.setAttribute('data-focus-member', members ? String(members.has(node.id)) : 'true');
 });
 (LAYOUT_DATA.edges || []).forEach(edge => {
-const item = document.getElementById(`path-${edge.id}`);
-if (item) item.setAttribute('data-focus-member', members ? String(members.has(edge.source) && members.has(edge.target)) : 'true');
+const member = members ? String(members.has(edge.source) && members.has(edge.target)) : 'true';
+for (const id of [`path-${edge.id}`, `label-${edge.id}`]) {
+document.getElementById(id)?.setAttribute('data-focus-member', member);
+}
 });
 const neighbors = document.getElementById('btn-focus-neighbors');
 const affected = document.getElementById('btn-focus-affected');
@@ -5284,6 +5319,7 @@ function viewSnapshot() {
 const snapshot = {
 chapter: state.chapter,
 lens: state.lens,
+delta: state.lens === 'change' && state.deltaMode && state.deltaMode !== 'diff' ? state.deltaMode : null,
 view: state.currentView,
 node: state.selectedNodeId,
 edge: state.selectedEdgeId,
@@ -5339,6 +5375,7 @@ actions.setCamera({ userMoved: false });
 actions.setPresentation(false);
 document.body.setAttribute('data-presentation', 'false');
 actions.setLens('structure', false);
+actions.setDeltaMode('diff');
 openChapter('overview');
 switchView(VIEWS.ARCHITECTURE);
 selectLens('structure', { explicit: false });
@@ -5375,6 +5412,14 @@ if (link.version === 2 && link.lens === undefined && link.view !== VIEWS.BEFORE_
 if (link.lens !== undefined) {
 if (LENSES.includes(link.lens)) selectLens(link.lens, { explicit: true });
 else notices.push(`Lens ${link.lens} does not exist; keeping the suggested lens.`);
+}
+if (link.delta !== undefined) {
+if (['current', 'proposed', 'diff'].includes(link.delta)) {
+actions.setDeltaMode(link.delta);
+applyVisibility();
+} else {
+notices.push(`Change mode ${link.delta} does not exist; showing the diff.`);
+}
 }
 if (link.filter !== undefined) {
 if (LAYER_FILTERS.includes(link.filter)) {
@@ -6020,7 +6065,7 @@ const track = document.querySelector('.walk-track');
 if (!track) return;
 if (!walkTrackBound) {
 walkTrackBound = true;
-['mousedown', 'touchstart'].forEach((type) => track.addEventListener(type, (event) => event.stopPropagation()));
+['mousedown', 'touchstart', 'wheel'].forEach((type) => track.addEventListener(type, (event) => event.stopPropagation()));
 new ResizeObserver(() => {
 document.body.style.setProperty('--walk-track-height', `${track.getBoundingClientRect().height}px`);
 if (typeof holdsLinkedCamera === 'function' && holdsLinkedCamera()) applyLinkedCamera();
@@ -6127,8 +6172,9 @@ beads.appendChild(row);
 return row;
 };
 const decisionIndex = entries.findIndex(entry => entry.kind === 'decision');
-lane('Main path', decisionIndex < 0 ? entries : entries.slice(0, decisionIndex + 1));
-if (decisionIndex >= 0) {
+const hasOutcomes = decisionIndex >= 0 && entries[decisionIndex].branches.length > 0;
+lane('Main path', hasOutcomes ? entries.slice(0, decisionIndex + 1) : entries);
+if (hasOutcomes) {
 const decision = entries[decisionIndex];
 decision.branches.forEach((branch, index) => {
 const branchEntries = [];
@@ -6502,6 +6548,7 @@ window.addEventListener('mouseup', handleMouseUp);
 container.addEventListener('touchstart', handleTouchStart, { passive: false });
 container.addEventListener('touchmove', handleTouchMove, { passive: false });
 container.addEventListener('touchend', handleTouchEnd);
+container.addEventListener('touchcancel', handleTouchCancel);
 
 const railToggle = document.querySelector('[data-action="rail-toggle"]');
 if (railToggle) railToggle.addEventListener('click', () => toggleDrawer('rail', railToggle));
@@ -6510,6 +6557,7 @@ document.querySelector('[data-action="sheet-back"]')?.addEventListener('click', 
 document.querySelector('[data-action="inspector-close"]').addEventListener('click', closeInspector);
 document.querySelector('[data-region="minimap"]').addEventListener('mousedown', event => event.stopPropagation());
 document.querySelector('[data-region="minimap"]').addEventListener('click', handleMinimapClick);
+document.querySelector('[data-region="minimap"]').addEventListener('keydown', handleMinimapKeyDown);
 document.getElementById('btn-focus-neighbors').addEventListener('click', () => setFocusMode(FOCUS_MODES.NEIGHBORS));
 document.getElementById('btn-focus-affected').addEventListener('click', () => setFocusMode(FOCUS_MODES.AFFECTED));
 document.addEventListener('fullscreenchange', () => {
@@ -6688,6 +6736,7 @@ return el('rect', { class: 'node-rect', width: node.width, height: node.height, 
 }
 
 function renderDiagram() {
+invalidateMinimapBounds();
 boundariesLayer.innerHTML = '';
 edgesLayer.innerHTML = '';
 nodesLayer.innerHTML = '';
@@ -6829,7 +6878,7 @@ id: `node-${n.id}`,
 transform: `translate(${n.x}, ${n.y})`,
 tabindex: '0',
 role: 'button',
-'aria-label': `${n.label}. ${n.type}. ${n.status || 'VERIFIED'}. ${n.delta || DELTA.UNCHANGED}.`
+'aria-label': `${n.label}. ${n.type}. ${n.status || 'UNKNOWN'}. ${n.delta || DELTA.UNCHANGED}.`
 });
 
 g.appendChild(nodeShape(n));
@@ -7035,6 +7084,7 @@ syncEdgeMarker(path);
 }
 });
 
+renderMinimap();
 if (state.animatingFlow) startFlowParticles();
 }
 
@@ -7046,12 +7096,20 @@ applyVisibility();
 updateUrlState();
 }
 
+function edgeRoutePoints(edge) {
+if (edge?.polyline?.length > 1) return edge.polyline;
+const segments = Array.isArray(edge?.segments) ? edge.segments : [];
+if (segments.length < 2 || !segments.every(segment => segment && (segment.type === 'M' || segment.type === 'L'))) return null;
+return segments.map(({ x, y }) => ({ x, y }));
+}
+
 function lensEdgePoint(edge, t) {
 if (edge && edge.points && edge.controls && typeof ArchVizGeometry !== 'undefined') {
 return ArchVizGeometry.cubicPointAt(t, edge.points, edge.controls);
 }
-if (edge?.polyline?.length > 1) {
-const points = edge.polyline;
+const route = edgeRoutePoints(edge);
+if (route) {
+const points = route;
 const lengths = points.slice(1).map((point, index) => Math.hypot(point.x - points[index].x, point.y - points[index].y));
 let remaining = lengths.reduce((sum, length) => sum + length, 0) * Math.max(0, Math.min(1, t));
 for (let i = 0; i < lengths.length; i++) {
@@ -7169,11 +7227,8 @@ const b = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(ma
 occupied.push({ left: a.x - 4, right: b.x + 4, top: a.y - 4, bottom: b.y + 4 });
 });
 edges.forEach(ghost => {
-const from = nodeById.get(ghost.from), to = nodeById.get(ghost.to);
-const points = routes[ghost.id]?.points || [
-{ x: from.x + from.width / 2, y: from.y + from.height / 2 },
-{ x: to.x + to.width / 2, y: to.y + to.height / 2 },
-];
+const points = routes[ghost.id]?.points;
+if (!points || points.length < 2) return;
 const group = el('g', { class: 'policy-ghost', 'data-policy-id': ghost.policyId });
 group.appendChild(el('path', {
 class: 'policy-ghost-line',
@@ -7225,13 +7280,14 @@ ghostLayer.appendChild(group);
 
 let lensFiltersBound = false;
 
-function closeLensFilters() {
+function closeLensFilters(restoreFocus = false) {
 const key = document.querySelector('.lens-key');
 const popover = key?.querySelector('.lens-filters');
 if (!popover || popover.hidden) return;
+restoreFocus = restoreFocus || popover.contains(document.activeElement);
 popover.hidden = true;
 key.querySelector('[data-action="lens-filters"]')?.setAttribute('aria-expanded', 'false');
-key.querySelector('[data-action="lens-filters"]')?.focus();
+if (restoreFocus) key.querySelector('[data-action="lens-filters"]')?.focus();
 }
 
 function renderLensKey(items) {
@@ -7253,7 +7309,7 @@ document.addEventListener('keydown', event => {
 if (event.key === 'Escape' && document.querySelector('.lens-filters')?.hidden === false) {
 event.preventDefault();
 event.stopImmediatePropagation();
-closeLensFilters();
+closeLensFilters(true);
 }
 }, true);
 }
@@ -7325,6 +7381,7 @@ button.setAttribute('aria-pressed', String(state.deltaMode === mode));
 button.addEventListener('click', () => {
 actions.setDeltaMode(mode);
 applyVisibility();
+updateUrlState();
 });
 modes.appendChild(button);
 });
@@ -7386,8 +7443,17 @@ sheetSection('responsibilities', responsibilities.length > 0);
 
 renderSheetConnections(nodeId);
 
-renderDetailList('ins-files', [...(node.details?.files || []).map(f => ({ path: typeof f === 'string' ? f : f.path })),
-...evidence.locators.filter(record => record.type !== 'file').map(record => ({ record }))], item => item.path
+const filePaths = new Set();
+const files = [...(node.details?.files || []).map(f => ({ path: typeof f === 'string' ? f : f.path })),
+...evidence.locators.map(record => record.type === 'file'
+? { path: typeof record.locator === 'string' ? record.locator : record.locator?.path || record.locator?.file, record }
+: { record })].filter(item => {
+if (!item.path) return true;
+if (filePaths.has(item.path)) return false;
+filePaths.add(item.path);
+return true;
+});
+renderDetailList('ins-files', files, item => item.path
 ? `<div class="sheet-row">${iconMarkup('ui-file')}<span class="voice-mono">${escapeHtml(item.path)}</span></div>`
 : `<div class="sheet-row"><span class="sheet-row-key">${escapeHtml(item.record.type)}</span><span class="voice-mono">${escapeHtml(typeof item.record.locator === 'string' ? item.record.locator : JSON.stringify(item.record.locator))}</span></div>`,
 null, 'files');
@@ -7660,6 +7726,7 @@ return;
 }
 
 if (targetIndex !== -1) {
+event.stopPropagation();
 const targetChapter = chapters[targetIndex];
 openChapter(targetChapter.id);
 const targetTab = document.getElementById(`chapter-tab-${targetChapter.id}`);
@@ -7903,7 +7970,7 @@ list.className = 'sheet-list';
 if (assumptions.length) list.appendChild(sheetListItem('?', plural(assumptions.length, 'assumption'), 'The design depends on these being true.', toReview('assumptions')));
 if (decisions.length) list.appendChild(sheetListItem('\u2261', plural(decisions.length, 'recorded decision'), decisions.map(d => d.id || d.title).join(', '), () => openChapter('review')));
 list.appendChild(sheetListItem('?', questions.length ? plural(questions.length, 'open question') : 'No open questions recorded',
-questions.length ? questions.slice(0, 2).map(q => (typeof q === 'string' ? q : q.question || q.text || '')).join(' · ') : 'Unresolved questions in the spec would appear here.', toReview('assumptions')));
+questions.length ? questions.slice(0, 2).map(q => (typeof q === 'string' ? q : q.question || q.text || '')).join(' · ') : 'Unresolved questions in the spec would appear here.', toReview('section-questions')));
 open.replaceChildren(list);
 }
 }
@@ -8202,14 +8269,15 @@ const summary = document.createElement('summary');
 summary.textContent = 'Quality gate';
 const count = document.createElement('span');
 count.className = 'chapter-aside';
-count.textContent = `${QUALITY_GATE.filter(check => check.status === 'PASS').length} pass · ${QUALITY_GATE.filter(check => check.status === 'SKIP').length} skipped`;
+count.textContent = trustSummary(ARCH_SPEC, QUALITY_GATE).gate.label;
 summary.appendChild(count);
 gateSection.querySelector('h3').remove();
 gateSection.querySelector('#gate-line').hidden = true;
 gate.append(summary, gateSection);
 document.addEventListener('click', event => {
 if (event.target.closest('.trust-pill[data-trust="rules"], .ov-trust-row[data-trust-key="rules"]')) {
-gateSection.scrollIntoView({ block: 'nearest' });
+gate.open = true;
+document.getElementById('section-rules')?.scrollIntoView({ block: 'nearest' });
 }
 });
 }
@@ -8230,7 +8298,8 @@ const TRUST_PILLS = [
 function openTrustChapter(chapter, opener) {
 openChapter(chapter);
 setDrawerOpen('rail', true);
-if (opener?.closest('[data-chapter-panel]')?.hidden) {
+const panel = opener?.closest('[data-chapter-panel]');
+if (!panel || panel.hidden) {
 document.getElementById(`chapter-tab-${state.chapter}`)?.focus();
 }
 }
@@ -8323,6 +8392,7 @@ edge: e,
 element: circle,
 pathEl,
 length,
+path: e.path,
 progress: length > 0 ? (index / Math.max(visibleEdges.length, 1)) * length : 0,
 speed: e.communication === 'async' ? 90 : 150
 };
@@ -8334,6 +8404,12 @@ if (!state.animatingFlow) return;
 const dt = Math.min((now - particleLastFrame) / 1000, 0.1);
 particleLastFrame = now;
 particles.forEach(p => {
+if (p.pathEl && p.path !== p.edge.path) {
+const length = p.pathEl.getTotalLength();
+p.progress = p.length > 0 ? p.progress / p.length * length : 0;
+p.length = length;
+p.path = p.edge.path;
+}
 if (p.length > 0 && p.pathEl) {
 p.progress = (p.progress + p.speed * dt) % p.length;
 const pt = p.pathEl.getPointAtLength(p.progress);
@@ -8631,6 +8707,7 @@ moveDraggedBoundary(e.clientX, e.clientY);
 }
 
 function handleMouseUp() {
+if (state.draggingNodeId || state.draggingBoundaryId) flushDragRoutes();
 if (state.dragMoved && (state.draggingNodeId || state.draggingBoundaryId)) {
 resolveLabelCollisions(LAYOUT_DATA.edges || [], LAYOUT_DATA.nodes || [], LAYOUT_DATA.boundaryHeaderBoxes || []);
 const totalBounds = computeTotalVisualBounds();
@@ -8696,12 +8773,38 @@ userMoved: true
 updateTransform();
 }
 
+function handleTouchCancel() {
+handleTouchEnd();
+}
+
 function handleTouchEnd(e) {
 if (e && e.touches && e.touches.length > 0) return;
 state.isDraggingCanvas = false;
 pinch = null;
 pressPoint = null;
 window.setTimeout(() => { state.dragMoved = false; }, 0);
+}
+
+let dragRouteFrame = null;
+const pendingDragNodes = new Set();
+function scheduleDragRoutes(nodeIds) {
+nodeIds.forEach(id => pendingDragNodes.add(id));
+if (!nodeIds.length) pendingDragNodes.add(null);
+if (dragRouteFrame !== null) return;
+dragRouteFrame = requestAnimationFrame(() => {
+dragRouteFrame = null;
+flushDragRoutes();
+});
+}
+
+function flushDragRoutes() {
+if (dragRouteFrame !== null) cancelAnimationFrame(dragRouteFrame);
+dragRouteFrame = null;
+if (!pendingDragNodes.size) return;
+if (LAYOUT_DATA.config.router === 'orthogonal') recomputeAllEdges();
+else pendingDragNodes.forEach(id => { if (id !== null) recalculateNodeEdges(id); });
+pendingDragNodes.clear();
+renderMinimap();
 }
 
 function startNodeDrag(e, nodeId) {
@@ -8727,7 +8830,7 @@ state.dragMoved = true;
 
 const nodeEl = document.getElementById(`node-${node.id}`);
 if (nodeEl) nodeEl.setAttribute('transform', `translate(${node.x}, ${node.y})`);
-recalculateNodeEdges(node.id);
+scheduleDragRoutes([node.id]);
 }
 
 function startBoundaryDrag(e, boundaryId) {
@@ -8787,8 +8890,7 @@ const nodeEl = document.getElementById(`node-${node.id}`);
 if (nodeEl) nodeEl.setAttribute('transform', `translate(${node.x}, ${node.y})`);
 });
 
-if (LAYOUT_DATA.config.router === 'orthogonal') recomputeAllEdges();
-else movedNodes.forEach(({ node }) => recalculateNodeEdges(node.id));
+scheduleDragRoutes(movedNodes.map(({ node }) => node.id));
 }
 
 function syncLabelLeader(edge) {
@@ -8820,7 +8922,7 @@ right: Math.max(acc.right, n.x + n.width)
 function resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes) {
 ArchVizGeometry.resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes);
 (edges || []).forEach(edge => {
-if (edge.polyline && !edge.controls && edge.labelSlot === null) { syncLabelLeader(edge); return; }
+if (LAYOUT_DATA.config?.router === 'orthogonal' && !edge.controls && !edge.labelBounds) { syncLabelLeader(edge); return; }
 if (!(edge.points && typeof edge.labelWidth === 'number' && edge.labelWidth > 0)) return;
 edge.labelAnchor = { x: edge.labelX, y: edge.labelY };
 edge.labelBounds = {
@@ -9174,7 +9276,8 @@ function fitCamera() {
 const rect = svg.getBoundingClientRect();
 const key = [Math.round(rect.width), Math.round(rect.height), JSON.stringify([...state.collapsedBoundaries].sort()), state.activeFilter, state.lens, state.currentView, state.deltaMode,
 document.querySelector('.walk-track')?.getBoundingClientRect().height || 0,
-(LAYOUT_DATA.nodes || []).reduce((sum, node) => sum + node.x * 3 + node.y * 7, 0)].join(':');
+JSON.stringify([(LAYOUT_DATA.nodes || []).map(node => [node.id, node.x, node.y, node.width, node.height]),
+(LAYOUT_DATA.boundaries || []).map(boundary => [boundary.id, boundary.x, boundary.y, boundary.width, boundary.height])])].join(':');
 if (fitCameraCache?.key === key) return { ...fitCameraCache.camera };
 const current = { zoom: state.zoom, panX: state.panX, panY: state.panY };
 fitToScreen();
@@ -9308,6 +9411,11 @@ const canvas = document.createElement('canvas');
 canvas.width = width * scale;
 canvas.height = height * scale;
 const ctx = canvas.getContext('2d');
+if (!ctx) {
+URL.revokeObjectURL(url);
+openModal('PNG export failed', 'The browser could not create the PNG. Use the SVG export instead.');
+return;
+}
 ctx.scale(scale, scale);
 ctx.drawImage(image, 0, 0);
 URL.revokeObjectURL(url);

@@ -68,7 +68,10 @@ function narrateStage(stage, nodeLabel) {
   }
 
   if (kind === 'branch') {
-    const condition = stage.condition ? String(stage.condition) : 'unspecified condition';
+    const condition = stage.condition ? String(stage.condition) : (stage.branches || [])
+      .map((branch) => branch && branch.condition)
+      .filter(Boolean)
+      .join(' or ') || 'unspecified condition';
     const outcomes = (stage.branches || []).map((branch) => {
       const name = branch && branch.name ? String(branch.name) : 'Outcome';
       return branch && branch.condition ? `${name} (${branch.condition})` : name;
@@ -77,8 +80,11 @@ function narrateStage(stage, nodeLabel) {
     return `Decision: ${condition}. Outcomes: ${outcomes.join(', ')}.`;
   }
 
-  const interaction = (stage.interactions && stage.interactions[0]) || stage;
-  return narrateInteraction(interaction, nodeLabel);
+  if (stage.interactions && stage.interactions.length) {
+    return stage.interactions.map((interaction) => narrateInteraction(interaction, nodeLabel))
+      .filter((sentence) => sentence !== '').join(' ');
+  }
+  return narrateInteraction(stage, nodeLabel);
 }
 
 function narrateStageEntry(stage, nodeLabel) {

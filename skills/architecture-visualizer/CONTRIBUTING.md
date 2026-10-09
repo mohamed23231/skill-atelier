@@ -172,4 +172,5 @@ generated-spec suites enforce them):
 - no route crosses a card, every crossing has a jump, and every placed label clears cards, other labels and
   other routes; a label with no clear room is left off the canvas, never drawn over something;
 - every generated spec lays out below the suite's 1.5-second limit (the browser re-routes with the same code on drag);
+- with `--router curved`, every edge is classified `forward`, `sibling`, `backward` or `self`, and the label anchor sits on the curve;
 - the browser's drag-time geometry in `src/workbench/scripts/drag.js` stays in sync with the Node layout.

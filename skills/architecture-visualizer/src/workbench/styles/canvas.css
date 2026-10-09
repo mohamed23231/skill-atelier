@@ -211,7 +211,7 @@ svg#arch-svg {
 }
 
 .node-group[data-lens-style="solid"] .node-rect,
-.edge-path[data-lens-stroke][data-lens-style="solid"] { stroke-dasharray: none; }
+.edge-path[data-lens-stroke][data-lens-style="solid"]:not(.read):not(.async) { stroke-dasharray: none; }
 .node-group[data-lens-style="dashed"] .node-rect,
 .edge-path[data-lens-stroke][data-lens-style="dashed"] { stroke-dasharray: 6 4; }
 .node-group[data-lens-style="dotted"] .node-rect,

@@ -1,3 +1,26 @@
+// Keep geometry work to one pass per frame, and flush the final position on release.
+let dragRouteFrame = null;
+const pendingDragNodes = new Set();
+function scheduleDragRoutes(nodeIds) {
+  nodeIds.forEach(id => pendingDragNodes.add(id));
+  if (!nodeIds.length) pendingDragNodes.add(null);
+  if (dragRouteFrame !== null) return;
+  dragRouteFrame = requestAnimationFrame(() => {
+    dragRouteFrame = null;
+    flushDragRoutes();
+  });
+}
+
+function flushDragRoutes() {
+  if (dragRouteFrame !== null) cancelAnimationFrame(dragRouteFrame);
+  dragRouteFrame = null;
+  if (!pendingDragNodes.size) return;
+  if (LAYOUT_DATA.config.router === 'orthogonal') recomputeAllEdges();
+  else pendingDragNodes.forEach(id => { if (id !== null) recalculateNodeEdges(id); });
+  pendingDragNodes.clear();
+  renderMinimap();
+}
+
 function startNodeDrag(e, nodeId) {
   rememberPress(e);
   state.draggingNodeId = nodeId;
@@ -21,7 +44,7 @@ function moveDraggedNode(clientX, clientY) {
 
   const nodeEl = document.getElementById(`node-${node.id}`);
   if (nodeEl) nodeEl.setAttribute('transform', `translate(${node.x}, ${node.y})`);
-  recalculateNodeEdges(node.id);
+  scheduleDragRoutes([node.id]);
 }
 
 function startBoundaryDrag(e, boundaryId) {
@@ -81,8 +104,7 @@ function moveDraggedBoundary(clientX, clientY) {
     if (nodeEl) nodeEl.setAttribute('transform', `translate(${node.x}, ${node.y})`);
   });
 
-  if (LAYOUT_DATA.config.router === 'orthogonal') recomputeAllEdges();
-  else movedNodes.forEach(({ node }) => recalculateNodeEdges(node.id));
+  scheduleDragRoutes(movedNodes.map(({ node }) => node.id));
 }
 
 function syncLabelLeader(edge) {
@@ -116,7 +138,9 @@ function contentBand() {
 function resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes) {
   ArchVizGeometry.resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes);
   (edges || []).forEach(edge => {
-    if (edge.polyline && !edge.controls && edge.labelSlot === null) { syncLabelLeader(edge); return; }
+    // An orthogonal label the router found no room for stays unplaced; the curved collision pass must not
+    // invent bounds for it. (The page embeds neither `polyline` nor `labelSlot`, so test what it does carry.)
+    if (LAYOUT_DATA.config?.router === 'orthogonal' && !edge.controls && !edge.labelBounds) { syncLabelLeader(edge); return; }
     if (!(edge.points && typeof edge.labelWidth === 'number' && edge.labelWidth > 0)) return;
     edge.labelAnchor = { x: edge.labelX, y: edge.labelY };
     edge.labelBounds = {

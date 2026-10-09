@@ -155,6 +155,7 @@ function handleChapterTabKeyDown(event, currentId) {
   }
 
   if (targetIndex !== -1) {
+    event.stopPropagation();
     const targetChapter = chapters[targetIndex];
     openChapter(targetChapter.id);
     const targetTab = document.getElementById(`chapter-tab-${targetChapter.id}`);
@@ -407,7 +408,7 @@ function renderOverviewChapter() {
     if (assumptions.length) list.appendChild(sheetListItem('?', plural(assumptions.length, 'assumption'), 'The design depends on these being true.', toReview('assumptions')));
     if (decisions.length) list.appendChild(sheetListItem('\u2261', plural(decisions.length, 'recorded decision'), decisions.map(d => d.id || d.title).join(', '), () => openChapter('review')));
     list.appendChild(sheetListItem('?', questions.length ? plural(questions.length, 'open question') : 'No open questions recorded',
-      questions.length ? questions.slice(0, 2).map(q => (typeof q === 'string' ? q : q.question || q.text || '')).join(' · ') : 'Unresolved questions in the spec would appear here.', toReview('assumptions')));
+      questions.length ? questions.slice(0, 2).map(q => (typeof q === 'string' ? q : q.question || q.text || '')).join(' · ') : 'Unresolved questions in the spec would appear here.', toReview('section-questions')));
     open.replaceChildren(list);
   }
 }
@@ -706,16 +707,16 @@ function renderReviewChapter() {
     summary.textContent = 'Quality gate';
     const count = document.createElement('span');
     count.className = 'chapter-aside';
-    count.textContent = `${QUALITY_GATE.filter(check => check.status === 'PASS').length} pass · ${QUALITY_GATE.filter(check => check.status === 'SKIP').length} skipped`;
+    count.textContent = trustSummary(ARCH_SPEC, QUALITY_GATE).gate.label;
     summary.appendChild(count);
     gateSection.querySelector('h3').remove();
     gateSection.querySelector('#gate-line').hidden = true;
     gate.append(summary, gateSection);
-    // Trust controls open Review without scrolling to a section. Reveal the gate
-    // after their chapter action, including controls recreated by a trust render.
+    // Keep gate rows available, but land Rules trust controls on the policy list.
     document.addEventListener('click', event => {
       if (event.target.closest('.trust-pill[data-trust="rules"], .ov-trust-row[data-trust-key="rules"]')) {
-        gateSection.scrollIntoView({ block: 'nearest' });
+        gate.open = true;
+        document.getElementById('section-rules')?.scrollIntoView({ block: 'nearest' });
       }
     });
   }

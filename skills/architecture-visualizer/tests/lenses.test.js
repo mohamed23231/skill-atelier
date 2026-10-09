@@ -116,6 +116,71 @@ function assertEdgeTokens(encoding, where) {
 }
 
 const cases = [
+  ['policy ghosts omit failed or missing routes instead of crossing cards', () => {
+    const nodes = [{ id: 'a', x: 0, y: 0, width: 40, height: 40 }, { id: 'b', x: 100, y: 100, width: 40, height: 40 }];
+    let drawn = 0;
+    const context = {
+      LAYOUT_DATA: { nodes, config: { direction: 'LR' } }, nodeById: new Map(nodes.map(node => [node.id, node])),
+      ArchVizOrthogonal: {}, estimateLabelWidth: () => 20,
+      ghostLayer: { getCTM: () => ({ inverse: () => ({}) }), appendChild() { drawn++; } },
+      document: { querySelectorAll: () => [] },
+      el: () => ({ appendChild() {} }),
+    };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/lens-canvas.js'), 'utf8'), context);
+    for (const route of [() => { throw new Error('blocked'); }, () => ({ routes: {} })]) {
+      context.ArchVizOrthogonal.routeOrthogonal = route;
+      context.renderPolicyGhosts([{ from: 'a', to: 'b', label: 'Forbidden', policyId: 'p' }]);
+      assert.strictEqual(drawn, 0);
+    }
+  }],
+  ['filter dismissal preserves outside focus and restores Escape', () => {
+    let focused = 0;
+    let expanded;
+    const popover = { hidden: false, contains() { return false; } };
+    const button = { focus() { focused++; }, setAttribute(key, value) { expanded = value; } };
+    const context = { document: { querySelector: () => ({ querySelector: selector => selector === '.lens-filters' ? popover : button }) } };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/lens-canvas.js'), 'utf8'), context);
+    context.closeLensFilters();
+    assert.ok(popover.hidden);
+    assert.strictEqual(expanded, 'false');
+    assert.strictEqual(focused, 0);
+    popover.hidden = false;
+    context.closeLensFilters(true);
+    assert.ok(popover.hidden);
+    assert.strictEqual(focused, 1);
+  }],
+  ['filter dismissal returns focus when a body click hides its focused control', () => {
+    let focused = false;
+    const activeElement = {};
+    const popover = { hidden: false, contains(element) { return element === activeElement; } };
+    const button = { focus() { focused = true; }, setAttribute() {} };
+    const context = { document: { activeElement, querySelector: () => ({ querySelector: selector => selector === '.lens-filters' ? popover : button }) } };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/lens-canvas.js'), 'utf8'), context);
+    context.closeLensFilters();
+    assert.ok(popover.hidden);
+    assert.ok(focused, 'Dismissal never leaves focus inside the hidden popover');
+  }],
+  ['lenses preserve prototype-named node, edge and policy IDs', () => {
+    const spec = baseSpec({
+      nodes: [{ id: '__proto__', status: 'VERIFIED', delta: 'ADDED' }, { id: 'constructor', status: 'VERIFIED' }],
+      edges: [{ id: '__proto__', source: '__proto__', target: 'constructor' }],
+      policies: [{ id: '__proto__', kind: 'layer_direction' }, { id: 'toString', kind: 'forbidden_dependency', from: '__proto__', to: 'constructor' }],
+      findings: [{ policyId: '__proto__', nodeIds: ['__proto__'], edgeIds: ['__proto__'] }],
+    });
+    for (const lens of ['structure', 'evidence', 'change', 'risk']) {
+      const encoding = lensEncoding(lens, spec);
+      assert.ok(Object.hasOwn(encoding.nodes, '__proto__'), lens + ' node');
+      assert.ok(Object.hasOwn(encoding.edges, '__proto__'), lens + ' edge');
+      assert.ok(Object.hasOwn(encoding.nodes, 'constructor'), lens + ' constructor');
+    }
+    const risk = lensEncoding('risk', spec);
+    assert.strictEqual(risk.edges.__proto__.marker, 'against-flow');
+    assert.ok(risk.ghosts.some(ghost => ghost.policyId === 'toString'));
+    assert.strictEqual(Object.prototype.marker, undefined);
+  }],
   // --- the lens list ---
 
   [

@@ -15,6 +15,7 @@ function selectLens(lens, { explicit = true } = {}) {
   else if (state.currentView === VIEWS.BEFORE_AFTER) switchView(VIEWS.ARCHITECTURE);
   if (scenarioActive && state.walkCursor) walkTo(state.walkCursor);
   applyLens();
+  renderMinimap();
   announceStatus(`${lens.charAt(0).toUpperCase() + lens.slice(1)} lens`);
   updateUrlState();
 }
@@ -65,6 +66,7 @@ function restorePersistedLayout() {
   const original = {
     nodes: (LAYOUT_DATA.nodes || []).map(node => [node, node.x, node.y]),
     boundaries: (LAYOUT_DATA.boundaries || []).map(boundary => [boundary, boundary.x, boundary.y]),
+    headers: (LAYOUT_DATA.boundaryHeaderBoxes || []).map(header => [header, header.x, header.y]),
   };
   try {
     const raw = window.localStorage.getItem(layoutStorageKey());
@@ -80,6 +82,8 @@ function restorePersistedLayout() {
     (LAYOUT_DATA.boundaries || []).forEach(boundary => {
       const point = saved?.boundaries?.[boundary.id];
       if (Number.isFinite(point?.x) && Number.isFinite(point?.y)) {
+        const header = LAYOUT_DATA.boundaryHeaderBoxes?.[(LAYOUT_DATA.boundaries || []).indexOf(boundary)];
+        if (header) { header.x += point.x - boundary.x; header.y += point.y - boundary.y; }
         boundary.x = point.x;
         boundary.y = point.y;
       }
@@ -89,6 +93,7 @@ function restorePersistedLayout() {
       throw new Error('saved layout no longer routes');
     }
   } catch (error) {
+    original.headers.forEach(([header, x, y]) => { header.x = x; header.y = y; });
     original.nodes.forEach(([node, x, y]) => { node.x = x; node.y = y; });
     original.boundaries.forEach(([boundary, x, y]) => { boundary.x = x; boundary.y = y; });
     try { window.localStorage.removeItem(layoutStorageKey()); } catch (storageError) { /* storage unavailable */ }
@@ -131,8 +136,10 @@ function applyFocusMode() {
     if (item) item.setAttribute('data-focus-member', members ? String(members.has(node.id)) : 'true');
   });
   (LAYOUT_DATA.edges || []).forEach(edge => {
-    const item = document.getElementById(`path-${edge.id}`);
-    if (item) item.setAttribute('data-focus-member', members ? String(members.has(edge.source) && members.has(edge.target)) : 'true');
+    const member = members ? String(members.has(edge.source) && members.has(edge.target)) : 'true';
+    for (const id of [`path-${edge.id}`, `label-${edge.id}`]) {
+      document.getElementById(id)?.setAttribute('data-focus-member', member);
+    }
   });
   const neighbors = document.getElementById('btn-focus-neighbors');
   const affected = document.getElementById('btn-focus-affected');
@@ -202,6 +209,8 @@ function viewSnapshot() {
   const snapshot = {
     chapter: state.chapter,
     lens: state.lens,
+    // The Change lens's Current / Proposed mode; Diff is the default and is not written.
+    delta: state.lens === 'change' && state.deltaMode && state.deltaMode !== 'diff' ? state.deltaMode : null,
     view: state.currentView,
     node: state.selectedNodeId,
     edge: state.selectedEdgeId,
@@ -261,6 +270,7 @@ function restoreUrlState() {
     actions.setPresentation(false);
     document.body.setAttribute('data-presentation', 'false');
     actions.setLens('structure', false);
+    actions.setDeltaMode('diff');
     openChapter('overview');
     switchView(VIEWS.ARCHITECTURE);
     selectLens('structure', { explicit: false });
@@ -297,6 +307,14 @@ function restoreUrlState() {
     if (link.lens !== undefined) {
       if (LENSES.includes(link.lens)) selectLens(link.lens, { explicit: true });
       else notices.push(`Lens ${link.lens} does not exist; keeping the suggested lens.`);
+    }
+    if (link.delta !== undefined) {
+      if (['current', 'proposed', 'diff'].includes(link.delta)) {
+        actions.setDeltaMode(link.delta);
+        applyVisibility();
+      } else {
+        notices.push(`Change mode ${link.delta} does not exist; showing the diff.`);
+      }
     }
     if (link.filter !== undefined) {
       if (LAYER_FILTERS.includes(link.filter)) {

@@ -13,12 +13,20 @@ const overlap = (a, b) => a.left < b.left + b.width && a.left + a.width > b.left
 const propertyLayouts = new Map();
 
 const cases = [
-  ['generated specs of every shape compile into a page within the size budget', () => {
+  ['generated specs of every shape compile into a page whose workbench code stays within budget', () => {
+    // The page is the workbench code plus the model it embeds. The model grows with the spec, so the
+    // budget applies to the code; the examples keep their whole-page 500 KB budget (compiler suite).
     SEEDS.forEach(seed => {
       const result = compileArchitecture(generateSpec(seed), {});
       const html = typeof result === 'string' ? result : result.html;
       assert.ok(html && html.includes('</html>'), `seed ${seed}: no page`);
-      assert.ok(Buffer.byteLength(html) < 500 * 1024, `seed ${seed}: ${Buffer.byteLength(html)} bytes`);
+      const embedded = ['const ARCH_SPEC = ', 'const LAYOUT_DATA = '].reduce((sum, marker) => {
+        const start = html.indexOf(marker);
+        return start < 0 ? sum : sum + Buffer.byteLength(html.slice(start, html.indexOf('\n', start)));
+      }, 0);
+      const code = Buffer.byteLength(html) - embedded;
+      assert.ok(embedded > 0, `seed ${seed}: embedded model not found`);
+      assert.ok(code < 450 * 1024, `seed ${seed}: ${code} bytes of workbench code`);
     });
   }],
   ['generated specs route without card crossings, keep every card in its lane and labels apart', () => {
