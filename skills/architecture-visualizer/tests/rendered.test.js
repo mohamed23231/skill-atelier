@@ -372,9 +372,9 @@ main();
 
 const ERROR_PRELOAD =
   'window.__errors = []; window.onerror = function (msg, url, line, col, err) { window.__errors.push({ msg: String(msg), url: url, line: line, col: col, stack: err && err.stack }); };'
-  // macOS overlays scrollbars; Linux and Windows reserve their width. ARCH_VIZ_CLASSIC_SCROLLBARS=1 makes a
-  // macOS run reserve it too, so layout checks see what CI and most readers see.
-  + (process.env.ARCH_VIZ_CLASSIC_SCROLLBARS === '1'
+  // macOS overlays scrollbars; Linux and Windows reserve their width. Every run reserves it, so a macOS run
+  // sees what CI and most readers see; ARCH_VIZ_CLASSIC_SCROLLBARS=0 turns it off.
+  + (process.env.ARCH_VIZ_CLASSIC_SCROLLBARS !== '0'
     ? ' document.addEventListener("DOMContentLoaded", function () { var s = document.createElement("style"); s.textContent = "::-webkit-scrollbar { width: 15px; height: 15px; background: #888; }"; document.head.appendChild(s); });'
     : '');
 

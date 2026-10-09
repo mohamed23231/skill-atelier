@@ -48,8 +48,9 @@
   .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme):not(#btn-palette) { display: none; }
   .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
   .viewport-controls { right: 8px; bottom: 8px; }
+  /* 100%, not 100vw: a classic (Windows, Linux) scrollbar is inside 100vw, so the bar would reach the zoom buttons. */
   body .sequence-controls { left: 8px; transform: translateY(-100%);
-    max-width: calc(100vw - 68px); }
+    max-width: calc(100% - 76px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
