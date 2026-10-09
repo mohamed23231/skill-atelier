@@ -424,4 +424,39 @@ cases.push(['packet recovery status is evaluated for each interaction', () => {
   assert.deepStrictEqual(packets.map(packet => packet.attrs.class), ['walk-packet recovery', 'walk-packet']);
 }]);
 
+cases.push(['review r2: playback advances from the current walkthrough cursor', () => {
+  const entries = [0, 1, 2, 3].map(n => ({ id: String(n), kind: 'step', interactions: [] }));
+  let index = 0, callback;
+  const ui = { window: { setTimeout: fn => { callback = fn; return 1; } },
+    walkCurrent: () => ({ entries, index, entry: entries[index] }),
+    walkTo: id => { index = Number(id); }, walkStartDelay: () => 1 };
+  vm.createContext(ui);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/walkthrough-ui.js'), 'utf8'), ui);
+  ui.walkCurrent = () => ({ entries, index, entry: entries[index] });
+  ui.walkTo = id => { index = Number(id); };
+  vm.runInContext('walkPlaying = true; scheduleWalkStep()', ui);
+  index = 2;
+  callback();
+  assert.strictEqual(index, 3);
+}]);
+cases.push(['review r2: an empty sequence stops without scheduling a timer', () => {
+  let scheduled = 0;
+  const ui = { ARCH_SPEC: { views: { sequence: { steps: [] } } }, state: { sequencePlaying: true },
+    setTimeout: () => { scheduled++; }, document: { getElementById: () => null } };
+  vm.createContext(ui);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/sequence.js'), 'utf8'), ui);
+  ui.scheduleNextStep();
+  assert.strictEqual(scheduled, 0);
+  assert.strictEqual(ui.state.sequencePlaying, false);
+}]);
+cases.push(['review r2: reverse sequence hops use oriented ghosts', () => {
+  const edge = { id: 'edge', source: 'a', target: 'b' };
+  const ui = { LAYOUT_DATA: { edges: [edge] }, edgeById: new Map([[edge.id, edge]]) };
+  vm.createContext(ui);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/sequence.js'), 'utf8'), ui);
+  assert.strictEqual(ui.interactionEdge({ from: 'a', to: 'b' }), edge);
+  assert.strictEqual(ui.interactionEdge({ from: 'b', to: 'a' }), null);
+  assert.strictEqual(ui.interactionEdge({ from: 'b', to: 'a', edgeId: 'edge' }), null);
+}]);
+
 module.exports = { name: 'Walkthrough engine', cases };

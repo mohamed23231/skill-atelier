@@ -76,7 +76,7 @@ svg#arch-svg {
 .node-group[data-lens-stroke="line"] .node-rect,
 .policy-ghost-line[data-lens-stroke="line"] { stroke: var(--line); }
 /* An unremarkable connection in a lens is context: the normal edge colour, quieter. */
-.edge-path[data-lens-stroke="line"] { stroke: var(--edge); opacity: 0.45; }
+.edge-path[data-lens-stroke="line"] { stroke: var(--edge); opacity: 1; }
 .node-group[data-lens-stroke="ink"] .node-rect,
 .edge-path[data-lens-stroke="ink"],
 .policy-ghost-line[data-lens-stroke="ink"] { stroke: var(--ink); }

@@ -380,11 +380,14 @@ function lensRiskGhosts(parts, options) {
   const absentForbidden = parts.policies.filter(
     (policy) => policy && policy.kind === 'forbidden_dependency' && (policy.id == null || !found[policy.id])
   );
-  // A wall of forbidden ghosts is noise: past three, draw only the one the reader asked about.
-  const drawn = absentForbidden.length <= 3 ? absentForbidden : absentForbidden.filter((policy) => policy.id === selected);
+  // Bound the default preview; an explicit selection isolates the requested policy.
+  const drawn = absentForbidden.length <= 3 ? absentForbidden : selected == null
+    ? absentForbidden.slice(0, 3) : absentForbidden.filter((policy) => policy.id === selected);
   const ghosts = drawn.map((policy) => ({
     from: policy.from,
     to: policy.to,
+    fromType: policy.fromType, toType: policy.toType,
+    fromBoundary: policy.fromBoundary, toBoundary: policy.toBoundary,
     label: 'Forbidden · absent',
     policyId: policy.id,
   }));
@@ -393,7 +396,8 @@ function lensRiskGhosts(parts, options) {
     if (!policy || policy.kind !== 'required_dependency') return;
     if (policy.id == null || !found[policy.id]) return;
     hasRequired = true;
-    ghosts.push({ from: policy.from, to: policy.to, label: 'Required · missing', policyId: policy.id });
+    ghosts.push({ from: policy.from, to: policy.to, fromType: policy.fromType, toType: policy.toType,
+      fromBoundary: policy.fromBoundary, toBoundary: policy.toBoundary, label: 'Required · missing', policyId: policy.id });
   });
   return { ghosts: ghosts, hasRequired: hasRequired, forbiddenCount: drawn.length };
 }

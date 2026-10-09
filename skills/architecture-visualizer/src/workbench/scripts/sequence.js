@@ -29,10 +29,9 @@ function goToSequenceStep(index) {
 
 function interactionEdge(interaction) {
   const byId = interaction.edgeId && edgeById.get(interaction.edgeId);
-  if (byId) return byId;
+  if (byId && byId.source === interaction.from && byId.target === interaction.to) return byId;
   return (LAYOUT_DATA.edges || []).find(edge =>
-    (edge.source === interaction.from && edge.target === interaction.to) ||
-    (edge.source === interaction.to && edge.target === interaction.from)) || null;
+    edge.source === interaction.from && edge.target === interaction.to) || null;
 }
 
 // Light up the participants and edges of one playback step (a sequence hop or a scenario stage).
@@ -114,6 +113,10 @@ function toggleSequencePlay() {
 
 function scheduleNextStep() {
   const steps = sequenceSteps();
+  if (steps.length === 0) {
+    stopSequenceTimer();
+    return;
+  }
   const current = steps[state.sequenceIndex] || {};
   const delay = Number.isFinite(current.durationMs) && current.durationMs > 0 ? current.durationMs : 1800;
   state.sequenceTimer = setTimeout(() => {

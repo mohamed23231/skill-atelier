@@ -10,6 +10,9 @@ const TRUST_PILLS = [
 function openTrustChapter(chapter, opener) {
   openChapter(chapter);
   setDrawerOpen('rail', true);
+  if (opener?.closest('[data-chapter-panel]')?.hidden) {
+    document.getElementById(`chapter-tab-${state.chapter}`)?.focus();
+  }
 }
 
 function renderTrustStrip() {

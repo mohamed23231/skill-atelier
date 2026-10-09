@@ -1270,6 +1270,100 @@ const cases = [
         assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [], `${spec} at ${[320, 390][i]}px`));
     });
   }],
+  ['review r2: Overview trust navigation focuses the visible chapter tab', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      openChapter('overview');
+      const opener = document.querySelector('#overview-trust [data-trust-chapter="evidence"]');
+      opener.focus(); opener.click();
+      return JSON.stringify({ chapter: state.chapter, focus: document.activeElement.id });
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(obs.chapter, 'evidence');
+    assert.strictEqual(obs.focus, 'chapter-tab-evidence');
+  }],
+  ['review r2: MODIFIED components appear in Changes from both sources', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const node = ARCH_SPEC.nodes.find(n => n.type !== 'actor');
+      return JSON.stringify([true, false].map(review => {
+        ARCH_SPEC.nodes.forEach(n => { n.delta = 'UNCHANGED'; }); node.delta = 'MODIFIED';
+        ARCH_SPEC.review.changedComponents = review ? [{ id: node.id, label: node.label, delta: 'MODIFIED' }] : [];
+        renderChangesChapter();
+        const group = document.querySelector('[data-change-delta="CHANGED"]');
+        return { text: group?.textContent || '', summary: document.getElementById('changes-deltas').closest('.rail-panel').textContent, label: node.label };
+      }));
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    obs.forEach(row => { assert.ok(row.text.includes(row.label)); assert.match(row.summary, /1 changed/); });
+  }],
+  ['review r2: focused walkthrough beads retain focus after activation', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      startWalkthrough(ARCH_SPEC.scenarios[0].id);
+      const bead = document.querySelectorAll('.walk-bead')[1];
+      const id = bead.dataset.walkEntry;
+      bead.focus(); bead.click();
+      return JSON.stringify({ id, cursor: state.walkCursor, focus: document.activeElement.dataset.walkEntry, selected: document.activeElement.getAttribute('aria-selected') });
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(obs.cursor, obs.id);
+    assert.strictEqual(obs.focus, obs.id);
+    assert.strictEqual(obs.selected, 'true');
+  }],
+  ['review r2: Risk renders selector-based forbidden and required ghosts', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const from = LAYOUT_DATA.nodes.find(n => n.type !== 'actor');
+      const to = LAYOUT_DATA.nodes.find(n => n.type !== from.type);
+      ARCH_SPEC.policies = [{ id: 'selector-forbidden', kind: 'forbidden_dependency', fromType: from.type, toType: to.type },
+        { id: 'selector-required', kind: 'required_dependency', fromType: from.type, toType: to.type }];
+      ARCH_SPEC.findings = [{ policyId: 'selector-required' }]; ARCH_SPEC.review.policyFindings = [];
+      selectLens('risk');
+      return JSON.stringify([...document.querySelectorAll('.policy-ghost')].map(group => ({ id: group.dataset.policyId, path: group.querySelector('path').getAttribute('d') })));
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    for (const id of ['selector-forbidden', 'selector-required']) {
+      const ghosts = obs.filter(row => row.id === id); assert.ok(ghosts.length > 0, id);
+      ghosts.forEach(row => assert.match(row.path, /^M .* L /));
+    }
+  }],
+  ['review r2: shared walkthrough continuations have no branch note', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const a = ARCH_SPEC.nodes[0].id, b = ARCH_SPEC.nodes[1].id;
+      const step = (id, name) => ({ id, name, kind: 'interaction', interactions: [{ from: a, to: b }] });
+      const scenario = { id: 'branches', stages: [{ id: 'decision', kind: 'branch', branches: [
+        { name: 'Yes', stages: [step('yes', 'Yes step')] }, { name: 'No', stages: [step('no', 'No step')] }] }, step('after', 'Shared continuation')] };
+      ARCH_SPEC.scenarios = [scenario]; actions.setScenario(scenario.id);
+      renderSheetWalkthrough(b);
+      return JSON.stringify([...document.querySelectorAll('#ins-walk .sheet-list-row')].map(row => ({ name: row.querySelector('.sheet-list-title').textContent, note: row.querySelector('.sheet-list-note')?.textContent || '' })));
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    assert.strictEqual(obs.find(row => row.name === 'Shared continuation').note, '');
+    assert.strictEqual(obs.find(row => row.name === 'Yes step').note, 'If Yes');
+    assert.strictEqual(obs.find(row => row.name === 'No step').note, 'If No');
+  }],
+  ['review r2: component sheets use the selected scenario', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const a = ARCH_SPEC.nodes[0].id, b = ARCH_SPEC.nodes[1].id;
+      const step = (id, name) => ({ id, name, kind: 'interaction', interactions: [{ from: a, to: b }] });
+      ARCH_SPEC.scenarios = [{ id: 'first', stages: [] }, { id: 'second', stages: [step('second-step', 'Second scenario step')] }];
+      actions.setScenario('second'); renderSheetWalkthrough(b);
+      const row = document.querySelector('#ins-walk .sheet-list-row');
+      const text = row?.textContent || ''; row?.click();
+      return JSON.stringify({ text, scenario: state.scenarioId, cursor: state.walkCursor });
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    assert.match(obs.text, /Second scenario step/);
+    assert.strictEqual(obs.scenario, 'second'); assert.strictEqual(obs.cursor, 'second-step');
+  }],
+  ['review r2: component sheets render string and object tasks', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const node = LAYOUT_DATA.nodes.find(n => n.type !== 'actor');
+      node.details = { ...node.details, tasks: ['String task <safe>', { title: 'Object task', status: 'done' }] };
+      selectNode(node.id);
+      return JSON.stringify({ text: document.getElementById('ins-tasks').textContent, checked: [...document.querySelectorAll('#ins-tasks input')].map(input => input.checked) });
+    })()`)] }]);
+    const obs = JSON.parse(lastEvalValue(phase));
+    assert.match(obs.text, /String task <safe>/); assert.match(obs.text, /Object task/);
+    assert.deepStrictEqual(obs.checked, [false, true]);
+  }],
   ['review fixes: string risks preserve structured findings and no-rules headline', () => {
     const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
       ARCH_SPEC.policies = [];
@@ -4131,6 +4225,164 @@ cases.push(['review: link defaults and orphan focus are enforced by the store', 
   assert.strictEqual(state.focusMode, null);
   actions.setFocusMode('neighbors');
   assert.strictEqual(ctx.viewSnapshot().focus, null);
+}]);
+
+
+// Second review regressions stay cheap: exercise the shared script scope with controlled DOMs.
+cases.push(['r2: horizontal wheel and canvas pan leave geometry untouched', () => {
+  const state = { zoom: 1, panX: 0, panY: 0, dragMoved: true, isDraggingCanvas: true };
+  let transforms = 0;
+  const ctx = canvasReviewContext(['camera'], { state, svg: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
+    actions: { setCamera: value => Object.assign(state, value) }, container: { classList: { remove() {} } },
+    window: { setTimeout() {} }, resolveLabelCollisions() { throw new Error('pan rerouted labels'); } });
+  ctx.updateTransform = () => transforms++;
+  ctx.handleWheel({ preventDefault() {}, deltaY: 0, clientX: 10, clientY: 10 });
+  assert.strictEqual(state.zoom, 1); assert.strictEqual(transforms, 0);
+  ctx.handleMouseUp();
+  assert.strictEqual(state.isDraggingCanvas, false);
+}]);
+
+cases.push(['r2: slider and source modal expose accessible names', () => {
+  const shell = fs.readFileSync(path.join(__dirname, '../src/workbench/shell.html'), 'utf8');
+  assert.match(shell, /<input[^>]*id="seq-slider"[^>]*aria-label="Walkthrough step"/);
+  assert.match(shell, /<div[^>]*id="modal"[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="modal-title"/);
+}]);
+
+cases.push(['r2: line connections retain graphic contrast in both themes', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/workbench/styles/canvas.css'), 'utf8');
+  const rule = css.match(/\.edge-path\[data-lens-stroke="line"\]\s*\{([^}]+)\}/)[1];
+  const opacity = Number(rule.match(/opacity:\s*([\d.]+)/)[1]);
+  const tokens = fs.readFileSync(path.join(__dirname, '../src/workbench/styles/tokens.css'), 'utf8');
+  const rgb = hex => hex.match(/[a-f\d]{2}/gi).map(v => parseInt(v, 16) / 255);
+  const lum = channels => channels.map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4)
+    .reduce((sum, c, i) => sum + c * [.2126, .7152, .0722][i], 0);
+  for (const block of tokens.match(/(?:\:root|\[data-theme="light"\])\s*\{[^}]+\}/g)) {
+    const edge = rgb(block.match(/--edge:\s*(#[a-f\d]+)/i)[1]);
+    for (const token of ['bg', 'lane', 'surface']) {
+      const bg = rgb(block.match(new RegExp('--' + token + ':\\s*(#[a-f\\d]+)', 'i'))[1]);
+      const a = lum(edge.map((c, i) => c * opacity + bg[i] * (1 - opacity))), b = lum(bg);
+      assert((Math.max(a, b) + .05) / (Math.min(a, b) + .05) >= 3, token);
+    }
+  }
+}]);
+
+cases.push(['r2: fit bounds omit collapsed nodes and connections', () => {
+  const nodes = [{ id: 'hidden', boundary: 'lane', x: 1000, y: 1000, width: 100, height: 100 }];
+  const ctx = canvasReviewContext(['fit'], { state: { collapsedBoundaries: new Set(['lane']) }, COLLAPSED_PILL_HEIGHT: 36,
+    LAYOUT_DATA: { boundaries: [{ id: 'lane', x: 0, y: 0, width: 200, height: 900 }], nodes,
+      edges: [{ source: 'hidden', target: 'hidden', totalVisualBounds: { minX: 900, minY: 900, maxX: 1200, maxY: 1200 } }] },
+    isNodeHidden: node => node.boundary === 'lane', ArchVizGeometry: geometry });
+  assert.strictEqual(ctx.computeTotalVisualBounds().maxY, 36);
+  assert.strictEqual(ctx.computeTotalVisualBounds().maxX, 200);
+  assert.strictEqual(ctx.canvasVisibleEdges().length, 0);
+}]);
+
+cases.push(['r2: dense fit bounds collision probes and falls back safely', () => {
+  let reads = 0, camera;
+  const ctx = canvasReviewContext(['fit'], { state: {}, LAYOUT_DATA: { nodes: [], edges: [], boundaries: [] },
+    svg: { getBoundingClientRect: () => ({ width: 1000, height: 1000 }) }, isNodeHidden: () => false,
+    clampZoom: n => Math.max(.15, n), actions: { setCamera: c => { camera = c; } }, updateTransform() {} });
+  ctx.computeTotalVisualBounds = () => ({ minX: 0, minY: 0, maxX: 100, maxY: 100, width: 100, height: 100 });
+  ctx.canvasOverlayRects = () => [{ get left() { reads++; return -1000; }, right: 2000, top: -1000, bottom: 2000 }];
+  ctx.canvasSafeArea = () => ({ left: 16, top: 16, width: 968, height: 968 });
+  ctx.LAYOUT_DATA.nodes = Array.from({ length: 1000 }, (_, i) => ({ id: i, x: i / 100, y: i / 100, width: 1, height: 1 }));
+  ctx.fitToScreen();
+  assert(reads < 130000, 'collision probes must be bounded');
+  assert(camera && Number.isFinite(camera.zoom));
+}]);
+
+cases.push(['r2: motion preference cancels in-flight walkthrough packets', () => {
+  let listener, stopped = 0;
+  const ctx = canvasReviewContext(['boot'], { state: {}, window: { matchMedia: () => ({ matches: false, addEventListener: (name, fn) => { listener = fn; } }) },
+    stopFlowParticles() {}, stopScenarioPlayback() {}, stopWalkPackets() { stopped++; } });
+  ctx.initMotionPreference(); listener({ matches: true });
+  assert.strictEqual(stopped, 1);
+}]);
+
+cases.push(['r2: collapse refreshes minimap with visible canvas geometry', () => {
+  const state = { collapsedBoundaries: new Set() }, marks = [];
+  const boundary = { id: 'lane', x: 0, y: 0, width: 200, height: 900 };
+  let refreshes = 0;
+  const ctx = canvasReviewContext(['canvas', 'minimap'], { state, COLLAPSED_PILL_HEIGHT: 36, VIEWS: { BEFORE_AFTER: 'before_after' },
+    LAYOUT_DATA: { boundaries: [boundary], nodes: [{ id: 'n', boundary: 'lane' }] },
+    document: { getElementById: id => id === 'minimap-svg' ? { setAttribute() {} } : { replaceChildren() { marks.length = 0; }, appendChild: mark => marks.push(mark) } },
+    el: (tag, attrs) => ({ attrs, setAttribute() {} }) });
+  ctx.renderDiagram = () => {}; ctx.applyVisibility = () => {}; ctx.updateMinimapViewport = () => {};
+  ctx.computeTotalVisualBounds = () => ({ minX: 0, minY: 0, width: 200, height: 36 });
+  const render = ctx.renderMinimap; ctx.renderMinimap = () => { refreshes++; render(); };
+  ctx.toggleBoundary('lane');
+  assert.strictEqual(refreshes, 1); assert.strictEqual(marks.length, 1); assert.strictEqual(marks[0].attrs.height, 36);
+  ctx.toggleBoundary('lane'); assert.strictEqual(marks.length, 2); assert.strictEqual(marks[0].attrs.height, 900);
+}]);
+
+cases.push(['r2: dimmed highlights stay emphasized and modal follows viewport', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/workbench/styles/workbench.css'), 'utf8');
+  assert.match(css, /\.edge-group\.dimmed \.edge-path:not\(\.highlighted\)\s*\{/);
+  assert.match(css, /\.modal\s*\{\s*position:\s*fixed;/);
+}]);
+
+cases.push(['r2: running flow particles follow selection spotlight changes', () => {
+  let frame; const classes = new Set(); const circle = { style: {}, setAttribute() {} };
+  const edge = { id: 'e', source: 'a', target: 'b' };
+  const ctx = canvasReviewContext(['flow'], { state: { animatingFlow: true }, LAYOUT_DATA: { edges: [edge] }, VIEWS: { DATA_FLOW: 'data_flow' },
+    particlesLayer: { innerHTML: '', appendChild() {} }, el: () => circle, performance: { now: () => 0 },
+    requestAnimationFrame: fn => { frame = fn; return 1; }, cancelAnimationFrame() {},
+    document: { getElementById: id => id === 'edge-e' ? { classList: { contains: name => classes.has(name) } } :
+      { getTotalLength: () => 100, getPointAtLength: () => ({ x: 10, y: 10 }) } } });
+  ctx.computeTotalVisualBounds = () => ({});
+  ctx.startFlowParticles(); frame(16); assert.strictEqual(circle.style.opacity, '');
+  classes.add('context-dim'); frame(32); assert.strictEqual(circle.style.opacity, '0');
+  classes.delete('context-dim'); frame(48); assert.strictEqual(circle.style.opacity, '');
+}]);
+
+cases.push(['r2: outcomes preserve prototype IDs and reject empty indices', () => {
+  const ctx = canvasReviewContext(['url']);
+  const choices = ctx.urlParseOutcomes('__proto__:1');
+  assert.strictEqual(choices.__proto__, 1); assert.strictEqual(Object.keys(choices).length, 1);
+  for (const raw of ['d:', 'd: ', 'd:1e0', 'd:-0']) assert.strictEqual(ctx.urlParseOutcomes(raw), null);
+  assert.strictEqual(ctx.urlParseOutcomes('d:0').d, 0);
+}]);
+
+cases.push(['r2: PNG encoding failure is visible and non-ASCII titles have filenames', () => {
+  let image, modal, downloaded = false;
+  const ctx = canvasReviewContext(['exports'], { ARCH_SPEC: { meta: { title: 'معمارية' } }, window: {}, Blob,
+    URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
+    Image: function () { image = this; }, document: { createElement: () => ({ getContext: () => ({ scale() {}, drawImage() {} }), toBlob: cb => cb(null) }) } });
+  ctx.buildExportSvg = () => ({ markup: '<svg/>', width: 100, height: 100 });
+  ctx.openModal = (title, message) => { modal = { title, message }; };
+  ctx.downloadBlob = () => { downloaded = true; };
+  assert.strictEqual(ctx.slugTitle(), 'architecture');
+  ctx.exportPng(); image.onload();
+  assert.strictEqual(modal.title, 'PNG export failed'); assert.match(modal.message, /SVG/); assert.strictEqual(downloaded, false);
+}]);
+
+cases.push(['r2: sequence steps are scoped to Sequence links', () => {
+  const state = { currentView: 'architecture', sequenceIndex: 2 };
+  const ctx = canvasReviewContext(['view-state'], { state, nodeById: new Map(), VIEWS: { SEQUENCE: 'sequence' }, sequenceSteps: () => [{ step: 1 }, { step: 2 }, { step: 3 }] });
+  assert.strictEqual(ctx.viewSnapshot().step, undefined);
+  state.currentView = 'data_flow'; assert.strictEqual(ctx.viewSnapshot().step, undefined);
+  state.currentView = 'sequence'; assert.strictEqual(ctx.viewSnapshot().step, 3);
+  const restoreState = {};
+  const restore = canvasReviewContext(['store', 'url', 'view-state'], { state: restoreState,
+    nodeById: new Map(), edgeById: new Map(), ARCH_SPEC: {}, LAYOUT_DATA: {},
+    VIEWS: { ARCHITECTURE: 'architecture', BEFORE_AFTER: 'before_after', SEQUENCE: 'sequence', DATA_FLOW: 'data_flow' },
+    LENSES: ['structure'], window: { location: { hash: '' } }, document: { body: { setAttribute() {} } },
+    endWalkthrough() {}, closeInspector() {}, fitToScreen() {} });
+  const actions = require('node:vm').runInContext('actions', restore);
+  restore.openChapter = actions.setChapter; restore.switchView = actions.setView; restore.selectLens = actions.setLens;
+  let selected = 0;
+  restore.goToSequenceStep = () => selected++;
+  restore.sequenceIndexForStep = () => 1;
+  for (const hash of ['#view=architecture&step=1', '#view=data_flow&step=1', '#v=2&step=2', '#v=2&view=data_flow&step=2']) {
+    restore.window.location.hash = hash; restore.restoreUrlState();
+  }
+  assert.strictEqual(selected, 0);
+  for (const hash of ['#view=sequence&step=1', '#v=2&view=sequence&step=2']) {
+    restore.window.location.hash = hash; restore.restoreUrlState();
+  }
+  assert.strictEqual(selected, 2);
+  const source = fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/view-state.js'), 'utf8');
+  assert.doesNotMatch(source, /function canvasSize\(/);
 }]);
 
 // Any model: generated specs of every shape get the same real-interaction sweep the examples get.

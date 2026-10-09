@@ -19,6 +19,7 @@ function zoomAround(newZoom, cx, cy) {
 
 function handleWheel(e) {
   e.preventDefault();
+  if (e.deltaY === 0) return;
   const rect = svg.getBoundingClientRect();
   zoomAround(state.zoom * (e.deltaY < 0 ? 1.1 : 0.9), e.clientX - rect.left, e.clientY - rect.top);
 }
@@ -66,7 +67,7 @@ function handleMouseMove(e) {
 }
 
 function handleMouseUp() {
-  if (state.dragMoved) {
+  if (state.dragMoved && (state.draggingNodeId || state.draggingBoundaryId)) {
     resolveLabelCollisions(LAYOUT_DATA.edges || [], LAYOUT_DATA.nodes || [], LAYOUT_DATA.boundaryHeaderBoxes || []);
     const totalBounds = computeTotalVisualBounds();
     LAYOUT_DATA.totalVisualBounds = totalBounds;

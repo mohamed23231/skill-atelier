@@ -530,7 +530,7 @@ const cases = [
   ],
 
   [
-    'risk: up to three forbidden ghosts are drawn, and no more without a selection',
+    'risk: up to three forbidden ghosts remain visible without a selection',
     () => {
       const policies = [1, 2, 3, 4].map((n) => ({
         id: `pol_${n}`,
@@ -539,7 +539,8 @@ const cases = [
         to: `b${n}`,
       }));
       const spec = baseSpec({ policies });
-      assert.deepStrictEqual(encode('risk', spec).ghosts, []);
+      assert.deepStrictEqual(encode('risk', spec).ghosts.map(ghost => ghost.policyId), ['pol_1', 'pol_2', 'pol_3']);
+      assert.ok(encode('risk', spec).keyItems.some(item => item.label.includes('Forbidden')));
       assert.strictEqual(encode('risk', baseSpec({ policies: policies.slice(0, 3) })).ghosts.length, 3);
     },
   ],

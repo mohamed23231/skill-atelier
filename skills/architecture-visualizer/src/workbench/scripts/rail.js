@@ -491,12 +491,13 @@ function renderChangesChapter() {
 
   const nodesById = new Map((ARCH_SPEC.nodes || []).map(node => [node.id, node]));
   const review = ARCH_SPEC.review || {};
-  const changed = Array.isArray(review.changedComponents) && review.changedComponents.length
+  const rawChanged = Array.isArray(review.changedComponents) && review.changedComponents.length
     ? review.changedComponents
     : (ARCH_SPEC.nodes || [])
       .filter(node => node.delta && node.delta !== 'UNCHANGED')
       .map(node => ({ id: node.id, label: node.label, delta: node.delta }));
 
+  const changed = rawChanged.map(entry => entry.delta === 'MODIFIED' ? { ...entry, delta: 'CHANGED' } : entry);
   const added = changed.filter(entry => entry.delta === 'ADDED');
   const modified = changed.filter(entry => entry.delta === 'CHANGED');
   const removed = changed.filter(entry => entry.delta === 'REMOVED');

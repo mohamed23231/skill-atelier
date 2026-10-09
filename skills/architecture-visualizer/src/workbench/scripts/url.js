@@ -37,13 +37,14 @@ function urlParseCamera(raw) {
 // dropped rather than guessed, and an empty result is reported as absent.
 function urlParseOutcomes(raw) {
   if (!urlSet(raw)) return null;
-  const result = {};
+  const result = Object.create(null);
   String(raw).split(',').forEach((pair) => {
     const parts = pair.split(':');
     if (parts.length !== 2) return;
     let id;
     try { id = decodeURIComponent(parts[0]); } catch (error) { return; }
     const indexRaw = parts[1];
+    if (!/^\d+$/.test(indexRaw)) return;
     const index = Number(indexRaw);
     if (!urlSet(id) || !Number.isInteger(index) || index < 0) return;
     result[id] = index;

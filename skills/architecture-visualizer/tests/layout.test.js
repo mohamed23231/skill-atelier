@@ -430,8 +430,9 @@ const cases = [
           check(tone, '--surface', 4.5);
           check(tone, `${tone}-soft`, 4.5, solid(tone)); // badge text on its own tint, composited over the surface
         });
-        // Supplementary text (counts, hints) and information-bearing graphics.
-        ['--bg', '--surface'].forEach((bg) => check('--faint', bg, 3));
+        // Supplementary text (counts, hints) has the same text contrast requirement.
+        ['--bg', '--surface', '--surface-2', '--lane'].forEach((bg) => check('--faint', bg, 4.5));
+        // Information-bearing graphics have a separate 3:1 requirement.
         ['--edge', '--accent', '--ok', '--warn', '--risk'].forEach((fg) => ['--bg', '--surface', '--lane'].forEach((bg) => check(fg, bg, 3)));
       });
       assert.deepStrictEqual(failures, []);
@@ -1174,6 +1175,30 @@ cases.push(['numeric lane order pins rows and slots despite reversed input and n
   const layout = computeDefaultLayout(spec);
   const nodes = layout.nodes.filter(n => n.boundary === 'b').sort((a, b) => a.row - b.row || a.slot - b.slot);
   assert.deepStrictEqual(nodes.map(n => n.order), [1, 2, 3, 4, 5, 6]);
+}]);
+
+cases.push(['gap expansion leaves empty boundaries before the gap in place', () => {
+  const spec = require('./spec-generator.js').generateSpec(9);
+  spec.boundaries.unshift({ id: 'empty_before', label: 'Empty before', order: -100 });
+  spec.boundaries.push({ id: 'empty_after', label: 'Empty after', order: 100 });
+  const file = path.join(__dirname, '../src/engine/layout.js');
+  const localRequire = require('node:module').createRequire(file);
+  const run = expand => {
+    let calls = 0;
+    const sandbox = { module: { exports: {} }, require: id => id === './orthogonal.js' ? {
+      routeOrthogonal: () => ({ routes: {}, stats: expand && calls++ === 0
+        ? { gapDemand: { 0: 64 }, gapAvailable: { 0: 0 } } : {} }),
+    } : localRequire(id) };
+    vm.runInNewContext(fs.readFileSync(file, 'utf8'), sandbox);
+    return sandbox.module.exports.computeLayout(spec, { layout: 'lanes', direction: 'TB' });
+  };
+  const baseline = run(false), widened = run(true);
+  assert.ok(widened.nodes.some(n => n.y > baseline.nodes.find(other => other.id === n.id).y), 'fixture must expand a gap');
+  const first = widened.boundaries.find(b => b.id === 'empty_before');
+  assert.strictEqual(first.y, baseline.boundaries.find(b => b.id === 'empty_before').y);
+  const last = widened.boundaries.find(b => b.id === 'empty_after');
+  assert.ok(last.y > baseline.boundaries.find(b => b.id === 'empty_after').y, 'following empty lane must move');
+  widened.boundaries.slice(1).forEach((b, i) => assert.ok(b.y >= widened.boundaries[i].y + widened.boundaries[i].height, 'boundary order and spacing'));
 }]);
 
 module.exports = { name: 'Layout Engine', cases };

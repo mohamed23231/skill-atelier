@@ -101,8 +101,14 @@ function applyLens() {
 
 // Route ghosts together so their ports and label slots do not compete with each other.
 function renderPolicyGhosts(ghosts) {
-  const edges = ghosts.filter(ghost => nodeById.has(ghost.from) && nodeById.has(ghost.to))
-    .map((ghost, index) => ({ ...ghost, id: `policy-ghost-${index}`, source: ghost.from, target: ghost.to }));
+  const candidates = (ghost, side) => (LAYOUT_DATA.nodes || []).filter(node =>
+    Boolean(ghost[side] || ghost[`${side}Type`] || ghost[`${side}Boundary`]) &&
+    (!ghost[side] || node.id === ghost[side]) &&
+    (!ghost[`${side}Type`] || node.type === ghost[`${side}Type`]) &&
+    (!ghost[`${side}Boundary`] || node.boundary === ghost[`${side}Boundary`]));
+  const resolved = ghosts.flatMap(ghost => candidates(ghost, 'from').flatMap(from =>
+    candidates(ghost, 'to').map(to => ({ ...ghost, from: from.id, to: to.id }))));
+  const edges = resolved.map((ghost, index) => ({ ...ghost, id: `policy-ghost-${index}`, source: ghost.from, target: ghost.to }));
   if (!edges.length) return;
   let routes = {};
   try {

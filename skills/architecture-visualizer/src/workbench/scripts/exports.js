@@ -1,6 +1,6 @@
 // Exports
 function slugTitle() {
-  return (ARCH_SPEC.meta?.title || 'architecture').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return (ARCH_SPEC.meta?.title || 'architecture').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'architecture';
 }
 
 // Embedded viewers (an iframe such as a chat artifact pane) block downloads and own the address bar.
@@ -125,6 +125,7 @@ function exportPng() {
     URL.revokeObjectURL(url);
     canvas.toBlob(blob => {
       if (blob) downloadBlob(blob, `${slugTitle()}.png`);
+      else openModal('PNG export failed', 'The browser could not create the PNG. Use the SVG export instead.');
     }, 'image/png');
   };
   image.onerror = () => {

@@ -7,14 +7,18 @@ function renderMinimap() {
   const height = Math.max(bounds.height, 1);
   minimap.setAttribute('viewBox', `${bounds.minX} ${bounds.minY} ${width} ${height}`);
   content.replaceChildren();
+  const tierBottom = new Map();
+  (LAYOUT_DATA.boundaries || []).forEach(b => {
+    tierBottom.set(b.y, Math.max(tierBottom.get(b.y) ?? -Infinity, b.y + b.height));
+  });
   (LAYOUT_DATA.boundaries || []).forEach(boundary => {
-    const mark = el('rect', { x: boundary.x, y: boundary.y, width: boundary.width, height: boundary.height, 'data-minimap-mark': 'boundary' });
+    const mark = el('rect', { x: boundary.x, y: boundary.y, width: boundary.width, height: state.collapsedBoundaries.has(boundary.id) ? COLLAPSED_PILL_HEIGHT : tierBottom.get(boundary.y) - boundary.y, 'data-minimap-mark': 'boundary' });
     mark.setAttribute('fill', 'none');
     mark.setAttribute('stroke', 'var(--faint)');
     mark.setAttribute('stroke-width', '4');
     content.appendChild(mark);
   });
-  (LAYOUT_DATA.nodes || []).forEach(node => {
+  (LAYOUT_DATA.nodes || []).filter(node => !isNodeHidden(node)).forEach(node => {
     const mark = el('rect', { x: node.x, y: node.y, width: node.width, height: node.height, rx: 4, 'data-minimap-mark': 'node' });
     mark.setAttribute('fill', 'var(--accent)');
     mark.setAttribute('opacity', '0.72');

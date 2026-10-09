@@ -279,8 +279,8 @@ Serial procurement flow with dynamic volume discount lookup and fallback recover
 1. **Submit Purchase Order**: Procurement Portal sends POST /api/v1/purchase-orders to Enterprise API Gateway. Payload: supplierId=sup-789, items={…}. _(generated)_
 2. **Route Validated Request**: Enterprise API Gateway sends gRPC CreatePO to Purchasing Service. Payload: poId=po-9910, supplierId=sup-789, grossTotal=22500. _(generated)_
 3. **Evaluate Supplier Discounts**: Purchasing Service sends gRPC EvaluateDiscounts to Discount Service. Payload: supplierId=sup-789, volume=500, bracketYear=2026. _(generated)_
-4. **Discount Evaluation Result & Valuation**: Decision: Does the supplier discount service respond within the timeout?. Outcomes: Volume Rebate Applied (Active tier found and valid rate returned), Discount Service Timeout Fallback (Supplier discount service unavailable or timed out). _(generated)_
-   - **Volume Rebate Applied** (Active tier found and valid rate returned)
+4. **Discount Evaluation Result & Valuation**: Decision: Does the supplier discount service respond within the timeout?. Outcomes: Volume Rebate Applied (Responded in time: the active tier's rate applies (0% when no tier is active)), Discount Service Timeout Fallback (Supplier discount service unavailable or timed out). _(generated)_
+   - **Volume Rebate Applied** (Responded in time: the active tier's rate applies (0% when no tier is active))
      - Persist Discounted PO: Purchasing Service sends SQL INSERT purchase_orders to Procurement DB. Payload: poId=po-9910, totalDiscount=2700, netTotal=19800. _(generated)_
      - Read Batch Costs: Valuation Service sends SQL Read Batches to Procurement DB. Payload: sku=SKU-4401. _(generated)_
      - Fetch Rebate Schedules: Valuation Service sends gRPC GetActiveDiscounts to Discount Service. Payload: sku=SKU-4401. _(generated)_

@@ -22,7 +22,7 @@ Arch-Viz prevents this through **Progressive Disclosure**: revealing details onl
     - Upstream and downstream dependencies.
     - Linked repository files and API contracts.
     - DB tables, test suites, and tasks.
-  - **Dependency Highlighting:** Selection spotlights the neighbourhood; Show neighbours / Show blast radius in the sheet or palette isolates relationships. Back, Escape, the close button, or an empty-canvas click clears selection.
+  - **Dependency Highlighting:** Selection spotlights the neighbourhood; Show neighbours / Show blast radius in the sheet or palette isolates relationships. Back, the close button, or an empty-canvas click clears selection; Escape clears it when no overlay or mode is active.
   - **Collapsible Boundaries:** Click a boundary title (or focus it and press Enter) to collapse the whole tier into
     a pill. Its nodes and every edge touching them disappear together, so a collapsed tier never leaves dangling arrows.
 

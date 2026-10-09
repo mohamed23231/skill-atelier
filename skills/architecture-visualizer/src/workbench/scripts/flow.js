@@ -71,7 +71,9 @@ function startFlowParticles() {
         const pt = p.pathEl.getPointAtLength(p.progress);
         p.element.setAttribute('cx', pt.x);
         p.element.setAttribute('cy', pt.y);
-        p.element.style.opacity = insideEdgeLabel(p.edge, pt, 4) ? '0' : '';
+        const group = document.getElementById(`edge-${p.edge.id}`);
+        const quiet = !group || ['hidden', 'dimmed', 'context-dim', 'out-of-focus'].some(name => group.classList.contains(name));
+        p.element.style.opacity = quiet || insideEdgeLabel(p.edge, pt, 4) ? '0' : '';
       }
     });
     particleAnimationId = requestAnimationFrame(animate);

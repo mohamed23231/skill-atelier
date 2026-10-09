@@ -172,11 +172,6 @@ function scheduleUrlState() {
   urlStateTimer = window.setTimeout(updateUrlState, 60);
 }
 
-function canvasSize() {
-  const rect = svg.getBoundingClientRect();
-  return { width: rect.width, height: rect.height };
-}
-
 function canvasCameraWorld() {
   const safe = canvasSafeArea();
   return cameraToWorld({ ...state, panX: state.panX - safe.left, panY: state.panY - safe.top }, safe);
@@ -214,7 +209,7 @@ function viewSnapshot() {
     focus: nodeById.has(state.selectedNodeId) ? state.focusMode : null,
     present: state.presentation
   };
-  if (state.sequenceIndex) {
+  if (state.currentView === VIEWS.SEQUENCE && state.sequenceIndex) {
     const step = sequenceSteps()[state.sequenceIndex];
     snapshot.step = Number.isInteger(step?.step) ? step.step : state.sequenceIndex + 1;
   }
@@ -350,8 +345,8 @@ function restoreUrlState() {
         notices.push(`Focus ${link.focus} does not exist.`);
       }
     }
-    if (link.stepIndex !== undefined) goToSequenceStep(link.stepIndex);
-    if (link.step !== undefined) {
+    if (state.currentView === VIEWS.SEQUENCE && link.stepIndex !== undefined) goToSequenceStep(link.stepIndex);
+    if (state.currentView === VIEWS.SEQUENCE && link.step !== undefined) {
       const index = sequenceIndexForStep(link.step);
       if (index >= 0) goToSequenceStep(index);
       else notices.push(`Sequence step ${link.step} no longer exists.`);

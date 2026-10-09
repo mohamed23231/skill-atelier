@@ -359,7 +359,8 @@ function scheduleWalkStep() {
   if (!current || !walkPlaying) return;
   walkTimer = window.setTimeout(() => {
     if (!walkPlaying) return;
-    const next = current.entries[current.index + 1];
+    const latest = walkCurrent();
+    const next = latest?.entries[latest.index + 1];
     if (!next) {
       stopWalkPlayback();
       return;
@@ -461,6 +462,7 @@ function renderWalkTrack() {
       if (typeof holdsLinkedCamera === 'function' && holdsLinkedCamera()) applyLinkedCamera();
     }).observe(track);
   }
+  const restoreBeadFocus = track.contains(document.activeElement) && document.activeElement.matches('.walk-bead');
   const previousHeight = track.getBoundingClientRect().height;
   const refitTrack = () => {
     document.body.style.setProperty('--walk-track-height', `${track.getBoundingClientRect().height}px`);
@@ -581,6 +583,7 @@ function renderWalkTrack() {
     if (continuation.length) lane('Main path', continuation);
   }
   track.append(controls, beads);
+  if (restoreBeadFocus) track.querySelector('.walk-bead[aria-selected="true"]')?.focus();
   if (current && walkPlaybackNote()) {
     const note = document.createElement('span');
     note.className = 'walk-note';

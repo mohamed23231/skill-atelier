@@ -189,6 +189,7 @@ function toggleBoundary(boundaryId) {
   }
   renderDiagram();
   applyVisibility();
+  renderMinimap();
   if (state.animatingFlow) startFlowParticles();
 }
 

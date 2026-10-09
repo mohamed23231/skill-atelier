@@ -618,4 +618,23 @@ cases.push(['vertical jump carriers bridge crossings in both travel directions',
   }
 }]);
 
+cases.push(['perpendicular terminal stub extensions stay orthogonal and avoid obstacles', () => {
+  // Exercise the private adjustment independently of the path search's chosen approach.
+  const source = fs.readFileSync(path.join(__dirname, '../src/engine/orthogonal.js'), 'utf8');
+  const sandbox = { module: { exports: {} } };
+  vm.runInNewContext(source.replace('return { routeOrthogonal, computeJumps, buildRouteGeometry };',
+    'return { ensureStubs };'), sandbox);
+  const points = [{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 0, y: 60 }, { x: 10, y: 60 }];
+  const adjust = boxes => sandbox.module.exports.ensureStubs(points, boxes, { source: 's', target: 't' }, 26);
+  const extended = adjust([]);
+  extended.slice(1).forEach((b, i) => assert(extended[i].x === b.x || extended[i].y === b.y, 'diagonal segment'));
+  const a = extended[extended.length - 2], b = extended[extended.length - 1];
+  assert(Math.abs(a.x - b.x) + Math.abs(a.y - b.y) >= 26);
+  const obstacle = { id: 'obstacle', left: -18, right: -14, top: 70, bottom: 90 };
+  assert.equal(JSON.stringify(adjust([obstacle])), JSON.stringify(points), 'blocked extension must be rejected');
+  const reversed = points.slice().reverse();
+  const fromSource = sandbox.module.exports.ensureStubs(reversed, [], { source: 't', target: 's' }, 26);
+  fromSource.slice(1).forEach((b, i) => assert(fromSource[i].x === b.x || fromSource[i].y === b.y));
+}]);
+
 module.exports = { name: 'Orthogonal router', cases };

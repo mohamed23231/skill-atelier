@@ -322,7 +322,7 @@ function computeLayout(spec, customConfig = {}) {
         widened = true;
         computedBoundaries.forEach(b => {
           const members = computedNodes.filter(n => n.boundary === b.id);
-          if (members.every(n => n[axis] >= right.left)) b[axis] += shift;
+          if (members.length ? members.every(n => n[axis] >= right.left) : b[axis] >= right.left) b[axis] += shift;
           else if (members.some(n => n[axis] >= right.left)) {
             b[size] += shift;
             if (isLanes) {

@@ -67,7 +67,7 @@ INSPECT → MODEL → VALIDATE → BUILD → REVIEW → RELEASE
 
 ### Evidence freshness
 
-Run `arch-viz validate <spec.json> --stamp` after clean validation to record the checked commit as `meta.groundedAt`. Builds record `meta.builtFrom` and mark every cited evidence record whose file changed since the stamp, or is untracked (ignored files included), with `stale` and `staleSince`; `assertion` records and records already `asserted`, `unresolved` or `stale` are left as they are. Legacy `details.files` paths are checked too. `arch-viz validate <spec.json> --fresh` lists stale records and exits 1 on drift. Illustrative specs are not stamped or freshness-checked.
+Run `arch-viz validate <spec.json> --stamp` after clean validation to record the checked commit as `meta.groundedAt`. Builds record `meta.builtFrom` and mark every cited evidence record whose file changed since the stamp, or is untracked (ignored files included), with `stale` and `staleSince`; `assertion` records and records already `asserted`, `unresolved` or `stale` are skipped by the freshness pass (build validation can still reclassify stale evidence as `unresolved` when its locator no longer resolves). Legacy `details.files` paths are checked too. `arch-viz validate <spec.json> --fresh` lists stale records and exits 1 on drift. Illustrative specs are not stamped or freshness-checked.
 
 The generated HTML viewer is an offline single-page application built on standard HTML5, CSS3, and vanilla ES6.
 

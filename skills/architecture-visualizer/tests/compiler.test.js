@@ -628,4 +628,28 @@ cases.push(['CLI explicit direction selects columns for both LR and TB', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }]);
 
+cases.push(['scalar payloads survive generated walkthrough narration', () => {
+  const { narrateInteraction } = require('../src/engine/narrative.js');
+  for (const payload of ['order=42', 0, false]) {
+    assert.ok(narrateInteraction({ from: 'api', to: 'db', label: 'Write', payload }).includes(`Payload: ${payload}.`));
+    assert.ok(narrateInteraction({ from: 'api', to: 'db', payload }).includes(`Payload: ${payload}.`));
+  }
+  for (const payload of ['', '  ', null, undefined]) {
+    assert.ok(!narrateInteraction({ from: 'api', to: 'db', label: 'Write', payload }).includes('Payload:'));
+  }
+}]);
+
+cases.push(['nested parallel child narratives survive compilation', () => {
+  const spec = clone(VALID_SPEC);
+  spec.scenarios = [{ id: 'authored_parallel', name: 'Parallel', stages: [{ id: 'p', type: 'parallel', stages: [
+    { id: 'a', type: 'interaction', from: 'api', to: 'db', narrative: 'Authored child.' },
+  ] }] }];
+  const result = compileArchitecture(spec, {});
+  const stage = readEmbeddedSpec(result.html).scenarios[0].stages[0];
+  assert.strictEqual(stage.interactions[0].narrative, 'Authored child.');
+  assert.strictEqual(stage.interactions[0].narrativeGenerated, undefined);
+  assert.ok(stage.narrative.includes('Authored child'));
+  assert.ok(!result.validation.notices.some(n => n.includes('no authored narrative')));
+}]);
+
 module.exports = { name: 'Compiler & Exporter', cases };

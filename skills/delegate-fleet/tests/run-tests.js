@@ -2191,6 +2191,8 @@ test('opencode data dir is private to the user and drops auth links whose shared
     assert.strictEqual(fs.statSync(first.XDG_DATA_HOME).mode & 0o777, 0o700);
   }
   assert.ok(fs.lstatSync(path.join(data, 'auth.json')).isSymbolicLink());
+  // Another user on the machine gets their own namespace, not a 0700 directory they cannot enter.
+  assert.match(path.basename(path.dirname(first.XDG_DATA_HOME)), new RegExp(`^delegate-fleet-opencode-${os.userInfo().uid >= 0 ? os.userInfo().uid : os.userInfo().username}$`));
   fs.rmSync(path.join(shared, 'opencode', 'auth.json'));
   adapter.isolate({ cwd, env });
   assert.throws(() => fs.lstatSync(path.join(data, 'auth.json')), /ENOENT/, 'a link to credentials no longer shared is removed');

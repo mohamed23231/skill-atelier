@@ -116,11 +116,13 @@ function applyFreshness(spec, root) {
   if (Array.isArray(spec.evidence)) {
     spec.evidence.forEach((record) => {
       const locPath = getLocatorPath(record);
-      if (!locPath || record.type === 'assertion' || ['asserted', 'unresolved', 'stale'].includes(record.verification)) return;
+      if (!locPath || record.type === 'assertion' || ['asserted', 'unresolved'].includes(record.verification)) return;
       const normalized = normalizePath(path.relative(path.resolve(root), path.resolve(root, locPath)));
       if (changed.has(normalized)) {
-        record.verification = 'stale';
-        record.staleSince = groundedAt;
+        if (record.verification !== 'stale') {
+          record.verification = 'stale';
+          record.staleSince = groundedAt;
+        }
         if (record.id) stale.push(record.id);
       }
     });

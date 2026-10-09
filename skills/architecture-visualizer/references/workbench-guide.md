@@ -64,13 +64,17 @@ The lens switcher also supports Left/Right and Home/End. The palette includes co
 
 ## Share links
 
-The hash uses version 2 state parameters. Parameters are optional and describe the current chapter, lens, selection, scenario, stage, sequence step, or camera region.
+The hash uses version 2 state parameters. Parameters are optional and describe the current chapter, lens, view, filter, selection, focus, presentation, scenario, stage, sequence step, or camera region.
 
 | Parameter | Meaning |
 | --- | --- |
 | `v=2` | Link format version. |
 | `c=` | Chapter. |
 | `l=` | Lens. |
+| `view=` | Canvas view other than the architecture: `data_flow` or `sequence`. |
+| `filter=` | Layer filter other than all (for example `backend`). |
+| `focus=` | `neighbors` or `affected`, applied to the selected component. |
+| `present=1` | Presentation mode. |
 | `n=` | Selected node/component. |
 | `e=` | Selected connection/edge. |
 | `s=` | Scenario. |

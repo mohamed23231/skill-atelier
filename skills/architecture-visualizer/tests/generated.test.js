@@ -43,18 +43,19 @@ const cases = [
         `seed ${seed}: label ${label.id} covers ${node.id}`)));
     });
   }],
-  ['generated specs lay out in well under a second and leave almost no label without room', () => {
-    // Dragging a card re-routes in the browser with this code, so a slow layout freezes the page.
+  ['generated specs use bounded CPU time and leave almost no label without room', () => {
+    // Bound work done by this process; wall time also counts unrelated host contention.
     let slowest = 0;
     let unplaced = 0;
     SEEDS.forEach(seed => {
       const spec = generateSpec(seed);
-      const started = process.hrtime.bigint();
+      const started = process.cpuUsage();
       const layout = computeLayout(spec);
-      slowest = Math.max(slowest, Number(process.hrtime.bigint() - started) / 1e6);
+      const elapsed = process.cpuUsage(started);
+      slowest = Math.max(slowest, (elapsed.user + elapsed.system) / 1000);
       unplaced += layout.edges.filter(edge => edge.label && !edge.labelBounds).length;
     });
-    assert.ok(slowest < 1500, `slowest generated layout took ${Math.round(slowest)}ms`);
+    assert.ok(slowest < 1500, `slowest generated layout used ${Math.round(slowest)}ms CPU`);
     // A label with no clear room is left off the canvas (its tooltip and sheet still name it).
     assert.ok(unplaced <= 5, `${unplaced} labels found no room across ${SEEDS.length} specs`);
   }],
@@ -144,6 +145,27 @@ cases.push(['generated node kinds are recognized by the validator', () => {
   SEEDS.forEach(seed => generateSpec(seed).nodes.forEach(node => {
     assert(VALID_NODE_TYPES.has(node.type), `seed ${seed}: unsupported ${node.type}`);
   }));
+}]);
+
+cases.push(['every generated VERIFIED node has resolvable evidence', () => {
+  SEEDS.forEach(seed => {
+    const spec = generateSpec(seed);
+    const evidence = new Set(spec.evidence.map(record => record.id));
+    spec.nodes.filter(node => node.status === 'VERIFIED').forEach(node => {
+      assert.ok(node.evidenceIds && node.evidenceIds.length, `seed ${seed}: ${node.id} lacks evidence`);
+      node.evidenceIds.forEach(id => assert.ok(evidence.has(id), `seed ${seed}: missing ${id}`));
+    });
+  });
+}]);
+
+cases.push(['generated layout CPU budget ignores unrelated elapsed time', () => {
+  const clock = process.hrtime.bigint;
+  let calls = 0;
+  // Simulate two seconds of host contention per wall-clock read without sleeping.
+  process.hrtime.bigint = () => clock() + BigInt(calls++) * 2000000000n;
+  try {
+    cases.find(([name]) => name.includes('leave almost no label without room'))[1]();
+  } finally { process.hrtime.bigint = clock; }
 }]);
 
 module.exports = { name: 'Generated Specs', cases };

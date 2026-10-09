@@ -33,9 +33,9 @@ function narrateInteraction(interaction, nodeLabel) {
   const from = labelOf(interaction.from, nodeLabel);
   const to = labelOf(interaction.to, nodeLabel);
   const label = interaction.label;
-  if (label == null || label === '') return `${from} calls ${to}.`;
-
-  let sentence = `${from} sends ${label} to ${to}.`;
+  let sentence = label == null || label === ''
+    ? `${from} calls ${to}.`
+    : `${from} sends ${label} to ${to}.`;
   const payload = interaction.payload;
   if (payload && typeof payload === 'object') {
     const keys = Object.keys(payload).slice(0, 4);
@@ -43,6 +43,8 @@ function narrateInteraction(interaction, nodeLabel) {
       const entries = keys.map((key) => `${key}=${displayValue(payload[key])}`).join(', ');
       sentence += ` Payload: ${entries}.`;
     }
+  } else if (payload != null && String(payload).trim() !== '') {
+    sentence += ` Payload: ${displayValue(payload)}.`;
   }
   return sentence;
 }

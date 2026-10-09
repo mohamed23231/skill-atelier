@@ -59,7 +59,7 @@ function selectNode(nodeId) {
   renderDetailList('ins-tasks', node.details?.tasks, t => `
     <label class="task-item">
       <input type="checkbox" ${t.status === 'done' ? 'checked' : ''} />
-      <span>${escapeHtml(t.title)}</span>
+      <span>${escapeHtml(typeof t === 'string' ? t : t.title)}</span>
     </label>`, null, 'tasks');
 
   renderDetailList('ins-risks', node.details?.failureModes, entry => {
@@ -83,20 +83,19 @@ function sheetSection(name, visible) {
 // Every step of the scenario, on any outcome, in which this component takes part; a row opens that step.
 function renderSheetWalkthrough(nodeId) {
   const list = document.getElementById('ins-walk');
-  const scenario = (ARCH_SPEC.scenarios || [])[0];
+  const scenario = selectedScenario() || (ARCH_SPEC.scenarios || [])[0];
   const rows = [];
   if (scenario) {
     const paths = walkScenarioPaths(scenario);
     const seen = new Set();
-    let number = 0;
     paths.forEach(({ choices, entries }) => entries.forEach(entry => {
       if (entry.kind !== 'step' || seen.has(entry.id)) return;
       seen.add(entry.id);
-      number = Math.max(number, entry.number);
       if (!(entry.interactions || []).some(hop => hop.from === nodeId || hop.to === nodeId)) return;
       const decision = entries.slice(0, entries.indexOf(entry)).findLast(item => item.kind === 'decision');
       const branch = decision?.branches[decision.chosen];
-      const afterDecision = Boolean(decision);
+      const shared = paths.every(path => path.entries.some(item => item.id === entry.id));
+      const afterDecision = Boolean(decision) && !shared;
       rows.push({ entry, choices, note: afterDecision && branch?.status === 'recovery' ? 'Recovery path' : afterDecision ? `If ${branch?.name || 'outcome'}` : '' });
     }));
   }

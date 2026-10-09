@@ -55,7 +55,10 @@ module.exports = {
     if (!cwd) return null;
     const shared = path.join(env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'opencode');
     const key = crypto.createHash('sha1').update(path.resolve(cwd)).digest('hex').slice(0, 16);
-    const root = path.join(os.tmpdir(), 'delegate-fleet-opencode', key);
+    // One namespace per user: on a shared /tmp a 0700 parent created by one user would lock out the rest.
+    let user = 'user';
+    try { user = String(os.userInfo().uid >= 0 ? os.userInfo().uid : os.userInfo().username); } catch { /* no passwd entry */ }
+    const root = path.join(os.tmpdir(), `delegate-fleet-opencode-${user}`, key);
     const data = path.join(root, 'opencode');
     // The data dir holds session history: only this user may read it, whatever the umask.
     fs.mkdirSync(data, { recursive: true, mode: 0o700 });

@@ -15,6 +15,13 @@ function canvasPolicyGhosts(selector) {
   return typeof ghostLayer === 'undefined' ? [] : [...ghostLayer.querySelectorAll(selector)];
 }
 
+function canvasVisibleEdges() {
+  const hidden = new Set((LAYOUT_DATA.nodes || []).filter(node => typeof isNodeHidden === 'function' && isNodeHidden(node)).map(node => node.id));
+  return (LAYOUT_DATA.edges || []).filter(edge => !hidden.has(edge.source) && !hidden.has(edge.target) &&
+    !(state.currentView === 'before_after' && ((state.deltaMode === 'current' && edge.delta === 'ADDED') ||
+      (state.deltaMode === 'proposed' && edge.delta === 'REMOVED'))));
+}
+
 function computeTotalVisualBounds() {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const tierBottom = new Map();
@@ -38,7 +45,7 @@ function computeTotalVisualBounds() {
     maxY = Math.max(maxY, hb.y + hb.height);
   });
 
-  (LAYOUT_DATA.nodes || []).forEach(n => {
+  (LAYOUT_DATA.nodes || []).filter(n => typeof isNodeHidden !== 'function' || !isNodeHidden(n)).forEach(n => {
     const box = canvasNodeVisualBounds(n);
     minX = Math.min(minX, box.x);
     minY = Math.min(minY, box.y);
@@ -46,7 +53,7 @@ function computeTotalVisualBounds() {
     maxY = Math.max(maxY, box.y + box.height);
   });
 
-  (LAYOUT_DATA.edges || []).forEach(e => {
+  canvasVisibleEdges().forEach(e => {
     if (e.totalVisualBounds) {
       minX = Math.min(minX, e.totalVisualBounds.minX);
       minY = Math.min(minY, e.totalVisualBounds.minY);
@@ -132,7 +139,7 @@ function fitToScreen() {
     const box = label.getBBox();
     return { x: box.x, y: box.y, width: box.width, height: box.height };
   });
-  const marks = cardsWithTags.concat(titles, policyTags, (LAYOUT_DATA.edges || []).filter(edge => edge.labelBounds)
+  const marks = cardsWithTags.concat(titles, policyTags, canvasVisibleEdges().filter(edge => edge.labelBounds)
     .map(edge => ({ x: edge.labelBounds.left, y: edge.labelBounds.top,
       width: edge.labelBounds.width, height: edge.labelBounds.height })));
   const initialZoom = Math.min((rect.width - 32) / Math.max(1, bounds.width),
@@ -140,21 +147,29 @@ function fitToScreen() {
   // Keep the whole drawing on-screen, but reserve overlay bands only where cards or labels cross them.
   // Candidate translations touch an inset or an overlay edge; prefer the centred solution.
   // Test translations at a fixed scale, then refine the first feasible scale below.
+  // Bound collision work across all zoom probes; dense diagrams fall back to the safe rectangle.
+  let fitChecks = 0;
   const cameraAtZoom = zoom => {
     const minX = 16 - bounds.minX * zoom, maxX = rect.width - 16 - bounds.maxX * zoom;
     const minY = 16 - bounds.minY * zoom, maxY = rect.height - 16 - bounds.maxY * zoom;
     const centreX = (minX + maxX) / 2, centreY = (minY + maxY) / 2;
     const xs = [centreX, minX, maxX], ys = [centreY, minY, maxY];
     overlays.forEach(overlay => marks.forEach(node => {
+      if (++fitChecks > 100000) return;
       xs.push(overlay.left - (node.x + node.width) * zoom, overlay.right - node.x * zoom);
       ys.push(overlay.top - (node.y + node.height) * zoom, overlay.bottom - node.y * zoom);
     }));
+    if (fitChecks > 100000) return null;
     const candidates = (values, min, max, centre) => [...new Set(values)]
       .filter(value => value >= min - 0.01 && value <= max + 0.01)
       .sort((a, b) => Math.abs(a - centre) - Math.abs(b - centre));
-    for (const panY of candidates(ys, minY, maxY, centreY)) {
-      for (const panX of candidates(xs, minX, maxX, centreX)) {
+    const panXs = candidates(xs, minX, maxX, centreX);
+    const panYs = candidates(ys, minY, maxY, centreY);
+    for (const panY of panYs) {
+      for (const panX of panXs) {
+        if (fitChecks >= 100000) return null;
         const blocked = marks.some(node => overlays.some(overlay =>
+          (++fitChecks > 100000) ||
           panX + node.x * zoom < overlay.right - 0.01 && panX + (node.x + node.width) * zoom > overlay.left + 0.01 &&
           panY + node.y * zoom < overlay.bottom - 0.01 && panY + (node.y + node.height) * zoom > overlay.top + 0.01));
         if (!blocked) {
@@ -182,7 +197,7 @@ function fitToScreen() {
       return;
     }
     upperZoom = zoom;
-    if (zoom <= 0.15) break;
+    if (zoom <= 0.15 || fitChecks >= 100000) break;
   }
   const safe = canvasSafeArea();
   const zoom = clampZoom(Math.min(safe.width / Math.max(1, bounds.width), safe.height / Math.max(1, bounds.height), 1.4));

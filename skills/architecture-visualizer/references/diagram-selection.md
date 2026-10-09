@@ -49,7 +49,7 @@ When addressing complex engineering problems, never settle for a single view. Pa
 4. **Plan chapter**: Connects every component to concrete file paths, schema migrations, and test tasks.
 
 ### Recipe B: Zero-Downtime Database Migration
-1. **Change lens / Changes chapter**:
+1. **Change lens / Changes chapter** (Current and Proposed; model the Transition phase as a walkthrough scenario, or as its own spec):
    - Current: Monolith writes directly to legacy table.
    - Transition: Dual-write with CDC replication and shadow reads.
    - Proposed: All traffic redirected to partitioned/sharded target; legacy table deprecated.

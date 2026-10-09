@@ -653,4 +653,16 @@ cases.push(['evidence summary respects recordless inferred assumed and unknown s
   assert.doesNotMatch(summary.evidence.detail, /3 .*inferred/);
 }]);
 
+cases.push(['review r2: added actors are excluded from planned evidence totals', () => {
+  const summary = trustSummary(baseSpec({ nodes: [{ id: 'person', type: 'actor', delta: 'ADDED' }, { id: 'service', type: 'service', delta: 'ADDED' }] }), []);
+  assert.strictEqual(summary.evidence.label, '1 planned');
+}]);
+cases.push(['review r2: API evidence retains distinct handler files', () => {
+  for (const extra of [{}, { symbol: 'handler', startLine: 1 }]) {
+    const spec = baseSpec({ nodes: [{ id: 'api' }], evidence: ['a.js', 'b.js', 'a.js'].map((file, i) =>
+      evidenceRecord(String(i), 'api', { type: 'api', locator: { method: 'GET', path: '/items', file, ...extra } })) });
+    assert.strictEqual(nodeEvidence(spec, 'api').locators.length, 2);
+  }
+}]);
+
 module.exports = { name: 'Trust model', cases };

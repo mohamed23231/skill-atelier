@@ -83,7 +83,8 @@ function generateSpec(seed) {
 
   const evidence = [];
   nodes.forEach(node => {
-    if (node.status !== 'VERIFIED' || random() < 0.3) return;
+    if (node.status !== 'VERIFIED') return;
+    random(); // Preserve the seeded sequence used by the remaining fixture fields.
     const record = { id: `ev_${node.id}`, type: 'file', locator: { path: `src/${node.id}/index.ts` }, verification: 'compatibility' };
     evidence.push(record);
     node.evidenceIds = [record.id];

@@ -1,7 +1,7 @@
 /* --- 1.1.0 additions --- */
 .hidden { display: none !important; }
 
-.edge-group.dimmed .edge-path { stroke: var(--edge) !important; opacity: 0.3 !important; }
+.edge-group.dimmed .edge-path:not(.highlighted) { stroke: var(--edge) !important; opacity: 0.3 !important; }
 /* A quiet label keeps its solid pill so no line shows through the text; only the text fades. */
 .edge-group.dimmed .edge-label text, .edge-group.out-of-focus .edge-label text { opacity: 0.4; }
 
@@ -127,7 +127,7 @@
 .gate-row:last-child { border-bottom: none; }
 
 .modal {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: var(--scrim);
   display: none;

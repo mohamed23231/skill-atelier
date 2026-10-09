@@ -368,7 +368,7 @@ function findEdgeId(edges, from, to) {
   return undirected ? undirected.id || null : null;
 }
 
-const INTERACTION_FIELDS = ['edgeId', 'label', 'sync', 'durationMs', 'condition', 'payload', 'metadata', 'optional', 'status', 'failure', 'recovery'];
+const INTERACTION_FIELDS = ['narrative', 'edgeId', 'label', 'sync', 'durationMs', 'condition', 'payload', 'metadata', 'optional', 'status', 'failure', 'recovery'];
 
 // A stage written as one flat hop ({ type, from|source, to|target, label, ... }) becomes the canonical
 // { kind, interactions: [...] } shape, so the validator and the player see a single dialect.

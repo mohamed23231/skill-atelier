@@ -238,7 +238,7 @@ cases.push(['changed evidence without verification becomes stale and exempt stat
       ({ id: `e${i}`, type: 'file', locator: { path: 'file.txt' }, verification }));
     evidence.push({ id: 'assertion', type: 'assertion', locator: { path: 'file.txt' } });
     const result = applyFreshness({ meta: { groundedAt: headSha }, evidence }, dir);
-    assert.deepStrictEqual(result.stale, ['e0', 'e1', 'e2']);
+    assert.deepStrictEqual(result.stale, ['e0', 'e1', 'e2', 'e5']);
     assert.deepStrictEqual(evidence.slice(3, 6).map(e => e.verification), ['asserted', 'unresolved', 'stale']);
     assert.strictEqual(evidence[6].verification, undefined);
   } finally { cleanup(); }
@@ -322,6 +322,19 @@ cases.push(['currentCommit supports SHA-256 object IDs', () => {
       else process.env.GIT_DEFAULT_HASH = previousHash;
     }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}]);
+
+cases.push(['already-stale changed evidence remains reported without changing its metadata', () => {
+  const { dir, headSha, cleanup } = makeTempRepo();
+  try {
+    fs.appendFileSync(path.join(dir, 'file.txt'), 'changed\n');
+    const record = { id: 'stale', type: 'file', locator: { path: 'file.txt' }, verification: 'stale', staleSince: 'original' };
+    const before = JSON.stringify(record);
+    const spec = { meta: { groundedAt: headSha }, evidence: [record] };
+    assert.deepStrictEqual(applyFreshness(spec, dir).stale, ['stale']);
+    assert.deepStrictEqual(applyFreshness(spec, dir).stale, ['stale']);
+    assert.strictEqual(JSON.stringify(record), before);
+  } finally { cleanup(); }
 }]);
 
 module.exports = { name: 'Freshness', cases };

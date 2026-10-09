@@ -46,8 +46,14 @@
       const shift = minStub - len;
       const next = pts.map(p => ({ x: p.x, y: p.y }));
       next[n - 2] = { x: a.x - dx * shift, y: a.y - dy * shift };
-      next[n - 3] = { x: next[n - 3].x - dx * shift, y: next[n - 3].y - dy * shift };
-      return clear(next, Math.max(0, n - 4), n - 1) ? next : pts;
+      const shifted = { x: next[n - 3].x - dx * shift, y: next[n - 3].y - dy * shift };
+      if (direction(pts[n - 4], pts[n - 3]) === direction(a, b)) {
+        next[n - 3] = shifted;
+      } else {
+        // Keep the preceding perpendicular run intact and bridge to the shifted run.
+        next.splice(n - 2, 0, shifted);
+      }
+      return clear(next, Math.max(0, n - 4), next.length - 1) ? next : pts;
     };
     const end = fixEnd(points);
     return fixEnd(end.slice().reverse()).reverse();

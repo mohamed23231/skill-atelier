@@ -15,9 +15,9 @@ function trustLocatorKey(locator) {
   if (typeof locator === 'string') return locator;
   const source = trustObject(locator);
   if (['symbol', 'startLine', 'endLine'].some(field => source[field] != null)) {
-    return JSON.stringify([source.method, source.path, source.document, source.symbol, source.startLine, source.endLine]);
+    return JSON.stringify([source.method, source.path, source.file, source.document, source.symbol, source.startLine, source.endLine]);
   }
-  if (source.method && source.path) return `${source.method} ${source.path}`;
+  if (source.method && source.path) return `${source.method} ${source.path}${source.file ? ` ${source.file}` : ''}`;
   if (source.path) return source.path;
   if (source.document) return source.document;
   if (source.table) return source.table;
@@ -95,7 +95,7 @@ function trustEvidenceEntry(spec) {
   const nodes = trustArray(trustObject(spec).nodes);
   // An actor is a person or a client outside the system: nothing in a repository can back it.
   const existing = nodes.filter((node) => node && node.delta !== 'ADDED' && node.type !== 'actor');
-  const planned = nodes.filter((node) => node && node.delta === 'ADDED').length;
+  const planned = nodes.filter((node) => node && node.delta === 'ADDED' && node.type !== 'actor').length;
   let lacking = 0;
   let unbacked = 0;
   const unbackedStatuses = { inferred: 0, assumed: 0, unknown: 0 };

@@ -8,6 +8,7 @@ function initMotionPreference() {
       state.animatingFlow = false;
       stopFlowParticles();
       stopScenarioPlayback();
+      stopWalkPackets();
     }
   });
 }
