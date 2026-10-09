@@ -48,6 +48,8 @@
   .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme):not(#btn-palette) { display: none; }
   .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
   .viewport-controls { right: 8px; bottom: 8px; }
+  body .sequence-controls { left: 8px; transform: translateY(-100%);
+    max-width: calc(100vw - 68px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

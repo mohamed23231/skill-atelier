@@ -781,7 +781,7 @@
           "name": "Discount Evaluation Result & Valuation",
           "type": "branch",
           "description": "Branching based on supplier discount calculation availability",
-          "condition": "Supplier discount service responds within timeout",
+          "condition": "Does the supplier discount service respond within the timeout?",
           "branches": [
             {
               "name": "Volume Rebate Applied",

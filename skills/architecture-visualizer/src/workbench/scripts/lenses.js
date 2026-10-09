@@ -335,7 +335,13 @@ function lensRiskEdgeMarks(parts) {
 
 function lensRiskEdges(parts) {
   const edges = {};
-  const required = parts.policies.filter((policy) => policy && policy.kind === 'required_dependency');
+  const select = (policy, side) => parts.nodes.filter(node =>
+    Boolean(policy[side] || policy[`${side}Type`] || policy[`${side}Boundary`]) &&
+    (!policy[side] || node.id === policy[side]) &&
+    (!policy[`${side}Type`] || node.type === policy[`${side}Type`]) &&
+    (!policy[`${side}Boundary`] || node.boundary === policy[`${side}Boundary`])).map(node => node.id);
+  const required = parts.policies.filter(policy => policy && policy.kind === 'required_dependency')
+    .map(policy => ({ from: select(policy, 'from'), to: select(policy, 'to') }));
   const marks = lensRiskEdgeMarks(parts);
   let hasRequired = false;
   let hasViolation = false;
@@ -351,7 +357,7 @@ function lensRiskEdges(parts) {
       edges[edge.id] = Object.assign(lensEdgeEncoding('risk', 'solid'), mark || {});
       return;
     }
-    const satisfies = required.some((policy) => policy.from === edge.source && policy.to === edge.target);
+    const satisfies = required.some((policy) => policy.from.includes(edge.source) && policy.to.includes(edge.target));
     if (satisfies) {
       hasRequired = true;
       edges[edge.id] = lensEdgeEncoding('ok', 'solid');

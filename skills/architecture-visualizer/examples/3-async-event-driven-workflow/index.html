@@ -45,7 +45,7 @@ draws is checked by the contrast test: text 4.5:1, information-bearing graphics 
 --lane: #e7ebf0;
 --ink: #141a22;
 --muted: #525d6c;
---faint: #6e7988;
+--faint: #596575;
 --line: #d3d9e1;
 --edge: #737e8e;
 --edge-dim: #dde2e8;
@@ -78,9 +78,10 @@ overflow: hidden;
 height: 100vh;
 height: 100dvh;
 width: 100%;
-user-select: none;
 -webkit-font-smoothing: antialiased;
 }
+
+#arch-svg, button, [role="slider"] { user-select: none; }
 
 .voice-serif { font-family: var(--serif); }
 .voice-mono, code, kbd { font-family: var(--mono); }
@@ -541,7 +542,7 @@ pointer-events: none;
 stroke: var(--faint);
 }
 
-.node-group[data-lens-stroke].selected .node-rect {
+.node-group[data-lens-stroke].selected:not(.walk-active) .node-rect {
 stroke: var(--ink);
 stroke-width: 2;
 }
@@ -673,7 +674,7 @@ fill: var(--accent);
 
 /* Recession is applied once to the whole mark, including its label. Spotlight
 classes share that opacity so overlapping focuses never multiply the fade. */
-:is(.node-group, .edge-group)[data-lens-context],
+:is(.node-group, .edge-group)[data-lens-context]:not(.selected, .walk-active, .context-focus, :has(.edge-path.highlighted)),
 :is(.node-group, .edge-group)[data-canvas-lens="change"]:is(.dimmed, .out-of-focus, .context-dim, :has(.edge-path.dimmed)),
 :is(.node-group, .edge-group)[data-canvas-lens="risk"]:is(.dimmed, .out-of-focus, .context-dim, :has(.edge-path.dimmed)) {
 opacity: 0.35 !important;
@@ -1431,7 +1432,7 @@ font-weight: 600;
 .walk-track-controls .walk-play { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .walk-count, .walk-length { color: var(--muted); font-size: 12px; font-weight: 400; }
 .walk-length { flex-basis: auto; white-space: nowrap; }
-.walk-beads { display: grid; gap: 5px; padding: 0; }
+.walk-beads { display: grid; gap: 5px; padding: 0; max-height: 132px; overflow-y: auto; }
 .walk-lane { display: flex; gap: 5px; align-items: center; min-width: max-content; height: 22px; }
 .walk-lane-label { width: 136px; flex: none; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .walk-lane[data-chosen="false"] { opacity: .45; }
@@ -1622,6 +1623,7 @@ white-space: pre-wrap;
 [data-focus-member="true"] .node-rect, [data-focus-member="true"].edge-path { stroke-width: 3 !important; }
 [data-focus-member="false"] { opacity: 0.12 !important; }
 body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-affected { border-style: double; }
+body[data-presentation="true"] .trust-strip,
 body[data-presentation="true"] header,
 body[data-presentation="true"] .rail { display: none !important; }
 body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }
@@ -1699,6 +1701,8 @@ header { overflow: hidden; }
 .header-actions > :not(.workbench-mobile-toggle):not(#btn-theme):not(#btn-palette) { display: none; }
 .workbench-minimap { left: 8px; bottom: 8px; width: 128px; height: 84px; }
 .viewport-controls { right: 8px; bottom: 8px; }
+body .sequence-controls { left: 8px; transform: translateY(-100%);
+max-width: calc(100vw - 68px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3239,8 +3243,10 @@ const before = j ? distance(jumps[j - 1], jump) / 2 : distance(start, jump);
 const after = j + 1 < jumps.length ? distance(jumps[j + 1], jump) / 2 : distance(jump, end);
 const radius = Math.min(jumpRadius, before, after);
 if (radius <= 0) return;
-const sign = Math.sign(b.x - a.x);
-commands.push(`L ${jump.x - sign * radius} ${jump.y}`, `A ${radius} ${radius} 0 0 ${sign > 0 ? 1 : 0} ${jump.x + sign * radius} ${jump.y}`);
+const dx = Math.sign(b.x - a.x);
+const dy = Math.sign(b.y - a.y);
+commands.push(`L ${jump.x - dx * radius} ${jump.y - dy * radius}`,
+`A ${radius} ${radius} 0 0 ${dx > 0 || dy > 0 ? 1 : 0} ${jump.x + dx * radius} ${jump.y + dy * radius}`);
 });
 commands.push(`L ${end.x} ${end.y}`);
 if (cuts[i + 1]) {
@@ -3743,7 +3749,7 @@ setView(view) { state.currentView = view; },
 setDeltaMode(mode) { state.deltaMode = mode; },
 selectNode(id) { state.selectedNodeId = id; },        // id or null
 selectEdge(id) { state.selectedEdgeId = id; },        // id or null
-clearSelection() { state.selectedNodeId = null; state.selectedEdgeId = null; },
+clearSelection() { state.selectedNodeId = null; state.selectedEdgeId = null; state.focusMode = null; },
 setFilter(filter) { state.activeFilter = filter; },
 setSearchQuery(query) { state.searchQuery = query; },
 setFocusMode(mode) { state.focusMode = mode; },       // mode or null; not a toggle
@@ -3841,10 +3847,11 @@ line = words[i];
 }
 if (line) lines.push(line);
 const last = lines.length - 1;
-if (last >= 0 && measureText(lines[last], font) > maxWidth) {
-let cut = lines[last];
+for (let index = 0; index <= last; index++) {
+if (measureText(lines[index], font) <= maxWidth) continue;
+let cut = lines[index];
 while (cut.length > 1 && measureText(`${cut}…`, font) > maxWidth) cut = cut.slice(0, -1).trimEnd();
-lines[last] = `${cut}…`;
+lines[index] = `${cut}…`;
 }
 return lines;
 }
@@ -3922,6 +3929,7 @@ const walking = typeof walkIsActive === 'function' && walkIsActive();
 const active = walking ? null : neighbourhood || (nodeId ? selectionNeighbourhood(nodeId) : null);
 document.querySelectorAll('.node-group').forEach(group => {
 group.classList.toggle('context-dim', Boolean(active) && !active.nodes.has(group.id.replace('node-', '')));
+group.classList.toggle('context-focus', Boolean(active) && active.nodes.has(group.id.replace('node-', '')));
 });
 document.querySelectorAll('.edge-group').forEach(group => {
 const id = group.id.replace('edge-', '');
@@ -3986,6 +3994,7 @@ document.querySelectorAll('.node-group').forEach(item => item.classList.remove('
 const path = document.getElementById(`path-${edgeId}`);
 if (path) path.setAttribute('data-selected', 'true');
 actions.selectNode(null);
+actions.setFocusMode(null);
 document.getElementById('node-inspector-body').dataset.kind = 'edge';
 const ends = { nodes: new Set([edge.source, edge.target]), edges: new Set([edgeId]) };
 applySelectionSpotlight(null, ends);
@@ -4042,13 +4051,13 @@ document.querySelector('.workbench-minimap')?.setAttribute('data-idle', idle || 
 
 function handleMinimapClick(event) {
 event.stopPropagation();
-const minimap = document.querySelector('[data-region="minimap"]');
-const bounds = computeTotalVisualBounds();
-const rect = minimap.getBoundingClientRect();
-if (!rect.width || !rect.height) return;
-const x = bounds.minX + ((event.clientX - rect.left) / rect.width) * bounds.width;
-const y = bounds.minY + ((event.clientY - rect.top) / rect.height) * bounds.height;
-focusModelPoint(x, y);
+const minimap = document.getElementById('minimap-svg');
+const matrix = minimap?.getScreenCTM();
+if (!matrix) return;
+const point = minimap.createSVGPoint();
+point.x = event.clientX; point.y = event.clientY;
+const world = point.matrixTransform(matrix.inverse());
+focusModelPoint(world.x, world.y);
 }
 
 
@@ -4063,6 +4072,9 @@ return value && typeof value === 'object' ? value : {};
 function trustLocatorKey(locator) {
 if (typeof locator === 'string') return locator;
 const source = trustObject(locator);
+if (['symbol', 'startLine', 'endLine'].some(field => source[field] != null)) {
+return JSON.stringify([source.method, source.path, source.document, source.symbol, source.startLine, source.endLine]);
+}
 if (source.method && source.path) return `${source.method} ${source.path}`;
 if (source.path) return source.path;
 if (source.document) return source.document;
@@ -4142,25 +4154,36 @@ const existing = nodes.filter((node) => node && node.delta !== 'ADDED' && node.t
 const planned = nodes.filter((node) => node && node.delta === 'ADDED').length;
 let lacking = 0;
 let unbacked = 0;
+const unbackedStatuses = { inferred: 0, assumed: 0, unknown: 0 };
 let verified = 0;
 existing.forEach((node) => {
 const evidence = nodeEvidence(spec, node.id);
 const claimed = node.status === 'VERIFIED' || trustArray(node.evidenceIds).length > 0;
 if (evidence.state === 'missing' || (evidence.records.length === 0 && claimed)) lacking += 1;
-else if (evidence.records.length === 0) unbacked += 1;
+else if (evidence.records.length === 0) {
+unbacked += 1;
+const status = String(node.status || 'UNKNOWN').toLowerCase();
+unbackedStatuses[Object.hasOwn(unbackedStatuses, status) ? status : 'unknown'] += 1;
+}
 else if (evidence.state === 'verified') verified += 1;
 });
 const total = existing.length;
 const backed = total - lacking - unbacked;
 const parts = [];
 if (lacking > 0) parts.push(`${lacking} missing evidence`);
-if (unbacked > 0) parts.push(`${unbacked} inferred`);
+Object.entries(unbackedStatuses).forEach(([status, count]) => {
+if (count) parts.push(`${count} ${status}`);
+});
 if (planned > 0) parts.push(`${planned} planned`);
 const suffix = parts.length ? ` · ${parts.join(' · ')}` : '';
 const sentences = [];
 if (backed > 0) sentences.push(`${backed} of ${total} existing component${total === 1 ? '' : 's'} cite${backed === 1 ? 's' : ''} evidence${verified === backed ? ' that was verified' : ' declared in the spec'}.`);
 if (lacking > 0) sentences.push(`${lacking} claim${lacking === 1 ? 's' : ''} evidence that is not there.`);
-if (unbacked > 0) sentences.push(`${unbacked} ${unbacked === 1 ? 'is' : 'are'} inferred from the components around ${unbacked === 1 ? 'it' : 'them'}.`);
+if (unbackedStatuses.inferred > 0) sentences.push(`${unbackedStatuses.inferred} ${unbackedStatuses.inferred === 1 ? 'is' : 'are'} inferred from surrounding components.`);
+['assumed', 'unknown'].forEach(status => {
+const count = unbackedStatuses[status];
+if (count) sentences.push(`${count} ${count === 1 ? 'is' : 'are'} ${status} and cites no evidence.`);
+});
 if (planned > 0) sentences.push(`${planned} ${planned === 1 ? 'is' : 'are'} planned and cannot have evidence yet.`);
 const detail = sentences.join(' ') || 'The model has no existing components to back.';
 if (total === 0) return trustEntry('unchecked', planned > 0 ? `${planned} planned` : 'No components', detail, 'evidence');
@@ -4574,7 +4597,13 @@ return marks;
 
 function lensRiskEdges(parts) {
 const edges = {};
-const required = parts.policies.filter((policy) => policy && policy.kind === 'required_dependency');
+const select = (policy, side) => parts.nodes.filter(node =>
+Boolean(policy[side] || policy[`${side}Type`] || policy[`${side}Boundary`]) &&
+(!policy[side] || node.id === policy[side]) &&
+(!policy[`${side}Type`] || node.type === policy[`${side}Type`]) &&
+(!policy[`${side}Boundary`] || node.boundary === policy[`${side}Boundary`])).map(node => node.id);
+const required = parts.policies.filter(policy => policy && policy.kind === 'required_dependency')
+.map(policy => ({ from: select(policy, 'from'), to: select(policy, 'to') }));
 const marks = lensRiskEdgeMarks(parts);
 let hasRequired = false;
 let hasViolation = false;
@@ -4590,7 +4619,7 @@ hasViolation = true;
 edges[edge.id] = Object.assign(lensEdgeEncoding('risk', 'solid'), mark || {});
 return;
 }
-const satisfies = required.some((policy) => policy.from === edge.source && policy.to === edge.target);
+const satisfies = required.some((policy) => policy.from.includes(edge.source) && policy.to.includes(edge.target));
 if (satisfies) {
 hasRequired = true;
 edges[edge.id] = lensEdgeEncoding('ok', 'solid');
@@ -4726,6 +4755,38 @@ counter.next += 1;
 });
 }
 
+function walkStageIds(scenario) {
+const ids = new Set();
+const visit = stages => (Array.isArray(stages) ? stages : []).forEach(stage => {
+if (!stage || typeof stage !== 'object') return;
+ids.add(stage.id);
+visit(stage.stages);
+walkBranches(stage).forEach(branch => visit(branch.stages));
+});
+visit(scenario?.stages);
+return ids;
+}
+
+function walkEndId(decisionId, counter) {
+let id = `end:${decisionId}`;
+while (counter.ids?.has(id)) id = `end:${id}`;
+counter.ids?.add(id);
+return id;
+}
+
+function walkScenarioPaths(scenario) {
+const paths = [];
+const expand = choices => {
+const entries = linearizeScenario(scenario, choices);
+const decision = entries.find(entry => entry.kind === 'decision' && !Object.hasOwn(choices, entry.id));
+if (!decision) { paths.push({ choices, entries }); return; }
+if (!decision.branches.length) { expand({ ...choices, [decision.id]: 0 }); return; }
+decision.branches.forEach((branch, index) => expand({ ...choices, [decision.id]: index }));
+};
+expand({});
+return paths;
+}
+
 function walkBranch(stage, choices, entries, counter) {
 const branches = walkBranches(stage);
 const chosen = walkChosenIndex(stage, choices);
@@ -4733,13 +4794,13 @@ entries.push({ kind: 'decision', id: stage.id, stage, branches, chosen });
 const branch = branches[chosen];
 walkStages(branch && branch.stages, choices, entries, counter);
 if (!branch || !Array.isArray(branch.stages) || branch.stages.length === 0) {
-entries.push({ kind: 'end', id: `end:${stage.id}`, decisionId: stage.id, branch });
+entries.push({ kind: 'end', id: walkEndId(stage.id, counter), decisionId: stage.id, branch });
 }
 }
 
 function linearizeScenario(scenario, choices) {
 const entries = [];
-const counter = { next: 1 };
+const counter = { next: 1, ids: walkStageIds(scenario) };
 if (scenario && typeof scenario === 'object') walkStages(scenario.stages, choices, entries, counter);
 return entries;
 }
@@ -4866,7 +4927,9 @@ const result = {};
 String(raw).split(',').forEach((pair) => {
 const parts = pair.split(':');
 if (parts.length !== 2) return;
-const [id, indexRaw] = parts;
+let id;
+try { id = decodeURIComponent(parts[0]); } catch (error) { return; }
+const indexRaw = parts[1];
 const index = Number(indexRaw);
 if (!urlSet(id) || !Number.isInteger(index) || index < 0) return;
 result[id] = index;
@@ -4879,7 +4942,7 @@ if (!outcomes || typeof outcomes !== 'object') return '';
 return Object.keys(outcomes)
 .filter((id) => urlSet(id) && Number.isInteger(outcomes[id]) && outcomes[id] >= 0)
 .sort()
-.map((id) => `${id}:${outcomes[id]}`)
+.map((id) => `${encodeURIComponent(id)}:${outcomes[id]}`)
 .join(',');
 }
 
@@ -4969,7 +5032,7 @@ if (urlFiniteNumber(x) && urlFiniteNumber(y) && urlFiniteNumber(w) && w > 0) {
 camSuffix = `&cam=${urlRound1(x)},${urlRound1(y)},${urlRound1(w)}`;
 }
 }
-return params.toString().replace(/([?&]o=)([^&]*)/, (match, prefix, value) => prefix + decodeURIComponent(value)) + camSuffix;
+return params.toString().replace(/([?&]o=)([^&]*)/, (match, prefix, value) => prefix + value.replace(/%3A/gi, ':').replace(/%2C/gi, ',')) + camSuffix;
 }
 
 function parseViewHash(hash) {
@@ -5133,6 +5196,7 @@ return members;
 }
 
 function applyFocusMode() {
+if (state.focusMode && !nodeById.has(state.selectedNodeId)) actions.setFocusMode(null);
 const members = state.focusMode ? focusMembers(state.focusMode) : null;
 document.body.toggleAttribute('data-focus-mode', Boolean(state.focusMode));
 if (state.focusMode) document.body.setAttribute('data-focus-mode', state.focusMode);
@@ -5215,7 +5279,7 @@ view: state.currentView,
 node: state.selectedNodeId,
 edge: state.selectedEdgeId,
 filter: state.activeFilter !== 'all' ? state.activeFilter : null,
-focus: state.focusMode,
+focus: nodeById.has(state.selectedNodeId) ? state.focusMode : null,
 present: state.presentation
 };
 if (state.sequenceIndex) {
@@ -5254,6 +5318,22 @@ const notices = [];
 linkedCamera = null;
 try {
 const link = parseViewHash(window.location.hash);
+actions.setCamera({ userMoved: true });
+actions.setScenario(null);
+actions.setScenarioStage(0);
+actions.setWalkChoices({});
+endWalkthrough();
+closeInspector();
+actions.setSequenceIndex(0);
+actions.setFilter('all');
+actions.setCamera({ userMoved: false });
+actions.setPresentation(false);
+document.body.setAttribute('data-presentation', 'false');
+actions.setLens('structure', false);
+openChapter('overview');
+switchView(VIEWS.ARCHITECTURE);
+selectLens('structure', { explicit: false });
+fitToScreen();
 if (link.unsupported) {
 notices.push(`This link uses a newer format (version ${link.version}); showing the default view.`);
 return notices;
@@ -5282,6 +5362,7 @@ switchView(link.view);
 notices.push(`View ${link.view} does not exist; showing the architecture.`);
 }
 }
+if (link.version === 2 && link.lens === undefined && link.view !== VIEWS.BEFORE_AFTER) selectLens('structure', { explicit: true });
 if (link.lens !== undefined) {
 if (LENSES.includes(link.lens)) selectLens(link.lens, { explicit: true });
 else notices.push(`Lens ${link.lens} does not exist; keeping the suggested lens.`);
@@ -5325,8 +5406,10 @@ if (entryId) walkTo(entryId);
 }
 if (link.focus !== undefined) {
 if (Object.values(FOCUS_MODES).includes(link.focus)) {
+if (nodeById.has(state.selectedNodeId)) {
 actions.setFocusMode(link.focus);
 applyFocusMode();
+}
 } else {
 notices.push(`Focus ${link.focus} does not exist.`);
 }
@@ -5524,7 +5607,8 @@ return flattenScenarioStages(scenario.stages).findIndex((stage) => stage.id === 
 
 function walkStartDelay(entry) {
 const stage = entry && entry.stage;
-return stage && typeof stage.durationMs === 'number' ? stage.durationMs : WALK_DEFAULT_DELAY;
+const durations = (entry?.interactions || []).map(hop => hop.durationMs).filter(value => Number.isFinite(value) && value > 0);
+return Number.isFinite(stage?.durationMs) && stage.durationMs > 0 ? stage.durationMs : durations.length ? Math.max(...durations) : WALK_DEFAULT_DELAY;
 }
 
 function walkIsActive() {
@@ -5577,6 +5661,7 @@ y: (from.y + from.height / 2 + to.y + to.height / 2) / 2
 }
 
 function drawWalkMarkers(markers) {
+ghostLayer.querySelectorAll('.walk-marker').forEach(marker => marker.remove());
 if (!Array.isArray(markers) || markers.length === 0) return;
 markers.forEach((marker) => {
 const point = walkMarkerPoint(marker);
@@ -5673,7 +5758,7 @@ const hops = (entry.interactions || []).map(hop => {
 const edgeId = walkEdgeId(hop, LAYOUT_DATA.edges || []);
 const edge = edgeById.get(edgeId);
 const path = document.getElementById(`path-${edgeId}`);
-return edge && path ? { edge, path, reverse: edge.source === hop.to && edge.target === hop.from } : null;
+return edge && path ? { edge, path, recovery: recovery || hop.status === 'recovery', reverse: edge.source === hop.to && edge.target === hop.from } : null;
 }).filter(Boolean);
 if (!hops.length) return;
 const run = walkPacketRun;
@@ -5682,7 +5767,7 @@ const duration = 1100;
 const once = () => {
 if (run !== walkPacketRun) return;
 hops.forEach((hop, i) => {
-const group = el('g', { class: recovery ? 'walk-packet recovery' : 'walk-packet' });
+const group = el('g', { class: hop.recovery ? 'walk-packet recovery' : 'walk-packet' });
 group.appendChild(el('circle', { class: 'walk-packet-halo', r: '9' }));
 group.appendChild(el('circle', { class: 'walk-packet-core', r: '4.5' }));
 layer.appendChild(group);
@@ -5784,6 +5869,7 @@ walkTo(entries[0].id);
 }
 
 function endWalkthrough() {
+drawWalkMarkers([]);
 stopWalkPlayback();
 stopWalkPackets();
 if (typeof clearSpotlight === 'function') clearSpotlight();
@@ -5799,6 +5885,7 @@ function suspendWalkthrough() {
 if (!state.scenarioActive) return;
 stopWalkPlayback();
 stopWalkPackets();
+drawWalkMarkers([]);
 actions.setScenarioActive(false);
 renderWalkTrack();
 }
@@ -5909,16 +5996,13 @@ return button;
 }
 
 function walkAllStepsTotal(scenario) {
-const entries = linearizeScenario(scenario, {});
-const decisionIndex = entries.findIndex(entry => entry.kind === 'decision');
-if (decisionIndex < 0) return walkthroughTotal(entries);
-let total = walkthroughTotal(entries.slice(0, decisionIndex));
-entries[decisionIndex].branches.forEach(branch => {
-const branchEntries = [];
-walkStages(branch.stages, {}, branchEntries, { next: total + 1 });
-total += walkthroughTotal(branchEntries);
-});
-return total;
+const count = stages => (Array.isArray(stages) ? stages : []).reduce((total, stage) => {
+if (!stage || typeof stage !== 'object') return total;
+return total + (stage.kind === 'branch'
+? walkBranches(stage).reduce((sum, branch) => sum + count(branch.stages), 0)
+: 1);
+}, 0);
+return count(scenario?.stages);
 }
 
 function renderWalkTrack() {
@@ -6037,14 +6121,18 @@ if (decisionIndex >= 0) {
 const decision = entries[decisionIndex];
 decision.branches.forEach((branch, index) => {
 const branchEntries = [];
-const counter = { next: walkthroughTotal(entries.slice(0, decisionIndex)) + 1 };
+const counter = { next: walkthroughTotal(entries.slice(0, decisionIndex)) + 1, ids: walkStageIds(scenario) };
 walkStages(branch.stages, active ? state.walkChoices : {}, branchEntries, counter);
-if (!branchEntries.length) branchEntries.push({ kind: 'end', id: `end:${decision.id}`, decisionId: decision.id, branch });
+if (!branchEntries.length) branchEntries.push({ kind: 'end', id: walkEndId(decision.id, counter), decisionId: decision.id, branch });
 const row = lane(`\u21b3 ${branch.name || branch.condition || `Outcome ${index + 1}`}`, branchEntries,
 index === decision.chosen ? null : { id: decision.id, index });
 row.dataset.walkOutcomeLane = String(index);
 row.dataset.chosen = String(index === decision.chosen);
 });
+const chosenEntries = [];
+walkStages(decision.branches[decision.chosen]?.stages, active ? state.walkChoices : {}, chosenEntries, { next: 1 });
+const continuation = entries.slice(decisionIndex + 1 + chosenEntries.length + (chosenEntries.length ? 0 : 1));
+if (continuation.length) lane('Main path', continuation);
 }
 track.append(controls, beads);
 if (current && walkPlaybackNote()) {
@@ -6254,10 +6342,11 @@ renderWalkTrack();
 function initMotionPreference() {
 const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 state.prefersReducedMotion = Boolean(media?.matches);
-if (state.prefersReducedMotion) stopFlowParticles();
+if (state.prefersReducedMotion) { state.animatingFlow = false; stopFlowParticles(); }
 media?.addEventListener?.('change', event => {
 state.prefersReducedMotion = event.matches;
 if (event.matches) {
+state.animatingFlow = false;
 stopFlowParticles();
 stopScenarioPlayback();
 }
@@ -6869,20 +6958,22 @@ default: return true;
 function dependencyChainSet(nodeId) {
 const edges = LAYOUT_DATA.edges || [];
 const active = new Set([nodeId]);
-const walk = (current, key, next) => {
+const walk = (current, key, next, visited) => {
 edges.forEach(e => {
-if (e[key] === current && !active.has(e[next])) {
+if (e[key] === current && !visited.has(e[next])) {
 active.add(e[next]);
-walk(e[next], key, next);
+visited.add(e[next]);
+walk(e[next], key, next, visited);
 }
 });
 };
-walk(nodeId, 'target', 'source');
-walk(nodeId, 'source', 'target');
+walk(nodeId, 'target', 'source', new Set([nodeId]));
+walk(nodeId, 'source', 'target', new Set([nodeId]));
 return active;
 }
 
 function applyVisibility() {
+applyFocusMode();
 renderLensKey(lensEncoding(state.lens, ARCH_SPEC).keyItems);
 const chain = state.highlightedChain ? dependencyChainSet(state.highlightedChain) : null;
 const hidden = new Set();
@@ -6944,6 +7035,19 @@ updateUrlState();
 function lensEdgePoint(edge, t) {
 if (edge && edge.points && edge.controls && typeof ArchVizGeometry !== 'undefined') {
 return ArchVizGeometry.cubicPointAt(t, edge.points, edge.controls);
+}
+if (edge?.polyline?.length > 1) {
+const points = edge.polyline;
+const lengths = points.slice(1).map((point, index) => Math.hypot(point.x - points[index].x, point.y - points[index].y));
+let remaining = lengths.reduce((sum, length) => sum + length, 0) * Math.max(0, Math.min(1, t));
+for (let i = 0; i < lengths.length; i++) {
+if (remaining <= lengths[i] && lengths[i] > 0) {
+const ratio = remaining / lengths[i];
+return { x: points[i].x + (points[i + 1].x - points[i].x) * ratio, y: points[i].y + (points[i + 1].y - points[i].y) * ratio };
+}
+remaining -= lengths[i];
+}
+return points[points.length - 1];
 }
 return { x: (edge && edge.labelX) || 0, y: (edge && edge.labelY) || 0 };
 }
@@ -7306,20 +7410,17 @@ const list = document.getElementById('ins-walk');
 const scenario = (ARCH_SPEC.scenarios || [])[0];
 const rows = [];
 if (scenario) {
-const main = linearizeScenario(scenario, {});
-const decisionIndex = main.findIndex(entry => entry.kind === 'decision');
-const paths = decisionIndex < 0 ? [[{}, main]] : main[decisionIndex].branches.map((branch, index) => {
-const choices = { [main[decisionIndex].id]: index };
-return [choices, linearizeScenario(scenario, choices), branch];
-});
+const paths = walkScenarioPaths(scenario);
 const seen = new Set();
 let number = 0;
-paths.forEach(([choices, entries, branch]) => entries.forEach(entry => {
+paths.forEach(({ choices, entries }) => entries.forEach(entry => {
 if (entry.kind !== 'step' || seen.has(entry.id)) return;
 seen.add(entry.id);
 number = Math.max(number, entry.number);
 if (!(entry.interactions || []).some(hop => hop.from === nodeId || hop.to === nodeId)) return;
-const afterDecision = decisionIndex >= 0 && entries.indexOf(entry) > decisionIndex;
+const decision = entries.slice(0, entries.indexOf(entry)).findLast(item => item.kind === 'decision');
+const branch = decision?.branches[decision.chosen];
+const afterDecision = Boolean(decision);
 rows.push({ entry, choices, note: afterDecision && branch?.status === 'recovery' ? 'Recovery path' : afterDecision ? `If ${branch?.name || 'outcome'}` : '' });
 }));
 }
@@ -7875,12 +7976,16 @@ const changed = Array.isArray(review.changedComponents) && review.changedCompone
 
 const added = changed.filter(entry => entry.delta === 'ADDED');
 const modified = changed.filter(entry => entry.delta === 'CHANGED');
+const removed = changed.filter(entry => entry.delta === 'REMOVED');
+const moved = changed.filter(entry => entry.delta === 'MOVED');
 const newEdges = (ARCH_SPEC.edges || []).filter(edge => edge.delta === 'ADDED');
-const counts = [[added.length, 'added'], [modified.length, 'changed'], [newEdges.length, 'new connections']];
+const counts = [[added.length, 'added'], [modified.length, 'changed'], [removed.length, 'removed'], [moved.length, 'moved'], [newEdges.length, 'new connections']];
 const nameOf = id => nodesById.get(id)?.label || id;
 const phrases = [];
 if (added.length) phrases.push(`adds ${added.map(entry => nameOf(entry.id)).join(', ')}`);
 if (modified.length) phrases.push(`changes ${modified.map(entry => nameOf(entry.id)).join(', ')}`);
+if (removed.length) phrases.push(`removes ${removed.map(entry => nameOf(entry.id)).join(', ')}`);
+if (moved.length) phrases.push(`moves ${moved.map(entry => nameOf(entry.id)).join(', ')}`);
 chapterIntro(deltas.closest('.rail-panel'), 'CHANGES', counts.filter(([count]) => count).map(([count, label]) => `${count} ${label}`).join(', ') || 'No changes',
 phrases.length ? `The proposal ${phrases.join(' and ')}.` : newEdges.length ? `The proposal adds ${plural(newEdges.length, 'connection')} between existing components.` : 'No component additions or changes are recorded.');
 deltas.replaceChildren();
@@ -7998,9 +8103,9 @@ const policies = ARCH_SPEC.policies || [];
 const findings = (ARCH_SPEC.findings || []).concat(ARCH_SPEC.review?.policyFindings || []);
 const violatedIds = new Set(findings.filter(finding => finding?.policyId).map(finding => finding.policyId));
 const failing = policies.filter(policy => violatedIds.has(policy.id)).length;
-const failures = (ARCH_SPEC.nodes || []).flatMap(node => (node.details?.failureModes || []).map(failure => ({ node, failure })));
-chapterIntro(panel, 'REVIEW', (failing ? `${failing} of ${plural(policies.length, 'rule')} violated` : 'All rules pass') +
-(failures.length ? `, ${failures.length} known failure modes` : ''),
+const failures = (ARCH_SPEC.nodes || []).flatMap(node => (node.details?.failureModes || []).map(failure => ({ node, failure: normalizeFailureMode(failure) })));
+chapterIntro(panel, 'REVIEW', (failing ? `${failing} of ${plural(policies.length, 'rule')} violated` : policies.length ? 'All rules pass' : 'No rules defined') +
+(failures.length ? `, ${plural(failures.length, 'known failure mode')}` : ''),
 'Rules are drawn on the canvas: required paths in green, forbidden ones as red dashed lines that must stay absent.');
 const rules = document.getElementById('section-rules');
 rules.querySelector('h3').replaceWith(chapterHeading('Architecture rules', `${policies.length - failing} of ${policies.length} pass`));
@@ -8020,10 +8125,14 @@ target.appendChild(row);
 });
 if (!policies.length) target.textContent = 'No rules defined.';
 const failureSection = document.getElementById('section-findings');
-failureSection.querySelector('h3').textContent = 'Failure modes';
-const failureTarget = failureSection.querySelector('[data-navigator-section], [data-failure-list]');
-failureTarget.removeAttribute('data-navigator-section');
+let failureTarget = failureSection.querySelector('[data-failure-list]');
+if (!failureTarget) {
+failureTarget = document.createElement('div');
 failureTarget.setAttribute('data-failure-list', '');
+const heading = document.createElement('h3');
+heading.textContent = 'Failure modes';
+failureSection.append(heading, failureTarget);
+}
 failureTarget.replaceChildren();
 failures.forEach(({ node, failure }) => {
 const row = chapterRow('!', failure.failure, `${node.label || node.id} · ${failure.impact || 'Impact not recorded'}. Mitigation: ${failure.mitigation || 'Not recorded'}.`, '', 'warn', () => openInspectorForNode(node.id));
@@ -8160,6 +8269,7 @@ let particleAnimationId = null;
 let particleLastFrame = 0;
 function startFlowParticles() {
 stopFlowParticles();
+if (state.prefersReducedMotion) { state.animatingFlow = false; return; }
 state.animatingFlow = true;
 
 const totalBounds = computeTotalVisualBounds();
@@ -8317,6 +8427,10 @@ goToSequenceStep(state.sequenceIndex + dir);
 }
 
 function toggleSequencePlay() {
+if (!state.sequencePlaying && state.prefersReducedMotion) {
+announceStatus('Playback is unavailable under reduced motion; use Previous and Next.');
+return;
+}
 state.sequencePlaying = !state.sequencePlaying;
 setIconLabel(document.getElementById('seq-play'), state.sequencePlaying ? 'ui-pause' : 'ui-play', state.sequencePlaying ? 'Pause' : 'Play');
 if (state.sequencePlaying) {
@@ -8329,7 +8443,7 @@ stopSequenceTimer();
 function scheduleNextStep() {
 const steps = sequenceSteps();
 const current = steps[state.sequenceIndex] || {};
-const delay = typeof current.durationMs === 'number' ? current.durationMs : 1800;
+const delay = Number.isFinite(current.durationMs) && current.durationMs > 0 ? current.durationMs : 1800;
 state.sequenceTimer = setTimeout(() => {
 if (!state.sequencePlaying) return;
 goToSequenceStep(state.sequenceIndex >= steps.length - 1 ? 0 : state.sequenceIndex + 1);
@@ -8615,6 +8729,9 @@ const cursorY = (clientY - rect.top - state.panY) / state.zoom;
 const newX = cursorX - state.boundaryDragOffset.x;
 const newY = cursorY - state.boundaryDragOffset.y;
 
+const dx = newX - boundary.x, dy = newY - boundary.y;
+const headerBox = LAYOUT_DATA.boundaryHeaderBoxes?.[(LAYOUT_DATA.boundaries || []).indexOf(boundary)];
+if (headerBox) { headerBox.x += dx; headerBox.y += dy; }
 boundary.x = newX;
 boundary.y = newY;
 state.dragMoved = true;
@@ -8626,19 +8743,10 @@ if (rectEl) {
 rectEl.setAttribute('x', boundary.x);
 rectEl.setAttribute('y', boundary.y);
 }
-const hitRectEl = boundaryEl.querySelector('.boundary-hit-rect');
-if (hitRectEl) {
-hitRectEl.setAttribute('x', boundary.x);
-hitRectEl.setAttribute('y', boundary.y);
-}
-const texts = boundaryEl.querySelectorAll('.boundary-header');
-if (texts[0]) {
-texts[0].setAttribute('x', boundary.x + 18);
-texts[0].setAttribute('y', boundary.y + 26);
-}
-if (texts[1]) {
-texts[1].setAttribute('x', boundary.x + 36);
-texts[1].setAttribute('y', boundary.y + 26);
+const header = boundaryEl.querySelector('.boundary-toggle');
+if (header) {
+const matrix = header.transform.baseVal.consolidate()?.matrix;
+header.setAttribute('transform', `translate(${(matrix?.e || 0) + dx}, ${(matrix?.f || 0) + dy})`);
 }
 }
 
@@ -8683,6 +8791,7 @@ right: Math.max(acc.right, n.x + n.width)
 function resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes) {
 ArchVizGeometry.resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes);
 (edges || []).forEach(edge => {
+if (edge.polyline && !edge.controls && edge.labelSlot === null) { syncLabelLeader(edge); return; }
 if (!(edge.points && typeof edge.labelWidth === 'number' && edge.labelWidth > 0)) return;
 edge.labelAnchor = { x: edge.labelX, y: edge.labelY };
 edge.labelBounds = {
@@ -8837,7 +8946,7 @@ resolveLabelCollisions(LAYOUT_DATA.edges || [], LAYOUT_DATA.nodes || [], LAYOUT_
 }
 
 function canvasNodeVisualBounds(node) {
-const badge = typeof document === 'undefined' ? null : document.querySelector(`#node-${node.id} .node-badge`);
+const badge = typeof document === 'undefined' ? null : document.getElementById?.(`node-${node.id}`)?.querySelector('.node-badge');
 if (!badge) return { x: node.x, y: node.y, width: node.width, height: node.height };
 const box = badge.getBBox();
 const translation = badge.transform.baseVal.consolidate().matrix;
@@ -8951,8 +9060,13 @@ if (!bounds || !isFinite(bounds.minX)) return;
 const rect = svg.getBoundingClientRect();
 const overlays = canvasOverlayRects();
 const nodes = (LAYOUT_DATA.nodes || []).filter(node => !isNodeHidden(node));
-const titles = (LAYOUT_DATA.boundaries || []).map(boundary => ({ x: boundary.x, y: boundary.y,
-width: Math.min(160, boundary.width), height: Math.min(52, boundary.height) }));
+const titles = (LAYOUT_DATA.boundaries || []).map(boundary => {
+const header = (typeof document === 'undefined' ? null : document.getElementById?.(`boundary-${boundary.id}`))?.querySelector('.boundary-toggle');
+const count = header?.querySelector('.boundary-count');
+const bottom = count ? count.getBBox().y + count.getBBox().height + (header.transform.baseVal.consolidate()?.matrix.f || 0) - boundary.y : 52;
+return { x: boundary.x, y: boundary.y, width: Math.min(160, boundary.width),
+height: Math.min(Math.max(52, bottom), boundary.height) };
+});
 const cardsWithTags = nodes.map(canvasNodeVisualBounds);
 const policyTags = canvasPolicyGhosts('.policy-ghost .edge-label-bg').map(label => {
 const box = label.getBBox();
@@ -9015,7 +9129,7 @@ updateTransform();
 let fitCameraCache = null;
 function fitCamera() {
 const rect = svg.getBoundingClientRect();
-const key = [Math.round(rect.width), Math.round(rect.height), state.collapsedBoundaries?.size || 0, state.activeFilter, state.lens,
+const key = [Math.round(rect.width), Math.round(rect.height), JSON.stringify([...state.collapsedBoundaries].sort()), state.activeFilter, state.lens, state.currentView, state.deltaMode,
 document.querySelector('.walk-track')?.getBoundingClientRect().height || 0,
 (LAYOUT_DATA.nodes || []).reduce((sum, node) => sum + node.x * 3 + node.y * 7, 0)].join(':');
 if (fitCameraCache?.key === key) return { ...fitCameraCache.camera };
@@ -9030,9 +9144,7 @@ return { ...fit };
 
 function resetView() {
 actions.setCamera({ userMoved: false });
-state.selectedNode = null;
-state.highlightedChain = null;
-applyVisibility();
+closeInspector();
 fitToScreen();
 }
 
@@ -9086,6 +9198,8 @@ const clone = svg.cloneNode(true);
 clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 clone.setAttribute('width', width);
 clone.setAttribute('height', height);
+clone.style.width = `${width}px`;
+clone.style.height = `${height}px`;
 clone.setAttribute('viewBox', `${bounds.minX - padding} ${bounds.minY - padding} ${width} ${height}`);
 
 const clonedViewport = clone.querySelector('#viewport-group');
@@ -9101,7 +9215,7 @@ const varBlock = DESIGN_TOKENS
 .join(' ');
 
 const style = document.createElementNS(SVG_NS, 'style');
-style.textContent = `svg { ${varBlock} background: var(--bg); }\n${collectStyles()}`;
+style.textContent = `${collectStyles()}\n:root { ${varBlock} background: var(--bg); }`;
 clone.insertBefore(style, clone.firstChild);
 
 return { markup: new XMLSerializer().serializeToString(clone), width, height };
@@ -9757,6 +9871,7 @@ else openShortcuts(opener);
 }
 
 function shortcutsHandleKeyDown(event) {
+event.stopPropagation();
 if (event.key === 'Escape') {
 event.preventDefault();
 event.stopPropagation();

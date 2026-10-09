@@ -54,6 +54,7 @@ function applySelectionSpotlight(nodeId, neighbourhood) {
   const active = walking ? null : neighbourhood || (nodeId ? selectionNeighbourhood(nodeId) : null);
   document.querySelectorAll('.node-group').forEach(group => {
     group.classList.toggle('context-dim', Boolean(active) && !active.nodes.has(group.id.replace('node-', '')));
+    group.classList.toggle('context-focus', Boolean(active) && active.nodes.has(group.id.replace('node-', '')));
   });
   document.querySelectorAll('.edge-group').forEach(group => {
     const id = group.id.replace('edge-', '');
@@ -123,6 +124,7 @@ function openInspectorForEdge(edgeId) {
   const path = document.getElementById(`path-${edgeId}`);
   if (path) path.setAttribute('data-selected', 'true');
   actions.selectNode(null);
+  actions.setFocusMode(null);
   document.getElementById('node-inspector-body').dataset.kind = 'edge';
   // A connection frames both of its ends, with the connection itself in focus.
   const ends = { nodes: new Set([edge.source, edge.target]), edges: new Set([edgeId]) };

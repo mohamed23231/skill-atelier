@@ -71,7 +71,7 @@ Open `dist/architecture.html` directly in any web browser. No web server, CDN, o
 
 ## Migrating from 2.x
 
-- The default layout is now swimlanes (`layout: 'lanes'`). Use `layout: 'columns'` for the previous arrangement or `--router curved` for the previous routes. Saved card positions from older builds are ignored.
+- The default layout is now swimlanes (`layout: 'lanes'`, always top to bottom). Use `layout: 'columns'` (or `--direction LR|TB`, which selects columns) for the previous arrangement, or `--router curved` for the previous routes. Saved card positions from older builds are ignored.
 - Shared links now use `#v=2&…`; v1 links still restore. Copy link is hidden in embedded viewers; view links work from the downloaded HTML file.
 - The left navigator is removed: Search is in the Cmd/Ctrl+K palette, the outline and locators are in Evidence, findings in Review, and scenarios in Walkthrough.
 - The inspector drawer is replaced by a component sheet in the reading rail. The Data Model and Plan tabs now live in the Data and Plan chapters.
@@ -130,7 +130,7 @@ For lifecycle gates and verification truth, see [`references/review-and-release.
 ```bash
 arch-viz inspect [dir]                                                                      # Detect framework, DB, and queue signatures
 arch-viz scaffold [-o spec.json] [--base <ref>] [--repo-root .] [--ignore <prefix>]        # Draft a spec from git diffs and import dependencies
-arch-viz validate <spec.json> [--strict] [--repo-root .] [--json] [--stamp] [--fresh]      # Run 14-point quality gate and policy checks
+arch-viz validate <spec.json> [--strict] [--repo-root .] [--json] [--stamp | --fresh]     # Run 14-point quality gate and policy checks
 arch-viz build <spec.json> [-o out.html] [--md out.md] [--strict] [--direction LR|TB]     # Build standalone HTML workbench and Markdown report
 arch-viz mermaid <spec.json> [--view flowchart|sequence|er]                                # Export to Mermaid diagram syntax
 arch-viz init [output.json]                                                                # Scaffold clean starter specification
@@ -139,7 +139,7 @@ arch-viz init [output.json]                                                     
 - `--strict`: Treats quality gate and policy warnings as non-zero build failures (recommended for CI pipelines).
 - `--repo-root <dir>`: Sets the base path where `VERIFIED` files and evidence locators are resolved on disk.
 - `--stamp`: Records the current commit as `meta.groundedAt` after clean validation.
-- `--fresh`: Verifies evidence freshness against `meta.groundedAt` and exits non-zero on drift.
+- `--fresh`: Verifies evidence freshness against `meta.groundedAt` and exits non-zero on drift. Use one of `--stamp` and `--fresh` per run: with both, `--stamp` wins and freshness is not checked.
 - `--no-open` or `ARCH_VIZ_NO_OPEN=1`: Prevents automatic browser launch after building.
 
 ---

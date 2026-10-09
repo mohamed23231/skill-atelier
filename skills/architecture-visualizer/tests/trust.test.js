@@ -129,7 +129,11 @@ const cases = [
     () => {
       const spec = baseSpec({
         nodes: [{ id: 'a', status: 'VERIFIED', delta: 'UNCHANGED' }],
-        evidence: [evidenceRecord('e1', 'a', { verification: 'stale' })],
+        evidence: [
+          evidenceRecord('e1', 'a', { verification: 'stale' }),
+          evidenceRecord('e2', 'a', { verification: 'compatibility' }),
+          evidenceRecord('e3', 'a', { verification: 'verified' }),
+        ],
       });
       const result = nodeEvidence(spec, 'a');
       assert.strictEqual(result.state, 'stale');
@@ -630,5 +634,23 @@ fs.readdirSync(EXAMPLE_DIR)
       },
     ]);
   });
+
+cases.push(['locators preserve distinct symbols and line ranges in files and documents', () => {
+  const locators = [
+    { path: 'src/a.js', symbol: 'first' }, { path: 'src/a.js', symbol: 'second' },
+    { path: 'src/a.js', startLine: 0, endLine: 5 }, { path: 'src/a.js', startLine: 6, endLine: 10 },
+    { document: 'design', startLine: 1, endLine: 2 }, { document: 'design', startLine: 3, endLine: 4 },
+  ];
+  const spec = baseSpec({ nodes: [{ id: 'a' }], evidence: locators.concat(locators[0]).map((locator, i) => evidenceRecord(`e${i}`, 'a', { locator })) });
+  assert.strictEqual(nodeEvidence(spec, 'a').locators.length, locators.length);
+}]);
+
+cases.push(['evidence summary respects recordless inferred assumed and unknown statuses', () => {
+  const summary = trustSummary(baseSpec({ nodes: ['INFERRED', 'ASSUMED', 'UNKNOWN'].map((status, i) => ({ id: `n${i}`, status })) }));
+  assert.match(summary.evidence.label, /1 inferred.*1 assumed.*1 unknown/);
+  assert.match(summary.evidence.detail, /1 is assumed and cites no evidence/);
+  assert.match(summary.evidence.detail, /1 is unknown and cites no evidence/);
+  assert.doesNotMatch(summary.evidence.detail, /3 .*inferred/);
+}]);
 
 module.exports = { name: 'Trust model', cases };

@@ -29,6 +29,7 @@ function toggleShortcuts(opener) {
 }
 
 function shortcutsHandleKeyDown(event) {
+  event.stopPropagation();
   if (event.key === 'Escape') {
     event.preventDefault();
     event.stopPropagation();

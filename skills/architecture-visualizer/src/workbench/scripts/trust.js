@@ -14,6 +14,9 @@ function trustObject(value) {
 function trustLocatorKey(locator) {
   if (typeof locator === 'string') return locator;
   const source = trustObject(locator);
+  if (['symbol', 'startLine', 'endLine'].some(field => source[field] != null)) {
+    return JSON.stringify([source.method, source.path, source.document, source.symbol, source.startLine, source.endLine]);
+  }
   if (source.method && source.path) return `${source.method} ${source.path}`;
   if (source.path) return source.path;
   if (source.document) return source.document;
@@ -95,6 +98,7 @@ function trustEvidenceEntry(spec) {
   const planned = nodes.filter((node) => node && node.delta === 'ADDED').length;
   let lacking = 0;
   let unbacked = 0;
+  const unbackedStatuses = { inferred: 0, assumed: 0, unknown: 0 };
   let verified = 0;
   existing.forEach((node) => {
     const evidence = nodeEvidence(spec, node.id);
@@ -103,7 +107,11 @@ function trustEvidenceEntry(spec) {
     // evidence is counted as inferred, neither hidden nor raised as a warning.
     const claimed = node.status === 'VERIFIED' || trustArray(node.evidenceIds).length > 0;
     if (evidence.state === 'missing' || (evidence.records.length === 0 && claimed)) lacking += 1;
-    else if (evidence.records.length === 0) unbacked += 1;
+    else if (evidence.records.length === 0) {
+      unbacked += 1;
+      const status = String(node.status || 'UNKNOWN').toLowerCase();
+      unbackedStatuses[Object.hasOwn(unbackedStatuses, status) ? status : 'unknown'] += 1;
+    }
     else if (evidence.state === 'verified') verified += 1;
   });
   const total = existing.length;
@@ -111,13 +119,19 @@ function trustEvidenceEntry(spec) {
   // Lead with what is backed, then name the rest in the reader's words.
   const parts = [];
   if (lacking > 0) parts.push(`${lacking} missing evidence`);
-  if (unbacked > 0) parts.push(`${unbacked} inferred`);
+  Object.entries(unbackedStatuses).forEach(([status, count]) => {
+    if (count) parts.push(`${count} ${status}`);
+  });
   if (planned > 0) parts.push(`${planned} planned`);
   const suffix = parts.length ? ` · ${parts.join(' · ')}` : '';
   const sentences = [];
   if (backed > 0) sentences.push(`${backed} of ${total} existing component${total === 1 ? '' : 's'} cite${backed === 1 ? 's' : ''} evidence${verified === backed ? ' that was verified' : ' declared in the spec'}.`);
   if (lacking > 0) sentences.push(`${lacking} claim${lacking === 1 ? 's' : ''} evidence that is not there.`);
-  if (unbacked > 0) sentences.push(`${unbacked} ${unbacked === 1 ? 'is' : 'are'} inferred from the components around ${unbacked === 1 ? 'it' : 'them'}.`);
+  if (unbackedStatuses.inferred > 0) sentences.push(`${unbackedStatuses.inferred} ${unbackedStatuses.inferred === 1 ? 'is' : 'are'} inferred from surrounding components.`);
+  ['assumed', 'unknown'].forEach(status => {
+    const count = unbackedStatuses[status];
+    if (count) sentences.push(`${count} ${count === 1 ? 'is' : 'are'} ${status} and cites no evidence.`);
+  });
   if (planned > 0) sentences.push(`${planned} ${planned === 1 ? 'is' : 'are'} planned and cannot have evidence yet.`);
   const detail = sentences.join(' ') || 'The model has no existing components to back.';
   if (total === 0) return trustEntry('unchecked', planned > 0 ? `${planned} planned` : 'No components', detail, 'evidence');

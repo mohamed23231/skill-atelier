@@ -219,8 +219,10 @@
         const after = j + 1 < jumps.length ? distance(jumps[j + 1], jump) / 2 : distance(jump, end);
         const radius = Math.min(jumpRadius, before, after);
         if (radius <= 0) return;
-        const sign = Math.sign(b.x - a.x);
-        commands.push(`L ${jump.x - sign * radius} ${jump.y}`, `A ${radius} ${radius} 0 0 ${sign > 0 ? 1 : 0} ${jump.x + sign * radius} ${jump.y}`);
+        const dx = Math.sign(b.x - a.x);
+        const dy = Math.sign(b.y - a.y);
+        commands.push(`L ${jump.x - dx * radius} ${jump.y - dy * radius}`,
+          `A ${radius} ${radius} 0 0 ${dx > 0 || dy > 0 ? 1 : 0} ${jump.x + dx * radius} ${jump.y + dy * radius}`);
       });
       commands.push(`L ${end.x} ${end.y}`);
       if (cuts[i + 1]) {

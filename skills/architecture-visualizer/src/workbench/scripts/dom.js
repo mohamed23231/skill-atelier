@@ -80,10 +80,11 @@ function wrapText(text, font, maxWidth, maxLines) {
   }
   if (line) lines.push(line);
   const last = lines.length - 1;
-  if (last >= 0 && measureText(lines[last], font) > maxWidth) {
-    let cut = lines[last];
+  for (let index = 0; index <= last; index++) {
+    if (measureText(lines[index], font) <= maxWidth) continue;
+    let cut = lines[index];
     while (cut.length > 1 && measureText(`${cut}…`, font) > maxWidth) cut = cut.slice(0, -1).trimEnd();
-    lines[last] = `${cut}…`;
+    lines[index] = `${cut}…`;
   }
   return lines;
 }

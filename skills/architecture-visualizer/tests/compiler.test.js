@@ -489,6 +489,7 @@ const cases = [
         (stage.interactions || []).forEach((interaction) => {
           assert.strictEqual(typeof interaction.narrative, 'string', `interaction ${interaction.id} must carry a narrative`);
           assert.ok(interaction.narrative.length > 0, `interaction ${interaction.id} narrative must not be empty`);
+          assert.strictEqual(interaction.narrativeGenerated, true, `interaction ${interaction.id} must be flagged as generated`);
         });
       });
       assert.ok(stages.every((stage) => stage.narrativeGenerated === true), 'generated stages must be flagged');
@@ -569,6 +570,12 @@ function readEmbeddedSpec(html) {
   throw new Error('Unterminated embedded ARCH_SPEC');
 }
 
+cases.push(['the workbench assembles from a relative or trailing-slash directory exactly as from its own', () => {
+  const relative = path.relative(process.cwd(), WORKBENCH_DIR) + path.sep;
+  assert.strictEqual(assembleWorkbench(relative).html, assembleWorkbench().html);
+  assert.strictEqual(assembleWorkbench(WORKBENCH_DIR + path.sep).html, assembleWorkbench().html);
+}]);
+
 cases.push(['CLI build accepts both router modes and rejects unknown modes', () => {
   const { execFileSync } = require('node:child_process');
   const dir = tmpDir();
@@ -602,6 +609,23 @@ cases.push(['compact cards and lens keys ship in every example', () => {
     const b = layout.totalVisualBounds;
     assert.ok(Math.min(1040 / (b.width + 48), 806 / (b.height + 48)) >= 0.75, name);
   }
+}]);
+
+
+cases.push(['CLI explicit direction selects columns for both LR and TB', () => {
+  const { execFileSync } = require('node:child_process');
+  const dir = tmpDir();
+  try {
+    const specPath = path.join(dir, 'spec.json');
+    fs.writeFileSync(specPath, JSON.stringify({ ...clone(VALID_SPEC), layout: { layout: 'lanes' } }));
+    for (const direction of ['LR', 'TB']) {
+      const output = path.join(dir, `${direction}.html`);
+      execFileSync(process.execPath, [path.join(__dirname, '../bin/arch-viz.js'), 'build', specPath, '-o', output, '--direction', direction, '--no-open'], { stdio: 'pipe' });
+      const layout = readEmbeddedSpec(fs.readFileSync(output, 'utf8')).layout;
+      assert.strictEqual(layout.layout, 'columns');
+      assert.strictEqual(layout.direction, direction);
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }]);
 
 module.exports = { name: 'Compiler & Exporter', cases };

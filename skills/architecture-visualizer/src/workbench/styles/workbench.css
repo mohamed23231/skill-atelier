@@ -166,6 +166,7 @@
 [data-focus-member="true"] .node-rect, [data-focus-member="true"].edge-path { stroke-width: 3 !important; }
 [data-focus-member="false"] { opacity: 0.12 !important; }
 body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-affected { border-style: double; }
+body[data-presentation="true"] .trust-strip,
 body[data-presentation="true"] header,
 body[data-presentation="true"] .rail { display: none !important; }
 body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }

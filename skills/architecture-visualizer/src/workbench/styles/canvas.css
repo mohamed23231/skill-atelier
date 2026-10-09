@@ -138,7 +138,7 @@ svg#arch-svg {
 }
 
 /* Selected reads as ink, distinct from active (accent) and from change states (ok / warn / risk). */
-.node-group[data-lens-stroke].selected .node-rect {
+.node-group[data-lens-stroke].selected:not(.walk-active) .node-rect {
   stroke: var(--ink);
   stroke-width: 2;
 }
@@ -274,7 +274,7 @@ svg#arch-svg {
 
 /* Recession is applied once to the whole mark, including its label. Spotlight
    classes share that opacity so overlapping focuses never multiply the fade. */
-:is(.node-group, .edge-group)[data-lens-context],
+:is(.node-group, .edge-group)[data-lens-context]:not(.selected, .walk-active, .context-focus, :has(.edge-path.highlighted)),
 :is(.node-group, .edge-group)[data-canvas-lens="change"]:is(.dimmed, .out-of-focus, .context-dim, :has(.edge-path.dimmed)),
 :is(.node-group, .edge-group)[data-canvas-lens="risk"]:is(.dimmed, .out-of-focus, .context-dim, :has(.edge-path.dimmed)) {
   opacity: 0.35 !important;

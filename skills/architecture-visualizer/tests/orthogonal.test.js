@@ -602,4 +602,20 @@ cases.push(['local links in a packed lane use an internal row channel for their 
   assert(end.y > to.y + to.height);
 }]);
 
+
+cases.push(['vertical jump carriers bridge crossings in both travel directions', () => {
+  const { buildRouteGeometry } = require('../src/engine/orthogonal.js');
+  const geometry = require('../src/engine/geometry.js');
+  for (const reverse of [false, true]) {
+    const routes = {
+      h: { points: [{ x: 0, y: 50 }, { x: 100, y: 50 }] },
+      v: { points: reverse ? [{ x: 10, y: 100 }, { x: 10, y: 0 }] : [{ x: 10, y: 0 }, { x: 10, y: 100 }] },
+    };
+    assert.strictEqual(computeJumps(routes), 1);
+    assert.strictEqual(routes.v.jumps.length, 1);
+    const result = buildRouteGeometry(routes.v, 0, geometry);
+    assert.ok(result.path.includes(reverse ? 'L 10 55 A 5 5 0 0 0 10 45' : 'L 10 45 A 5 5 0 0 1 10 55'), result.path);
+  }
+}]);
+
 module.exports = { name: 'Orthogonal router', cases };

@@ -294,7 +294,13 @@ function computeLayout(spec, customConfig = {}) {
     const input = { config, nodes: computedNodes, boundaries: computedBoundaries, edges: computedEdges.filter(e => nodeMap.has(e.source) && nodeMap.has(e.target)) };
     let result;
     for (let pass = 0; pass <= 3; pass++) {
-      result = routeOrthogonal(input, { labelWidths, direction: config.direction, lanes: isLanes });
+      try {
+        result = routeOrthogonal(input, { labelWidths, direction: config.direction, lanes: isLanes });
+      } catch (err) {
+        const fallback = computeLayout(spec, { ...config, router: 'curved' });
+        fallback.routingFallback = err.message;
+        return fallback;
+      }
       if ((isLanes && !computedNodes.some(n => n.row > 0)) || pass === 3 || !result.stats.gapDemand) break;
       // Router gap indexes refer to merged occupied x slabs, including subcolumns.
       const columns = [];
@@ -468,6 +474,11 @@ function chooseLaneGrid(boundaries, edges, config) {
 
 /** Assign shared slots in two deterministic sweeps, retaining spec order on ties. */
 function assignLaneSlots(boundaries, edges, k) {
+  boundaries.forEach(b => b.nodes.sort((a, c) => {
+    const ao = typeof a.order === 'number' ? a.order : Infinity;
+    const co = typeof c.order === 'number' ? c.order : Infinity;
+    return ao === co ? 0 : ao - co;
+  }));
   const neighbors = new Map();
   edges.forEach(e => {
     for (const [id, other] of [[e.source, e.target], [e.target, e.source]]) {
@@ -494,7 +505,7 @@ function assignLaneSlots(boundaries, edges, k) {
       const occupied = new Set();
       b.nodes.forEach((n, index) => {
         const adjacent = (neighbors.get(n.id) || []).filter(id => placed.has(id));
-        const center = adjacent.length
+        const center = typeof n.order === 'number' ? index % k : adjacent.length
           ? adjacent.reduce((sum, id) => sum + placed.get(id), 0) / adjacent.length
           : index % k;
         const row = Math.floor(index / k);

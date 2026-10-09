@@ -25,7 +25,7 @@ The core rule is: **Do not force everything into one diagram type.** Complex pro
 | 13 | **Backend Architecture** | Microservices, monolith internals, modular monolith | Domains, service interfaces, persistence | Structure lens (Services boundary) |
 | 14 | **Mobile Architecture** | iOS/Android app internals, native modules | Native bridge, offline sync, SQLite | Structure lens (Mobile container) |
 | 15 | **Infrastructure & Deployment** | Cloud resources, VPCs, Kubernetes, CDN, Load Balancers | Subnets, clusters, pods, regions | Structure lens (Deployment boundary) |
-| 16 | **CI/CD Pipeline** | Build, test, security scan, deploy workflows | Stages, gates, artifacts, environments | Structure lens (Pipeline LR) |
+| 16 | **CI/CD Pipeline** | Build, test, security scan, deploy workflows | Stages, gates, artifacts, environments | Structure lens (`--direction LR` for a left-to-right column layout) |
 | 17 | **Service Dependency Graph** | Microservice coupling, upstream/downstream impact | Blast radius, circular dependencies | Structure + sheet/palette relationship highlighting |
 | 18 | **Migration Plan** | Dual-write, zero-downtime DB cutover, cloud migration | Phased transition, CDC, shadow reads | Change lens + Plan chapter |
 | 19 | **Refactoring Plan** | Code extraction, decoupling legacy spaghetti | Modularization, interfaces, strangler fig | Change lens (Diff) |

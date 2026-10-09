@@ -41,7 +41,9 @@ function urlParseOutcomes(raw) {
   String(raw).split(',').forEach((pair) => {
     const parts = pair.split(':');
     if (parts.length !== 2) return;
-    const [id, indexRaw] = parts;
+    let id;
+    try { id = decodeURIComponent(parts[0]); } catch (error) { return; }
+    const indexRaw = parts[1];
     const index = Number(indexRaw);
     if (!urlSet(id) || !Number.isInteger(index) || index < 0) return;
     result[id] = index;
@@ -54,7 +56,7 @@ function urlEncodeOutcomes(outcomes) {
   return Object.keys(outcomes)
     .filter((id) => urlSet(id) && Number.isInteger(outcomes[id]) && outcomes[id] >= 0)
     .sort()
-    .map((id) => `${id}:${outcomes[id]}`)
+    .map((id) => `${encodeURIComponent(id)}:${outcomes[id]}`)
     .join(',');
 }
 
@@ -148,8 +150,8 @@ function encodeViewHash(snapshot) {
       camSuffix = `&cam=${urlRound1(x)},${urlRound1(y)},${urlRound1(w)}`;
     }
   }
-  // The colon and comma are part of the outcome grammar, so the value is left unencoded.
-  return params.toString().replace(/([?&]o=)([^&]*)/, (match, prefix, value) => prefix + decodeURIComponent(value)) + camSuffix;
+  // Keep the grammar separators readable; escaped ID characters retain their outer encoding.
+  return params.toString().replace(/([?&]o=)([^&]*)/, (match, prefix, value) => prefix + value.replace(/%3A/gi, ':').replace(/%2C/gi, ',')) + camSuffix;
 }
 
 function parseViewHash(hash) {

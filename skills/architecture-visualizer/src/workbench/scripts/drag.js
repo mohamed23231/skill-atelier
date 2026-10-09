@@ -52,6 +52,9 @@ function moveDraggedBoundary(clientX, clientY) {
   const newX = cursorX - state.boundaryDragOffset.x;
   const newY = cursorY - state.boundaryDragOffset.y;
 
+  const dx = newX - boundary.x, dy = newY - boundary.y;
+  const headerBox = LAYOUT_DATA.boundaryHeaderBoxes?.[(LAYOUT_DATA.boundaries || []).indexOf(boundary)];
+  if (headerBox) { headerBox.x += dx; headerBox.y += dy; }
   boundary.x = newX;
   boundary.y = newY;
   state.dragMoved = true;
@@ -63,19 +66,10 @@ function moveDraggedBoundary(clientX, clientY) {
       rectEl.setAttribute('x', boundary.x);
       rectEl.setAttribute('y', boundary.y);
     }
-    const hitRectEl = boundaryEl.querySelector('.boundary-hit-rect');
-    if (hitRectEl) {
-      hitRectEl.setAttribute('x', boundary.x);
-      hitRectEl.setAttribute('y', boundary.y);
-    }
-    const texts = boundaryEl.querySelectorAll('.boundary-header');
-    if (texts[0]) {
-      texts[0].setAttribute('x', boundary.x + 18);
-      texts[0].setAttribute('y', boundary.y + 26);
-    }
-    if (texts[1]) {
-      texts[1].setAttribute('x', boundary.x + 36);
-      texts[1].setAttribute('y', boundary.y + 26);
+    const header = boundaryEl.querySelector('.boundary-toggle');
+    if (header) {
+      const matrix = header.transform.baseVal.consolidate()?.matrix;
+      header.setAttribute('transform', `translate(${(matrix?.e || 0) + dx}, ${(matrix?.f || 0) + dy})`);
     }
   }
 
@@ -122,6 +116,7 @@ function contentBand() {
 function resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes) {
   ArchVizGeometry.resolveLabelCollisions(edges, nodes, boundaryHeaderBoxes);
   (edges || []).forEach(edge => {
+    if (edge.polyline && !edge.controls && edge.labelSlot === null) { syncLabelLeader(edge); return; }
     if (!(edge.points && typeof edge.labelWidth === 'number' && edge.labelWidth > 0)) return;
     edge.labelAnchor = { x: edge.labelX, y: edge.labelY };
     edge.labelBounds = {

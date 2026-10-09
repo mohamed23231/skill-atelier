@@ -12,7 +12,7 @@ const actions = Object.freeze({
   setDeltaMode(mode) { state.deltaMode = mode; },
   selectNode(id) { state.selectedNodeId = id; },        // id or null
   selectEdge(id) { state.selectedEdgeId = id; },        // id or null
-  clearSelection() { state.selectedNodeId = null; state.selectedEdgeId = null; },
+  clearSelection() { state.selectedNodeId = null; state.selectedEdgeId = null; state.focusMode = null; },
   setFilter(filter) { state.activeFilter = filter; },
   setSearchQuery(query) { state.searchQuery = query; },
   setFocusMode(mode) { state.focusMode = mode; },       // mode or null; not a toggle

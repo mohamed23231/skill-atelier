@@ -802,7 +802,7 @@
           "name": "Shadow Verification Gate & Cutover Decision",
           "type": "branch",
           "description": "Decision gate evaluating 7-day shadow read checksum parity before switching traffic",
-          "condition": "Zero checksum discrepancies across 50M shadow reads over 7 consecutive days",
+          "condition": "Do 50M shadow reads over 7 consecutive days show zero checksum discrepancies and lag under 100ms?",
           "branches": [
             {
               "name": "Proceed with Primary Cutover",
@@ -832,7 +832,7 @@
             },
             {
               "name": "Rollback and Abort Cutover",
-              "condition": "Data mismatch detected or replication lag exceeds SLA (> 2s)",
+              "condition": "Any data mismatch, or replication lag of 100ms or more",
               "status": "recovery",
               "recovery": "Halt dual writes, disable shadow comparisons, and maintain legacy orders DB as sole write authority",
               "stages": [

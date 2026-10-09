@@ -1254,6 +1254,14 @@ const cases = [
     assert.deepStrictEqual(sheet, { tabsAboveSheet: true, outline: 'none' }, 'the sheet opens under the tabs and the selected card has no square frame');
     assert.deepStrictEqual(review, { chapter: 'review', top: 0, visible: true }, 'a chapter opens at its top with its tab in view');
   }],
+  ['viewer: under reduced motion the Sequence view does not autoplay, as the walkthrough does not', () => {
+    const [phase] = runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [
+      ev(`new Promise(r => { state.prefersReducedMotion = true; switchView(VIEWS.SEQUENCE); toggleSequencePlay();
+        setTimeout(() => r(JSON.stringify({ playing: state.sequencePlaying, timer: Boolean(state.sequenceTimer), status: document.getElementById('workbench-status').textContent })), 120); })`)] }]);
+    const m = JSON.parse(lastEvalValue(phase));
+    assert.deepStrictEqual({ playing: m.playing, timer: m.timer }, { playing: false, timer: false });
+    assert.ok(/reduced motion/i.test(m.status), m.status);
+  }],
   ['viewer: every chapter of every example fits a phone without sideways scroll, long file paths included', () => {
     const OPEN_ALL = ev(`JSON.stringify([...document.querySelectorAll('.rail-tab')].map(tab => { tab.click();
       const width = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth); return width > innerWidth + 1 ? tab.id + ':' + width : null; }).filter(Boolean))`);
@@ -1261,6 +1269,75 @@ const cases = [
       runPhases(spec, [320, 390].map(width => ({ width, height: 844, steps: [OPEN_ALL] }))).forEach((phase, i) =>
         assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), [], `${spec} at ${[320, 390][i]}px`));
     });
+  }],
+  ['review fixes: string risks preserve structured findings and no-rules headline', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      ARCH_SPEC.policies = [];
+      ARCH_SPEC.findings = [{ id: 'review-detail', severity: 'warning', message: 'Structured finding survives', nodeIds: [ARCH_SPEC.nodes[0].id] }];
+      ARCH_SPEC.nodes.forEach(node => { node.details = { ...node.details, failureModes: [] }; });
+      ARCH_SPEC.nodes[0].details.failureModes = ['String risk survives'];
+      renderReviewNavigator(); renderReviewChapter(); renderReviewChapter();
+      const panel = document.getElementById('chapter-review');
+      return JSON.stringify({ text: panel.textContent, findings: panel.querySelector('[data-navigator-section="findings"]').textContent,
+        risks: [...panel.querySelectorAll('[data-failure-node]')].map(row => row.textContent), lists: panel.querySelectorAll('[data-failure-list]').length });
+    })()`)] }]);
+    const result = JSON.parse(lastEvalValue(phase));
+    assert.match(result.text, /No rules defined, 1 known failure mode(?!s)/);
+    assert.doesNotMatch(result.text, /All rules pass/);
+    assert.match(result.findings, /review-detail/);
+    assert.strictEqual(result.risks.length, 1);
+    assert.match(result.risks[0], /String risk survives/);
+    assert.doesNotMatch(result.risks[0], /undefined/);
+    assert.strictEqual(result.lists, 1);
+  }],
+  ['changes fixes: removal-only and move-only proposals have truthful summaries', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`JSON.stringify(['REMOVED', 'MOVED'].map(delta => {
+      ARCH_SPEC.review.changedComponents = [{ id: ARCH_SPEC.nodes[0].id, delta }];
+      ARCH_SPEC.edges.forEach(edge => { edge.delta = 'UNCHANGED'; });
+      renderChangesChapter();
+      return document.getElementById('changes-deltas').closest('.rail-panel').textContent;
+    }))`)] }]);
+    const [removed, moved] = JSON.parse(lastEvalValue(phase));
+    assert.match(removed, /1 removed/); assert.match(removed, /The proposal removes/);
+    assert.match(moved, /1 moved/); assert.match(moved, /The proposal moves/);
+    assert.doesNotMatch(removed + moved, /No changes/);
+  }],
+  ['walkthrough fixes: continuation beads and nested alternate component steps remain reachable', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const [a, b] = ARCH_SPEC.nodes.map(node => node.id);
+      const step = (id, from = a, to = a) => ({ id, kind: 'interaction', interactions: [{ from, to }] });
+      const branch = (id, stages) => ({ id, kind: 'branch', branches: stages.map(stages => ({ stages })) });
+      const scenario = { id: 'regression', stages: [branch('first', [[branch('nested', [[step('default')], [step('alternate', a, b)]])], []]), step('after'), branch('later', [[step('later-default')], [step('later-alternate', a, b)]])] };
+      ARCH_SPEC.scenarios = [scenario]; actions.setScenario(scenario.id); actions.setScenarioActive(false);
+      renderWalkTrack(); renderSheetWalkthrough(b);
+      const rows = document.getElementById('ins-walk').textContent;
+      const bead = document.querySelector('.walk-beads [data-walk-entry="after"]');
+      const total = document.querySelector('.walk-length').textContent;
+      bead?.click();
+      return JSON.stringify({ rows, total, bead: !!bead, cursor: state.walkCursor });
+    })()`)] }]);
+    const result = JSON.parse(lastEvalValue(phase));
+    assert.ok(result.bead); assert.strictEqual(result.cursor, 'after');
+    assert.strictEqual(result.total, '5 steps');
+    assert.match(result.rows, /alternate/); assert.match(result.rows, /later-alternate/);
+  }],
+  ['walkthrough fixes: markers replace prior focus and interaction recovery colors each hop', () => {
+    const [phase] = runPhases('examples/1-crud-business-feature/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+      const edge = LAYOUT_DATA.edges[0];
+      const marker = { n: 1, edgeId: edge.id, from: edge.source, to: edge.target };
+      drawWalkMarkers([marker]); drawWalkMarkers([marker]);
+      const repeated = document.querySelectorAll('.walk-marker').length;
+      drawWalkMarkers([]);
+      const cleared = document.querySelectorAll('.walk-marker').length;
+      drawWalkMarkers([marker]); endWalkthrough();
+      const ended = document.querySelectorAll('.walk-marker').length;
+      const entries = [{ kind: 'step', interactions: [{ from: edge.source, to: edge.target, status: 'recovery' }, { from: edge.source, to: edge.target }] }];
+      playWalkPackets(entries, 0);
+      const packets = [...document.querySelectorAll('.walk-packet')].map(packet => packet.classList.contains('recovery'));
+      stopWalkPackets();
+      return JSON.stringify({ repeated, cleared, ended, packets });
+    })()`)] }]);
+    assert.deepStrictEqual(JSON.parse(lastEvalValue(phase)), { repeated: 1, cleared: 0, ended: 0, packets: [true, false] });
   }],
   ['viewer: moving flow dots and walkthrough packets pass behind connection labels, never over their text', () => {
     const overLabel = `(x, y) => LAYOUT_DATA.edges.some(e => e.labelBounds && x > e.labelBounds.left && x < e.labelBounds.left + e.labelBounds.width && y > e.labelBounds.top && y < e.labelBounds.top + e.labelBounds.height)`;
@@ -1704,6 +1781,7 @@ const cases = [
           spotlight: ['dimmed', 'out-of-focus', 'context-dim'].filter(name => item.classList.contains(name)),
           parentSpotlight: ['dimmed', 'out-of-focus', 'context-dim'].filter(name => item.parentNode.classList.contains(name)),
           context: (item.classList.contains('edge-path') ? item.parentNode : item).hasAttribute('data-lens-context'),
+          focused: (item.classList.contains('edge-path') ? item.parentNode : item).matches('.selected, .walk-active, .context-focus, :has(.edge-path.highlighted)'),
           unchanged: item.classList.contains('node-group') && !['ADDED', 'CHANGED', 'REMOVED'].includes(ARCH_SPEC.nodes.find(node => 'node-' + node.id === item.id)?.delta),
           effectiveOpacity: Number(getComputedStyle(item).opacity) * (item.classList.contains('edge-path') ? Number(getComputedStyle(item.parentNode).opacity) : 1),
         }));
@@ -1729,9 +1807,9 @@ const cases = [
           assert.deepStrictEqual(mark.spotlight, before.spotlight, lens + ': preserves scenario spotlight');
           assert.deepStrictEqual(mark.parentSpotlight, before.parentSpotlight, lens + ': preserves connection spotlight');
           if (lens === 'change' || lens === 'risk') {
-            const expected = mark.id.startsWith('node-') && (before.opacity < 1 || (lens === 'change' && mark.unchanged)) ? 0.35 : 1;
+            const expected = mark.id.startsWith('node-') && (before.opacity < 1 || (lens === 'change' && mark.unchanged && !mark.focused)) ? 0.35 : 1;
             assert.strictEqual(mark.opacity, expected, lens + ': ' + mark.id);
-            const effective = before.effectiveOpacity < 1 || mark.context ? 0.35 : 1;
+            const effective = before.effectiveOpacity < 1 || (mark.context && !mark.focused) ? 0.35 : 1;
             assert.strictEqual(mark.effectiveOpacity, effective, lens + ': avoids multiplying spotlight and lens fades');
           } else {
             assert.strictEqual(mark.opacity, before.opacity, lens + ': restores scenario opacity');
@@ -3676,10 +3754,13 @@ cases.push(['p8: lens fit measures badge ink and policy ghosts while supporting 
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/fit.js'), 'utf8'), context);
   const bounds = () => JSON.parse(JSON.stringify(context.computeTotalVisualBounds()));
   assert.deepStrictEqual(bounds(), { minX: 100, minY: 100, maxX: 320, maxY: 172, width: 220, height: 72 });
-  context.document = { querySelector: selector => {
-    assert.strictEqual(selector, '#node-card .node-badge');
-    return { getBBox: () => ({ x: -2, y: -1, width: 100, height: 18 }),
-      transform: { baseVal: { consolidate: () => ({ matrix: { e: 108, f: -8 } }) } } };
+  context.document = { getElementById: id => {
+    assert.strictEqual(id, 'node-card');
+    return { querySelector: selector => {
+      assert.strictEqual(selector, '.node-badge');
+      return { getBBox: () => ({ x: -2, y: -1, width: 100, height: 18 }),
+        transform: { baseVal: { consolidate: () => ({ matrix: { e: 108, f: -8 } }) } } };
+    } };
   } };
   assert.deepStrictEqual(bounds(), { minX: 100, minY: 91, maxX: 320, maxY: 172, width: 220, height: 81 });
   context.ghostLayer = { querySelectorAll: selector => {
@@ -3775,6 +3856,282 @@ cases.push(['p8: lenses and top-edge tags keep the page inside every viewport', 
   results.forEach(result => JSON.parse(lastEvalValue(result)).forEach(visit => { assert(!visit.overflow, visit.lens); assert(!visit.clipped, visit.lens); }));
 }]);
 
+
+// PR review regressions: pure module probes avoid launching a browser for geometry/state contracts.
+function canvasReviewContext(modules, globals = {}) {
+  const vm = require('node:vm');
+  const context = vm.createContext({ URLSearchParams, console, ...globals });
+  modules.forEach(name => vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts', name + '.js'), 'utf8'), context));
+  return context;
+}
+
+cases.push(['review: fit accepts CSS syntax in node IDs', () => {
+  const ctx = canvasReviewContext(['fit'], { document: {
+    getElementById(id) { assert.strictEqual(id, 'node-service:primary'); return { querySelector: () => null }; },
+    querySelector() { throw new Error('ID interpolated into CSS'); }
+  } });
+  assert.strictEqual(ctx.canvasNodeVisualBounds({ id: 'service:primary', x: 1, y: 2, width: 3, height: 4 }).width, 3);
+}]);
+
+cases.push(['review: fit reserves all three title lines and the lane count', () => {
+  const state = { collapsedBoundaries: new Set() };
+  const ctx = canvasReviewContext(['fit'], { state,
+    LAYOUT_DATA: { boundaries: [{ id: 'lane', x: 0, y: 0, width: 200, height: 200 }], nodes: [], edges: [] },
+    document: { getElementById: () => ({ querySelector: () => ({ transform: { baseVal: { consolidate: () => null } },
+      querySelector: () => ({ getBBox: () => ({ y: 76, height: 14 }) }) }) }) },
+    svg: { getBoundingClientRect: () => ({ width: 232, height: 232 }) },
+    isNodeHidden: () => false, clampZoom: n => n,
+    actions: { setCamera: camera => Object.assign(state, camera) }, updateTransform() {}
+  });
+  ctx.computeTotalVisualBounds = () => ({ minX: 0, minY: 0, maxX: 200, maxY: 200, width: 200, height: 200 });
+  ctx.canvasOverlayRects = () => [{ left: 16, right: 176, top: 80, bottom: 100 }];
+  ctx.fitToScreen();
+  assert(state.panY + 90 * state.zoom <= 80.02 || state.panY >= 99.98 || state.panX >= 175.98 || state.panX + 160 * state.zoom <= 16.02);
+}]);
+
+cases.push(['review: fit cache distinguishes collapsed IDs, view and delta mode', () => {
+  const state = { collapsedBoundaries: new Set(['a']), activeFilter: 'all', lens: 'structure', currentView: 'architecture', deltaMode: 'diff', zoom: 1, panX: 0, panY: 0 };
+  const ctx = canvasReviewContext(['fit'], { state, svg: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
+    document: { querySelector: () => null }, LAYOUT_DATA: { nodes: [] }, actions: { setCamera: c => Object.assign(state, c) }, updateTransform() {} });
+  let calls = 0;
+  ctx.fitToScreen = () => { calls++; state.zoom = calls; };
+  ctx.fitCamera(); ctx.fitCamera();
+  state.collapsedBoundaries = new Set(['b']); ctx.fitCamera();
+  state.currentView = 'before_after'; ctx.fitCamera();
+  state.deltaMode = 'current'; ctx.fitCamera();
+  assert.strictEqual(calls, 4);
+}]);
+
+cases.push(['review: reduced motion blocks visibility particle restarts', () => {
+  const state = { prefersReducedMotion: true, animatingFlow: true };
+  const ctx = canvasReviewContext(['flow'], { state, particlesLayer: { innerHTML: 'old particles' } });
+  ctx.startFlowParticles();
+  assert.strictEqual(state.animatingFlow, false);
+  assert.strictEqual(ctx.particlesLayer.innerHTML, '');
+}]);
+
+cases.push(['review: collision sync preserves unplaced orthogonal labels', () => {
+  const edge = { id: 'e', polyline: [{ x: 0, y: 0 }], controls: null, points: {}, labelSlot: null, labelWidth: 80, labelX: 0, labelY: 0, labelBounds: null };
+  let unplaced;
+  const group = { toggleAttribute: (name, value) => { if (name === 'data-unplaced') unplaced = value; }, querySelector: () => null };
+  const ctx = canvasReviewContext(['drag'], { ArchVizGeometry: { resolveLabelCollisions() {}, labelLeader: () => null }, document: { getElementById: () => group } });
+  ctx.resolveLabelCollisions([edge], [], []);
+  assert.strictEqual(edge.labelBounds, null);
+  assert.strictEqual(unplaced, true);
+}]);
+
+cases.push(['review: shortcuts dialog consumes every key', () => {
+  const ctx = canvasReviewContext(['shortcuts']);
+  ['l', '+', 'ArrowLeft', 'Tab'].forEach(key => {
+    let stopped = false;
+    ctx.document = { getElementById: () => ({ focus() {} }) };
+    ctx.shortcutsHandleKeyDown({ key, preventDefault() {}, stopPropagation() { stopped = true; } });
+    assert(stopped, key);
+  });
+}]);
+
+cases.push(['review: outcome IDs with URL delimiters round trip', () => {
+  const ctx = canvasReviewContext(['url']);
+  const outcomes = { 'decision&one,two:three%four': 2 };
+  const decoded = ctx.parseViewHash(ctx.encodeViewHash({ outcomes }));
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(decoded.outcomes)), outcomes);
+}]);
+
+cases.push(['review: every wrapped line fits including an overlong first word', () => {
+  const vm = require('node:vm');
+  const source = fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/dom.js'), 'utf8');
+  const ctx = vm.createContext({});
+  vm.runInContext(source.slice(source.indexOf('let textMeasure = null;')), ctx);
+  ctx.measureText = text => text.length;
+  const lines = ctx.wrapText('abcdefghijklmnop second third', 'font', 8, 3);
+  assert(lines.length > 1);
+  assert(lines.every(line => line.length <= 8), JSON.stringify(lines));
+}]);
+
+cases.push(['review: upstream cycles do not suppress downstream spotlight traversal', () => {
+  const ctx = canvasReviewContext(['canvas'], { LAYOUT_DATA: { edges: [{ source: 'a', target: 'b' }, { source: 'b', target: 'a' }, { source: 'b', target: 'c' }] } });
+  assert.deepStrictEqual([...ctx.dependencyChainSet('a')].sort(), ['a', 'b', 'c']);
+}]);
+
+cases.push(['review: boundary drag translates header ink and routing obstacle together', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+    const b = LAYOUT_DATA.boundaries[0];
+    const header = document.getElementById('boundary-' + b.id).querySelector('.boundary-toggle');
+    const marks = [...header.querySelectorAll('.boundary-header, .boundary-chevron, .boundary-count')];
+    const boxes = () => marks.map(mark => { const r = mark.getBoundingClientRect(); return { x: r.x, y: r.y }; });
+    const before = boxes(), obstacle = { ...LAYOUT_DATA.boundaryHeaderBoxes[0] }, origin = { x: b.x, y: b.y };
+    const rect = svg.getBoundingClientRect();
+    startBoundaryDrag({ target: header, clientX: rect.left + b.x * state.zoom + state.panX, clientY: rect.top + b.y * state.zoom + state.panY }, b.id);
+    moveDraggedBoundary(rect.left + (b.x + 45) * state.zoom + state.panX, rect.top + (b.y + 25) * state.zoom + state.panY);
+    moveDraggedBoundary(rect.left + (origin.x + 60) * state.zoom + state.panX, rect.top + (origin.y + 40) * state.zoom + state.panY);
+    return JSON.stringify({ before, after: boxes(), zoom: state.zoom, obstacle, moved: LAYOUT_DATA.boundaryHeaderBoxes[0] });
+  })()`)] }])[0]));
+  assert(obs.before.length >= 3);
+  obs.before.forEach((box, i) => { assert(Math.abs(obs.after[i].x - box.x - 60 * obs.zoom) < 0.1); assert(Math.abs(obs.after[i].y - box.y - 40 * obs.zoom) < 0.1); });
+  assert(Math.abs(obs.moved.x - obs.obstacle.x - 60) < 1e-9, 'routing obstacle follows the horizontal drag');
+  assert(Math.abs(obs.moved.y - obs.obstacle.y - 40) < 1e-9, 'routing obstacle follows the vertical drag');
+}]);
+
+cases.push(['review: reset closes selection sheet and clears node focus', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, steps: [ev(`(() => {
+    openInspectorForNode('api'); setFocusMode('neighbors'); resetView();
+    return JSON.stringify({ node: state.selectedNodeId, edge: state.selectedEdgeId, focus: state.focusMode, sheet: document.getElementById('component-sheet').hidden, selected: document.querySelectorAll('.node-group.selected').length, faded: document.querySelectorAll('[data-focus-member="false"]').length });
+  })()`)] }])[0]));
+  assert.deepStrictEqual(obs, { node: null, edge: null, focus: null, sheet: true, selected: 0, faded: 0 });
+}]);
+
+cases.push(['review: edge selection and inspector closure cannot retain node focus', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, steps: [ev(`(() => {
+    openInspectorForNode('api'); setFocusMode('affected'); openInspectorForEdge('e1');
+    const edge = { focus: state.focusMode, faded: document.querySelectorAll('[data-focus-member="false"]').length };
+    openInspectorForNode('api'); setFocusMode('neighbors'); closeInspector();
+    const snapshot = viewSnapshot();
+    history.replaceState(null, '', '#v=2&focus=neighbors'); restoreUrlState();
+    return JSON.stringify({ edge, serialized: snapshot.focus, restored: state.focusMode, faded: document.querySelectorAll('[data-focus-member="false"]').length });
+  })()`)] }])[0]));
+  assert.deepStrictEqual(obs, { edge: { focus: null, faded: 0 }, serialized: null, restored: null, faded: 0 });
+}]);
+
+cases.push(['review: sparse hashes replace prior state and restore the default Structure lens', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(async () => {
+    history.replaceState(null, '', '#v=2&c=review'); restoreUrlState();
+    const chapterLens = state.lens;
+    openInspectorForNode(LAYOUT_DATA.nodes[0].id); setFocusMode('neighbors');
+    actions.setFilter('backend'); setPresentation(true); actions.setCamera({ panX: -9000, panY: -8000, zoom: 3, userMoved: true });
+    actions.setScenario(ARCH_SPEC.scenarios[0].id); actions.setScenarioActive(true); actions.setWalkChoices({ old: 1 });
+    history.replaceState(null, '', '#v=2'); window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return JSON.stringify({ chapterLens, chapter: state.chapter, lens: state.lens, view: state.currentView, node: state.selectedNodeId, edge: state.selectedEdgeId, filter: state.activeFilter, focus: state.focusMode, present: state.presentation, scenario: state.scenarioId, active: state.scenarioActive, choices: state.walkChoices, moved: state.userMovedView, cameraReset: state.panX !== -9000 && state.zoom !== 3 });
+  })()`)] }])[0]));
+  assert.deepStrictEqual(obs, { chapterLens: 'structure', chapter: 'overview', lens: 'structure', view: 'architecture', node: null, edge: null, filter: 'all', focus: null, present: false, scenario: null, active: false, choices: {}, moved: false, cameraReset: true });
+}]);
+
+cases.push(['review: standalone light SVG uses resolved palette and full intrinsic dimensions', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, steps: [ev(`(async () => {
+    document.body.dataset.theme = 'light';
+    const exported = buildExportSvg(), expected = cssToken('--bg');
+    const image = new Image();
+    image.src = URL.createObjectURL(new Blob([exported.markup], { type: 'image/svg+xml' }));
+    await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
+    const canvas = document.createElement('canvas'); canvas.width = exported.width; canvas.height = exported.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0);
+    const pixel = [...ctx.getImageData(1, 1, 1, 1).data];
+    URL.revokeObjectURL(image.src);
+    return JSON.stringify({ width: exported.width, height: exported.height, actualWidth: image.naturalWidth, actualHeight: image.naturalHeight, pixel, expected });
+  })()`)] }])[0]));
+  assert.strictEqual(obs.actualWidth, obs.width);
+  assert.strictEqual(obs.actualHeight, obs.height);
+  assert.deepStrictEqual(obs.pixel, [238, 241, 244, 255]);
+}]);
+
+cases.push(['review: minimap clicks invert the SVG transform despite letterboxing', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, steps: [ev(`(() => {
+    const map = document.getElementById('minimap-svg'); map.setAttribute('viewBox', '-100 -50 1000 100');
+    const wanted = map.createSVGPoint(); wanted.x = 200; wanted.y = 20;
+    const screen = wanted.matrixTransform(map.getScreenCTM());
+    let actual; const original = focusModelPoint; focusModelPoint = (x, y) => { actual = { x, y }; };
+    try { handleMinimapClick({ clientX: screen.x, clientY: screen.y, stopPropagation() {} }); } finally { focusModelPoint = original; }
+    return JSON.stringify(actual);
+  })()`)] }])[0]));
+  assert(Math.abs(obs.x - 200) < 0.001);
+  assert(Math.abs(obs.y - 20) < 0.001);
+}]);
+
+cases.push(['review: walkthrough accent and selection lift lens context fading', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, steps: [ev(`(async () => {
+    document.body.dataset.theme = 'dark';
+    selectLens('change');
+    const db = document.getElementById('node-db');
+    spotlightWalkFocus({ primaryNodes: ['db'], primaryEdges: ['e1'] });
+    await new Promise(r => setTimeout(r, 350));
+    const walk = { stroke: getComputedStyle(db.querySelector('.node-rect')).stroke, opacity: getComputedStyle(db).opacity };
+    clearSpotlight(); openInspectorForNode('api');
+    await new Promise(r => setTimeout(r, 350));
+    return JSON.stringify({ walk, accent: cssToken('--accent'), nodeOpacity: getComputedStyle(db).opacity, edgeOpacity: getComputedStyle(document.getElementById('edge-e1')).opacity });
+  })()`)] }])[0]));
+  assert.strictEqual(obs.walk.stroke, 'rgb(127, 156, 255)');
+  assert.strictEqual(obs.walk.opacity, '1');
+  assert.strictEqual(obs.nodeOpacity, '1');
+  assert.strictEqual(obs.edgeOpacity, '1');
+}]);
+
+cases.push(['review: phone sequence controls clear viewport buttons', () => {
+  const [phase] = runPhases(fixtures.VALID_SPEC, [{ width: 320, height: 900, steps: [ev(`(() => {
+    switchView('sequence');
+    const a = document.getElementById('sequence-bar').getBoundingClientRect(), b = document.querySelector('.viewport-controls').getBoundingClientRect();
+    return JSON.stringify({ visible: a.width > 0 && b.width > 0, overlaps: a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top });
+  })()`)] }]);
+  const obs = JSON.parse(lastEvalValue(phase));
+  assert(obs.visible);
+  assert(!obs.overlaps);
+}]);
+
+cases.push(['review: boundary counts meet light-theme text contrast', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../src/workbench/styles/tokens.css'), 'utf8');
+  const light = css.split('[data-theme="light"] {')[1];
+  const obs = { faint: light.match(/--faint:\s*(#[a-f0-9]+)/i)[1], lane: light.match(/--lane:\s*(#[a-f0-9]+)/i)[1] };
+  const luminance = hex => hex.match(/[a-f0-9]{2}/gi).map(pair => parseInt(pair, 16) / 255)
+    .map(c => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+    .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+  assert((luminance(obs.lane) + 0.05) / (luminance(obs.faint) + 0.05) >= 4.5);
+}]);
+
+cases.push(['review: tall outcome grids scroll without expanding the track', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases('examples/3-async-event-driven-workflow/architecture.json', [{ width: 1440, height: 900, steps: [ev(`(() => {
+    const grid = document.querySelector('.walk-beads');
+    for (let i = 0; i < 40; i++) { const row = document.createElement('div'); row.className = 'walk-lane'; row.textContent = 'Outcome ' + i; grid.appendChild(row); }
+    const track = grid.closest('.walk-track'); track.hidden = false;
+    grid.scrollTop = 100;
+    return JSON.stringify({ scrollHeight: grid.scrollHeight, height: grid.clientHeight, top: grid.scrollTop, trackHeight: track.getBoundingClientRect().height });
+  })()`)] }])[0]));
+  assert(obs.scrollHeight > obs.height);
+  assert(obs.top > 0);
+  assert(obs.trackHeight < 250);
+}]);
+
+cases.push(['review: reading content remains selectable and presentation hides trust chrome', () => {
+  const obs = JSON.parse(lastEvalValue(runPhases(fixtures.VALID_SPEC, [{ width: 1440, height: 900, steps: [ev(`(() => {
+    openInspectorForNode('api');
+    const content = getComputedStyle(document.getElementById('ins-description')).userSelect;
+    const rail = getComputedStyle(document.querySelector('.rail-body')).userSelect;
+    setPresentation(true);
+    return JSON.stringify({ content, rail, trust: getComputedStyle(document.querySelector('.trust-strip')).display });
+  })()`)] }])[0]));
+  assert.notStrictEqual(obs.content, 'none');
+  assert.notStrictEqual(obs.rail, 'none');
+  assert.strictEqual(obs.trust, 'none');
+}]);
+
+cases.push(['review: link defaults and orphan focus are enforced by the store', () => {
+  const state = { chapter: 'review', lens: 'risk', currentView: 'sequence', activeFilter: 'backend', selectedNodeId: 'api', selectedEdgeId: 'e1', focusMode: 'neighbors', presentation: true, scenarioId: 'old', scenarioActive: true, walkChoices: { old: 1 }, walkCursor: 'old', sequenceIndex: 2, zoom: 3, panX: -9000, panY: -8000, userMovedView: true };
+  const ctx = canvasReviewContext(['store', 'url', 'view-state'], { state,
+    LAYOUT_DATA: { nodes: [], edges: [] }, ARCH_SPEC: { scenarios: [] },
+    nodeById: new Map([['api', {}]]), edgeById: new Map(), LENSES: ['structure', 'risk', 'change'], LAYER_FILTERS: ['all', 'backend'],
+    VIEWS: { ARCHITECTURE: 'architecture', BEFORE_AFTER: 'before_after', SEQUENCE: 'sequence' },
+    document: { body: { setAttribute() {}, toggleAttribute() {} }, querySelectorAll: () => [], getElementById: () => ({ setAttribute() {} }) },
+    window: { location: { hash: '#v=2' }, requestAnimationFrame() {} }
+  });
+  const actions = require('node:vm').runInContext('actions', ctx);
+  ctx.endWalkthrough = () => { actions.setScenarioActive(false); actions.setWalkCursor(null); };
+  ctx.closeInspector = () => actions.clearSelection();
+  ctx.openChapter = chapter => { actions.setChapter(chapter); actions.setLens(chapter === 'review' ? 'risk' : 'structure', false); };
+  ctx.switchView = actions.setView;
+  ctx.selectLens = (lens, { explicit } = {}) => actions.setLens(lens, explicit);
+  ctx.fitToScreen = () => actions.setCamera({ zoom: 1, panX: 10, panY: 20 });
+  ctx.updateTransform = () => {};
+  ctx.restoreUrlState();
+  assert.deepStrictEqual([state.chapter, state.lens, state.currentView, state.activeFilter, state.selectedNodeId, state.selectedEdgeId, state.focusMode, state.presentation, state.scenarioId, state.scenarioActive, state.walkCursor, state.sequenceIndex, state.userMovedView, state.zoom],
+    ['overview', 'structure', 'architecture', 'all', null, null, null, false, null, false, null, 0, false, 1]);
+  assert.strictEqual(Object.keys(state.walkChoices).length, 0);
+  ctx.window.location.hash = '#v=2&c=review'; ctx.restoreUrlState();
+  assert.strictEqual(state.lens, 'structure');
+  ctx.window.location.hash = '#v=2&focus=neighbors'; ctx.restoreUrlState();
+  assert.strictEqual(state.focusMode, null);
+  actions.selectNode('api'); actions.setFocusMode('neighbors'); actions.clearSelection();
+  assert.strictEqual(state.focusMode, null);
+  actions.setFocusMode('neighbors');
+  assert.strictEqual(ctx.viewSnapshot().focus, null);
+}]);
 
 // Any model: generated specs of every shape get the same real-interaction sweep the examples get.
 cases.push(['generated: fourteen generated specs survive a full interaction sweep with no errors, overlaps or overflow', () => {

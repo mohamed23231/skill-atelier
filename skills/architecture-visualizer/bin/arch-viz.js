@@ -25,7 +25,7 @@ Options for 'build':
   -o, --output <file>      Output HTML file (default: ./architecture.html)
   --md <file>              Also write a Markdown architecture report
   --strict                 Fail the build if any quality warning is found
-  --direction <LR|TB>      Layout flow direction (default: LR)
+  --direction <LR|TB>      Column layout flow direction (selects columns; default: lanes TB)
   --router <curved|orthogonal> Routing style (default: orthogonal)
   --repo-root <dir>        Root used to resolve VERIFIED file paths (default: cwd)
   --no-open                Do not open the generated HTML in the default browser
@@ -163,7 +163,9 @@ function commandValidate(args) {
       process.exit(0);
     }
 
-    const result = validateArchitecture(spec, { repoRoot });
+    const stampSpec = { ...spec, meta: { ...spec.meta } };
+    delete stampSpec.meta.groundedAt;
+    const result = validateArchitecture(stampSpec, { repoRoot });
     if (result.errors.length > 0) {
       console.log('\n--- Architecture Quality Gate Report ---');
       console.log(`\nErrors (${result.errors.length}):`);
@@ -289,7 +291,7 @@ function commandBuild(args) {
       outputMarkdown: opts.markdown || null,
       strict: Boolean(opts.strict),
       repoRoot: opts.repoRoot ? path.resolve(opts.repoRoot) : process.cwd(),
-      layoutOverrides: { ...(opts.direction ? { direction: opts.direction } : {}), ...(opts.router ? { router: opts.router } : {}) },
+      layoutOverrides: { ...(opts.direction ? { direction: opts.direction, layout: 'columns' } : {}), ...(opts.router ? { router: opts.router } : {}) },
     });
 
     console.log('\n--- Architecture Visualization Generated ---');

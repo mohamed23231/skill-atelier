@@ -1,6 +1,6 @@
 // Geometry-only callers have no DOM; live fitting also includes the pill's ink bounds.
 function canvasNodeVisualBounds(node) {
-  const badge = typeof document === 'undefined' ? null : document.querySelector(`#node-${node.id} .node-badge`);
+  const badge = typeof document === 'undefined' ? null : document.getElementById?.(`node-${node.id}`)?.querySelector('.node-badge');
   if (!badge) return { x: node.x, y: node.y, width: node.width, height: node.height };
   const box = badge.getBBox();
   const translation = badge.transform.baseVal.consolidate().matrix;
@@ -120,8 +120,13 @@ function fitToScreen() {
   const overlays = canvasOverlayRects();
   const nodes = (LAYOUT_DATA.nodes || []).filter(node => !isNodeHidden(node));
   // Lane titles sit in the gutter at each boundary's top-left; they must stay readable too.
-  const titles = (LAYOUT_DATA.boundaries || []).map(boundary => ({ x: boundary.x, y: boundary.y,
-    width: Math.min(160, boundary.width), height: Math.min(52, boundary.height) }));
+  const titles = (LAYOUT_DATA.boundaries || []).map(boundary => {
+    const header = (typeof document === 'undefined' ? null : document.getElementById?.(`boundary-${boundary.id}`))?.querySelector('.boundary-toggle');
+    const count = header?.querySelector('.boundary-count');
+    const bottom = count ? count.getBBox().y + count.getBBox().height + (header.transform.baseVal.consolidate()?.matrix.f || 0) - boundary.y : 52;
+    return { x: boundary.x, y: boundary.y, width: Math.min(160, boundary.width),
+      height: Math.min(Math.max(52, bottom), boundary.height) };
+  });
   const cardsWithTags = nodes.map(canvasNodeVisualBounds);
   const policyTags = canvasPolicyGhosts('.policy-ghost .edge-label-bg').map(label => {
     const box = label.getBBox();
@@ -191,7 +196,7 @@ function fitToScreen() {
 let fitCameraCache = null;
 function fitCamera() {
   const rect = svg.getBoundingClientRect();
-  const key = [Math.round(rect.width), Math.round(rect.height), state.collapsedBoundaries?.size || 0, state.activeFilter, state.lens,
+  const key = [Math.round(rect.width), Math.round(rect.height), JSON.stringify([...state.collapsedBoundaries].sort()), state.activeFilter, state.lens, state.currentView, state.deltaMode,
     document.querySelector('.walk-track')?.getBoundingClientRect().height || 0,
     (LAYOUT_DATA.nodes || []).reduce((sum, node) => sum + node.x * 3 + node.y * 7, 0)].join(':');
   if (fitCameraCache?.key === key) return { ...fitCameraCache.camera };
@@ -206,8 +211,6 @@ function fitCamera() {
 
 function resetView() {
   actions.setCamera({ userMoved: false });
-  state.selectedNode = null;
-  state.highlightedChain = null;
-  applyVisibility();
+  closeInspector();
   fitToScreen();
 }

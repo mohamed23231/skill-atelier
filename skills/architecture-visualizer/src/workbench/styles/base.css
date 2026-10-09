@@ -12,9 +12,10 @@ body {
   height: 100vh;
   height: 100dvh;
   width: 100%;
-  user-select: none;
   -webkit-font-smoothing: antialiased;
 }
+
+#arch-svg, button, [role="slider"] { user-select: none; }
 
 /* Three voices: interface (sans), explanation (serif), machine facts (mono). */
 .voice-serif { font-family: var(--serif); }

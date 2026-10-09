@@ -122,6 +122,7 @@ function focusMembers(mode) {
 }
 
 function applyFocusMode() {
+  if (state.focusMode && !nodeById.has(state.selectedNodeId)) actions.setFocusMode(null);
   const members = state.focusMode ? focusMembers(state.focusMode) : null;
   document.body.toggleAttribute('data-focus-mode', Boolean(state.focusMode));
   if (state.focusMode) document.body.setAttribute('data-focus-mode', state.focusMode);
@@ -210,7 +211,7 @@ function viewSnapshot() {
     node: state.selectedNodeId,
     edge: state.selectedEdgeId,
     filter: state.activeFilter !== 'all' ? state.activeFilter : null,
-    focus: state.focusMode,
+    focus: nodeById.has(state.selectedNodeId) ? state.focusMode : null,
     present: state.presentation
   };
   if (state.sequenceIndex) {
@@ -253,6 +254,22 @@ function restoreUrlState() {
   linkedCamera = null;
   try {
     const link = parseViewHash(window.location.hash);
+    actions.setCamera({ userMoved: true });
+    actions.setScenario(null);
+    actions.setScenarioStage(0);
+    actions.setWalkChoices({});
+    endWalkthrough();
+    closeInspector();
+    actions.setSequenceIndex(0);
+    actions.setFilter('all');
+    actions.setCamera({ userMoved: false });
+    actions.setPresentation(false);
+    document.body.setAttribute('data-presentation', 'false');
+    actions.setLens('structure', false);
+    openChapter('overview');
+    switchView(VIEWS.ARCHITECTURE);
+    selectLens('structure', { explicit: false });
+    fitToScreen();
     if (link.unsupported) {
       notices.push(`This link uses a newer format (version ${link.version}); showing the default view.`);
       return notices;
@@ -281,6 +298,7 @@ function restoreUrlState() {
         notices.push(`View ${link.view} does not exist; showing the architecture.`);
       }
     }
+    if (link.version === 2 && link.lens === undefined && link.view !== VIEWS.BEFORE_AFTER) selectLens('structure', { explicit: true });
     if (link.lens !== undefined) {
       if (LENSES.includes(link.lens)) selectLens(link.lens, { explicit: true });
       else notices.push(`Lens ${link.lens} does not exist; keeping the suggested lens.`);
@@ -324,8 +342,10 @@ function restoreUrlState() {
     }
     if (link.focus !== undefined) {
       if (Object.values(FOCUS_MODES).includes(link.focus)) {
-        actions.setFocusMode(link.focus);
-        applyFocusMode();
+        if (nodeById.has(state.selectedNodeId)) {
+          actions.setFocusMode(link.focus);
+          applyFocusMode();
+        }
       } else {
         notices.push(`Focus ${link.focus} does not exist.`);
       }

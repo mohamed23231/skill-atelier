@@ -45,11 +45,11 @@ function updateMinimapViewport() {
 
 function handleMinimapClick(event) {
   event.stopPropagation();
-  const minimap = document.querySelector('[data-region="minimap"]');
-  const bounds = computeTotalVisualBounds();
-  const rect = minimap.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-  const x = bounds.minX + ((event.clientX - rect.left) / rect.width) * bounds.width;
-  const y = bounds.minY + ((event.clientY - rect.top) / rect.height) * bounds.height;
-  focusModelPoint(x, y);
+  const minimap = document.getElementById('minimap-svg');
+  const matrix = minimap?.getScreenCTM();
+  if (!matrix) return;
+  const point = minimap.createSVGPoint();
+  point.x = event.clientX; point.y = event.clientY;
+  const world = point.matrixTransform(matrix.inverse());
+  focusModelPoint(world.x, world.y);
 }

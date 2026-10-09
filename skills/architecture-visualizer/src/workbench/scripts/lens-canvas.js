@@ -11,6 +11,19 @@ function lensEdgePoint(edge, t) {
   if (edge && edge.points && edge.controls && typeof ArchVizGeometry !== 'undefined') {
     return ArchVizGeometry.cubicPointAt(t, edge.points, edge.controls);
   }
+  if (edge?.polyline?.length > 1) {
+    const points = edge.polyline;
+    const lengths = points.slice(1).map((point, index) => Math.hypot(point.x - points[index].x, point.y - points[index].y));
+    let remaining = lengths.reduce((sum, length) => sum + length, 0) * Math.max(0, Math.min(1, t));
+    for (let i = 0; i < lengths.length; i++) {
+      if (remaining <= lengths[i] && lengths[i] > 0) {
+        const ratio = remaining / lengths[i];
+        return { x: points[i].x + (points[i + 1].x - points[i].x) * ratio, y: points[i].y + (points[i + 1].y - points[i].y) * ratio };
+      }
+      remaining -= lengths[i];
+    }
+    return points[points.length - 1];
+  }
   return { x: (edge && edge.labelX) || 0, y: (edge && edge.labelY) || 0 };
 }
 

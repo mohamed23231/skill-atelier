@@ -14,8 +14,10 @@ const WORKBENCH_DIR = __dirname;
 const INCLUDE_LINE = /^( *)<!-- include: ([^\s]+) -->$/gm;
 
 function readModule(dir, relPath) {
-  const resolved = path.resolve(dir, relPath);
-  if (!resolved.startsWith(dir + path.sep)) {
+  // A relative or trailing-slash dir must still contain its own includes.
+  const root = path.resolve(dir);
+  const resolved = path.resolve(root, relPath);
+  if (!resolved.startsWith(root + path.sep)) {
     throw new Error(`Workbench include escapes the workbench directory: ${relPath}`);
   }
   if (!fs.existsSync(resolved)) {

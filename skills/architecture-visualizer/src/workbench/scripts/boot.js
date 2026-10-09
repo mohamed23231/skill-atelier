@@ -1,10 +1,11 @@
 function initMotionPreference() {
   const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
   state.prefersReducedMotion = Boolean(media?.matches);
-  if (state.prefersReducedMotion) stopFlowParticles();
+  if (state.prefersReducedMotion) { state.animatingFlow = false; stopFlowParticles(); }
   media?.addEventListener?.('change', event => {
     state.prefersReducedMotion = event.matches;
     if (event.matches) {
+      state.animatingFlow = false;
       stopFlowParticles();
       stopScenarioPlayback();
     }

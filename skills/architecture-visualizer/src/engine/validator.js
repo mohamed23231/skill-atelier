@@ -1448,6 +1448,7 @@ function runQualityGate(ctx) {
 module.exports = {
   validateArchitecture,
   normalizeArchitecture,
+  liftLegacyEvidence,
   runQualityGate,
   VALID_NODE_TYPES,
   VALID_STATUSES,

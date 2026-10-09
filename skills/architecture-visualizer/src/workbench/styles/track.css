@@ -298,7 +298,7 @@ body .sequence-controls { bottom: calc(var(--walk-track-height, 0px) + 20px); }
 .walk-track-controls .walk-play { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .walk-count, .walk-length { color: var(--muted); font-size: 12px; font-weight: 400; }
 .walk-length { flex-basis: auto; white-space: nowrap; }
-.walk-beads { display: grid; gap: 5px; padding: 0; }
+.walk-beads { display: grid; gap: 5px; padding: 0; max-height: 132px; overflow-y: auto; }
 .walk-lane { display: flex; gap: 5px; align-items: center; min-width: max-content; height: 22px; }
 .walk-lane-label { width: 136px; flex: none; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .walk-lane[data-chosen="false"] { opacity: .45; }

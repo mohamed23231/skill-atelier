@@ -51,6 +51,8 @@ function buildExportSvg() {
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   clone.setAttribute('width', width);
   clone.setAttribute('height', height);
+  clone.style.width = `${width}px`;
+  clone.style.height = `${height}px`;
   clone.setAttribute('viewBox', `${bounds.minX - padding} ${bounds.minY - padding} ${width} ${height}`);
 
   const clonedViewport = clone.querySelector('#viewport-group');
@@ -67,7 +69,7 @@ function buildExportSvg() {
     .join(' ');
 
   const style = document.createElementNS(SVG_NS, 'style');
-  style.textContent = `svg { ${varBlock} background: var(--bg); }\n${collectStyles()}`;
+  style.textContent = `${collectStyles()}\n:root { ${varBlock} background: var(--bg); }`;
   clone.insertBefore(style, clone.firstChild);
 
   return { markup: new XMLSerializer().serializeToString(clone), width, height };

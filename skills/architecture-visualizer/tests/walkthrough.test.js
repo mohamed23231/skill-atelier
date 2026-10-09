@@ -346,4 +346,82 @@ const cases = [
   ],
 ];
 
+cases.push(['synthetic ends cannot shadow authored stages on any outcome', () => {
+  const scenario = { stages: [{ id: 'dec', kind: 'branch', branches: [{ stages: [] }] }, step('end:dec', 'a', 'b'), step('end:end:dec', 'b', 'c')] };
+  const entries = plain(linearizeScenario(scenario, {}));
+  assert.strictEqual(new Set(entries.map(entry => entry.id)).size, entries.length);
+  assert.strictEqual(entries[1].id, 'end:end:end:dec');
+  assert.strictEqual(entries.find(entry => entry.id === 'end:dec').kind, 'step');
+  const consecutive = plain(linearizeScenario({ stages: ['dec', 'end:dec'].map(id => ({ id, kind: 'branch', branches: [{ stages: [] }] })) }, {}));
+  assert.strictEqual(new Set(consecutive.map(entry => entry.id)).size, consecutive.length);
+}]);
+
+cases.push(['scenario paths enumerate nested and later decision combinations', () => {
+  const decision = (id, stages) => ({ id, kind: 'branch', branches: stages.map(stages => ({ stages })) });
+  const scenario = { stages: [decision('first', [[decision('nested', [[step('n0', 'a', 'b')], [step('n1', 'a', 'c')]])], []]), decision('later', [[step('l0', 'b', 'd')], [step('l1', 'c', 'd')]])] };
+  const paths = plain(ctx.walkScenarioPaths(scenario));
+  assert.strictEqual(paths.length, 6);
+  assert.ok(paths.some(path => path.choices.nested === 1 && path.choices.later === 1 && path.entries.some(entry => entry.id === 'n1') && path.entries.some(entry => entry.id === 'l1')));
+}]);
+
+cases.push(['walkthrough autoplay uses positive stage or interaction durations', () => {
+  const ui = vm.createContext({ Number, Math });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/walkthrough-ui.js'), 'utf8'), ui);
+  assert.strictEqual(ui.walkStartDelay({ stage: {}, interactions: [{ durationMs: 640 }] }), 640);
+  assert.strictEqual(ui.walkStartDelay({ stage: { durationMs: 900 }, interactions: [{ durationMs: 640 }] }), 900);
+  assert.strictEqual(ui.walkStartDelay({ stage: { durationMs: 0 }, interactions: [{ durationMs: -2 }] }), 2600);
+}]);
+
+cases.push(['sequence playback defaults nonpositive and nonfinite durations', () => {
+  let delay;
+  const sequence = vm.createContext({ Number, state: { sequenceIndex: 0 }, setTimeout: (fn, ms) => { delay = ms; } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/sequence.js'), 'utf8'), sequence);
+  [0, -1, NaN, Infinity, undefined, 720].forEach(durationMs => {
+    sequence.sequenceSteps = () => [{ durationMs }];
+    sequence.scheduleNextStep();
+    assert.strictEqual(delay, durationMs === 720 ? 720 : 1800);
+  });
+}]);
+
+cases.push(['idle walkthrough total includes shared steps after empty and nonempty outcomes', () => {
+  const ui = vm.createContext({ Number, Math });
+  vm.runInContext(source, ui);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/walkthrough-ui.js'), 'utf8'), ui);
+  const scenario = branchScenario();
+  assert.strictEqual(ui.walkAllStepsTotal(scenario), 4);
+  scenario.stages[0].branches.forEach(branch => { branch.stages = []; });
+  assert.strictEqual(ui.walkAllStepsTotal(scenario), 1);
+}]);
+
+cases.push(['parallel markers replace prior focus and clear on empty focus', () => {
+  const groups = [];
+  const ui = vm.createContext({
+    ghostLayer: { querySelectorAll: () => groups.slice(), appendChild: group => groups.push(group) },
+    el: () => ({ appendChild() {}, remove() { groups.splice(groups.indexOf(this), 1); } }),
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/walkthrough-ui.js'), 'utf8'), ui);
+  ui.walkMarkerPoint = () => ({ x: 0, y: 0 });
+  ui.drawWalkMarkers([{ n: 1 }]);
+  ui.drawWalkMarkers([{ n: 2 }]);
+  assert.strictEqual(groups.length, 1);
+  ui.drawWalkMarkers([]);
+  assert.strictEqual(groups.length, 0);
+}]);
+
+cases.push(['packet recovery status is evaluated for each interaction', () => {
+  const packets = [];
+  const layer = { replaceChildren: () => { packets.length = 0; }, appendChild: group => packets.push(group) };
+  const edge = { id: 'e', source: 'a', target: 'b' };
+  const ui = vm.createContext({
+    state: { prefersReducedMotion: false }, LAYOUT_DATA: { edges: [edge] }, edgeById: new Map([['e', edge]]),
+    document: { getElementById: id => id === 'walk-packets' ? layer : { getTotalLength: () => 100 } },
+    window: { clearTimeout() {}, setTimeout() {}, requestAnimationFrame() {} }, performance: { now: () => 0 },
+    el: (tag, attrs) => ({ attrs, appendChild() {} }),
+  });
+  vm.runInContext(source, ui);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/walkthrough-ui.js'), 'utf8'), ui);
+  ui.playWalkPackets([{ kind: 'step', interactions: [{ from: 'a', to: 'b', status: 'recovery' }, { from: 'a', to: 'b' }] }], 0);
+  assert.deepStrictEqual(packets.map(packet => packet.attrs.class), ['walk-packet recovery', 'walk-packet']);
+}]);
+
 module.exports = { name: 'Walkthrough engine', cases };

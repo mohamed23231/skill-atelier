@@ -138,4 +138,12 @@ cases.push(['generated multi-row lanes improve fit and never double back through
   assert(zooms[0] >= 0.5003573981415297 * 0.95, 'minimum fit must stay within five percent');
 }]);
 
+
+cases.push(['generated node kinds are recognized by the validator', () => {
+  const { VALID_NODE_TYPES } = require('../src/engine/validator.js');
+  SEEDS.forEach(seed => generateSpec(seed).nodes.forEach(node => {
+    assert(VALID_NODE_TYPES.has(node.type), `seed ${seed}: unsupported ${node.type}`);
+  }));
+}]);
+
 module.exports = { name: 'Generated Specs', cases };

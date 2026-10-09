@@ -86,20 +86,17 @@ function renderSheetWalkthrough(nodeId) {
   const scenario = (ARCH_SPEC.scenarios || [])[0];
   const rows = [];
   if (scenario) {
-    const main = linearizeScenario(scenario, {});
-    const decisionIndex = main.findIndex(entry => entry.kind === 'decision');
-    const paths = decisionIndex < 0 ? [[{}, main]] : main[decisionIndex].branches.map((branch, index) => {
-      const choices = { [main[decisionIndex].id]: index };
-      return [choices, linearizeScenario(scenario, choices), branch];
-    });
+    const paths = walkScenarioPaths(scenario);
     const seen = new Set();
     let number = 0;
-    paths.forEach(([choices, entries, branch]) => entries.forEach(entry => {
+    paths.forEach(({ choices, entries }) => entries.forEach(entry => {
       if (entry.kind !== 'step' || seen.has(entry.id)) return;
       seen.add(entry.id);
       number = Math.max(number, entry.number);
       if (!(entry.interactions || []).some(hop => hop.from === nodeId || hop.to === nodeId)) return;
-      const afterDecision = decisionIndex >= 0 && entries.indexOf(entry) > decisionIndex;
+      const decision = entries.slice(0, entries.indexOf(entry)).findLast(item => item.kind === 'decision');
+      const branch = decision?.branches[decision.chosen];
+      const afterDecision = Boolean(decision);
       rows.push({ entry, choices, note: afterDecision && branch?.status === 'recovery' ? 'Recovery path' : afterDecision ? `If ${branch?.name || 'outcome'}` : '' });
     }));
   }

@@ -23,6 +23,7 @@ let particleAnimationId = null;
 let particleLastFrame = 0;
 function startFlowParticles() {
   stopFlowParticles();
+  if (state.prefersReducedMotion) { state.animatingFlow = false; return; }
   state.animatingFlow = true;
 
   const totalBounds = computeTotalVisualBounds();

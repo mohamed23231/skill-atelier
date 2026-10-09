@@ -14,12 +14,12 @@ function mulberry32(seed) {
   };
 }
 
-const KINDS = ['actor', 'frontend', 'mobile', 'api_gateway', 'service', 'worker', 'database', 'storage', 'cache', 'queue', 'topic', 'external', 'cloud_function', 'component'];
+const KINDS = ['actor', 'frontend', 'mobile', 'api_gateway', 'service', 'worker', 'database', 'storage', 'cache', 'queue', 'topic', 'external', 'cloud_function', 'boundary_group'];
 const WORDS = ['Order', 'Payment', 'Ledger', 'Gateway', 'Catalog', 'Search', 'Identity', 'Billing', 'Inventory', 'Shipping',
   'Notification', 'Audit', 'Pricing', 'Fraud', 'Analytics', 'Session', 'Profile', 'Media', 'Export', 'Reconciliation',
   'Settlement', 'Webhook', 'Scheduler', 'Projection', 'Snapshot', 'Replica', 'Outbox', 'Cache', 'Index', 'Stream'];
 const SUFFIX = { actor: 'User', frontend: 'Portal', mobile: 'App', api_gateway: 'Gateway', service: 'Service', worker: 'Worker',
-  database: 'DB', storage: 'Bucket', cache: 'Cache', queue: 'Queue', topic: 'Topic', external: 'Provider', cloud_function: 'Function', component: 'Module' };
+  database: 'DB', storage: 'Bucket', cache: 'Cache', queue: 'Queue', topic: 'Topic', external: 'Provider', cloud_function: 'Function', boundary_group: 'Module' };
 const TECH = ['Node.js / Fastify', 'Go', 'PostgreSQL 16', 'Redis 7', 'Kafka 3.6', 'Python / FastAPI', 'React / Vite', 'S3', 'Java / Spring Boot', 'Rust / Axum', ''];
 const VERBS = ['Read', 'Write', 'Publish', 'Consume', 'Query', 'Sync', 'Notify', 'Fetch', 'Persist', 'Replicate', 'Stream', 'Validate'];
 const TIERS = ['Client Applications', 'Edge & Gateway', 'Core Domain Services', 'Asynchronous Messaging Backbone', 'Data Storage & Persistence Layer', 'External Partners'];

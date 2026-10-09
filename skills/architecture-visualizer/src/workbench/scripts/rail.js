@@ -499,12 +499,16 @@ function renderChangesChapter() {
 
   const added = changed.filter(entry => entry.delta === 'ADDED');
   const modified = changed.filter(entry => entry.delta === 'CHANGED');
+  const removed = changed.filter(entry => entry.delta === 'REMOVED');
+  const moved = changed.filter(entry => entry.delta === 'MOVED');
   const newEdges = (ARCH_SPEC.edges || []).filter(edge => edge.delta === 'ADDED');
-  const counts = [[added.length, 'added'], [modified.length, 'changed'], [newEdges.length, 'new connections']];
+  const counts = [[added.length, 'added'], [modified.length, 'changed'], [removed.length, 'removed'], [moved.length, 'moved'], [newEdges.length, 'new connections']];
   const nameOf = id => nodesById.get(id)?.label || id;
   const phrases = [];
   if (added.length) phrases.push(`adds ${added.map(entry => nameOf(entry.id)).join(', ')}`);
   if (modified.length) phrases.push(`changes ${modified.map(entry => nameOf(entry.id)).join(', ')}`);
+  if (removed.length) phrases.push(`removes ${removed.map(entry => nameOf(entry.id)).join(', ')}`);
+  if (moved.length) phrases.push(`moves ${moved.map(entry => nameOf(entry.id)).join(', ')}`);
   chapterIntro(deltas.closest('.rail-panel'), 'CHANGES', counts.filter(([count]) => count).map(([count, label]) => `${count} ${label}`).join(', ') || 'No changes',
     phrases.length ? `The proposal ${phrases.join(' and ')}.` : newEdges.length ? `The proposal adds ${plural(newEdges.length, 'connection')} between existing components.` : 'No component additions or changes are recorded.');
   deltas.replaceChildren();
@@ -622,9 +626,9 @@ function renderReviewChapter() {
   const findings = (ARCH_SPEC.findings || []).concat(ARCH_SPEC.review?.policyFindings || []);
   const violatedIds = new Set(findings.filter(finding => finding?.policyId).map(finding => finding.policyId));
   const failing = policies.filter(policy => violatedIds.has(policy.id)).length;
-  const failures = (ARCH_SPEC.nodes || []).flatMap(node => (node.details?.failureModes || []).map(failure => ({ node, failure })));
-  chapterIntro(panel, 'REVIEW', (failing ? `${failing} of ${plural(policies.length, 'rule')} violated` : 'All rules pass') +
-    (failures.length ? `, ${failures.length} known failure modes` : ''),
+  const failures = (ARCH_SPEC.nodes || []).flatMap(node => (node.details?.failureModes || []).map(failure => ({ node, failure: normalizeFailureMode(failure) })));
+  chapterIntro(panel, 'REVIEW', (failing ? `${failing} of ${plural(policies.length, 'rule')} violated` : policies.length ? 'All rules pass' : 'No rules defined') +
+    (failures.length ? `, ${plural(failures.length, 'known failure mode')}` : ''),
     'Rules are drawn on the canvas: required paths in green, forbidden ones as red dashed lines that must stay absent.');
   const rules = document.getElementById('section-rules');
   rules.querySelector('h3').replaceWith(chapterHeading('Architecture rules', `${policies.length - failing} of ${policies.length} pass`));
@@ -644,10 +648,14 @@ function renderReviewChapter() {
   });
   if (!policies.length) target.textContent = 'No rules defined.';
   const failureSection = document.getElementById('section-findings');
-  failureSection.querySelector('h3').textContent = 'Failure modes';
-  const failureTarget = failureSection.querySelector('[data-navigator-section], [data-failure-list]');
-  failureTarget.removeAttribute('data-navigator-section');
-  failureTarget.setAttribute('data-failure-list', '');
+  let failureTarget = failureSection.querySelector('[data-failure-list]');
+  if (!failureTarget) {
+    failureTarget = document.createElement('div');
+    failureTarget.setAttribute('data-failure-list', '');
+    const heading = document.createElement('h3');
+    heading.textContent = 'Failure modes';
+    failureSection.append(heading, failureTarget);
+  }
   failureTarget.replaceChildren();
   failures.forEach(({ node, failure }) => {
     const row = chapterRow('!', failure.failure, `${node.label || node.id} · ${failure.impact || 'Impact not recorded'}. Mitigation: ${failure.mitigation || 'Not recorded'}.`, '', 'warn', () => openInspectorForNode(node.id));

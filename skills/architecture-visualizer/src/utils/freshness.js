@@ -40,10 +40,13 @@ function normalizePath(filePath) {
   return filePath.split(/[\\/]/).filter(Boolean).join('/');
 }
 
-function changedFilesSince(root, sha) {
+function changedFilesSince(root, sha, cited = []) {
   // --relative: locators are relative to the repo root, which may be a subfolder of the git toplevel.
   const diffOut = runGit(root, ['diff', '--name-only', '--relative', sha]);
-  const untrackedOut = runGit(root, ['ls-files', '--others', '--exclude-standard']);
+  // Untracked files count as changed. Ignored files are listed only when the spec cites them: listing
+  // every ignored file would walk node_modules and build output in a large repository.
+  const ignoredCited = cited.length ? runGit(root, ['ls-files', '--others', '--ignored', '--exclude-standard', '--', ...cited]) : '';
+  const untrackedOut = runGit(root, ['ls-files', '--others', '--exclude-standard']) + '\n' + ignoredCited;
   const files = new Set();
   diffOut.split(/\r?\n/).forEach((line) => {
     const trimmed = line.trim();
@@ -99,20 +102,26 @@ function applyFreshness(spec, root) {
     };
   }
 
-  const changed = changedFilesSince(root, groundedAt);
+  // Load lazily: the validator also uses isCommit from this module. Reuse its
+  // canonical lifting so legacy IDs and locator deduplication stay identical.
+  if ((spec.nodes || []).some(node => node.details?.files?.length)) {
+    require('../engine/validator.js').liftLegacyEvidence(spec);
+  }
+  const cited = [...new Set((spec.evidence || []).map(getLocatorPath).filter(Boolean)
+    .map(locPath => normalizePath(path.relative(path.resolve(root), path.resolve(root, locPath))))
+    .filter(rel => rel && !rel.startsWith('..')))];
+  const changed = changedFilesSince(root, groundedAt, cited);
   const stale = [];
 
   if (Array.isArray(spec.evidence)) {
     spec.evidence.forEach((record) => {
       const locPath = getLocatorPath(record);
-      if (!locPath) return;
-      const normalized = normalizePath(locPath);
-      if (changed.has(locPath) || changed.has(normalized)) {
-        if (record.verification === 'verified' || record.verification === 'compatibility') {
-          record.verification = 'stale';
-          record.staleSince = groundedAt;
-          if (record.id) stale.push(record.id);
-        }
+      if (!locPath || record.type === 'assertion' || ['asserted', 'unresolved', 'stale'].includes(record.verification)) return;
+      const normalized = normalizePath(path.relative(path.resolve(root), path.resolve(root, locPath)));
+      if (changed.has(normalized)) {
+        record.verification = 'stale';
+        record.staleSince = groundedAt;
+        if (record.id) stale.push(record.id);
       }
     });
   }

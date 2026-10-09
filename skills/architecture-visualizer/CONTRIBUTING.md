@@ -124,7 +124,7 @@ node bin/arch-viz.js build examples/3-async-event-driven-workflow/architecture.j
 Inject a small probe script before `</body>` to drive `switchView`, `toggleBoundary`, `goToSequenceStep` and
 `runExport`, and assert there are no `window.onerror` entries.
 
-## Layout engine invariants
+## Workbench modules
 
 The workbench page lives in `src/workbench/`: `shell.html` holds the skeleton and markup, and each
 `<!-- include: … -->` line is replaced by a style or script module, indented to match. All scripts share one
@@ -148,8 +148,9 @@ keep moving between captures, and Chrome itself alternates between two rasteriza
 1. **Freeze motion.** Emulate `prefers-reduced-motion: reduce` (DevTools Protocol
    `Emulation.setEmulatedMedia`). The workbench honours it: particles and autoplay stop and transitions collapse.
 2. **Capture the same states on both builds**, each in a fresh browser profile, at the reference viewport of
-   1440×900, in both themes: initial load, light theme, sequence playback, a scenario stage with the inspector
-   open, and the delta view with the gate open.
+   1440×900, in both themes: initial load, light theme, a walkthrough step, a component sheet open, the Change
+   lens, and the Review chapter with its quality gate unfolded. Walkthrough playback is disabled under reduced
+   motion; pause it before capturing a step.
 3. **Capture each build at least twice** and record the noise floor: the pixel difference between two captures
    of the same build.
 4. **Frame equivalence passes** when every candidate frame equals at least one baseline frame of the same state
@@ -160,10 +161,15 @@ keep moving between captures, and Chrome itself alternates between two rasteriza
    attributes), identical node and edge geometry, every rendered test passing, and a side-by-side review of each
    state in both themes.
 
-Any change to `src/engine/layout.js` must keep these true (the layout suite enforces them):
+## Layout engine invariants
+
+Any change to `src/engine/layout.js` or `src/engine/orthogonal.js` must keep these true (the layout, router and
+generated-spec suites enforce them):
 
 - the same spec produces byte-identical coordinates on repeated runs;
-- every node stays inside its boundary box;
+- every node stays inside its boundary box (its lane, in the default `lanes` layout);
 - an explicit numeric `order` always wins over barycenter ordering;
-- every edge is classified `forward`, `sibling`, `backward` or `self`, and the label anchor sits on the curve;
-- the browser's drag-time geometry in `src/workbench/scripts/drag.js` stays in sync with `buildEdgeGeometry`.
+- no route crosses a card, every crossing has a jump, and every placed label clears cards, other labels and
+  other routes; a label with no clear room is left off the canvas, never drawn over something;
+- every generated spec lays out in well under a second (the browser re-routes with the same code on drag);
+- the browser's drag-time geometry in `src/workbench/scripts/drag.js` stays in sync with the Node layout.

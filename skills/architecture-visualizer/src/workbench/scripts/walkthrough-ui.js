@@ -35,7 +35,8 @@ function walkStageIndex(entry) {
 
 function walkStartDelay(entry) {
   const stage = entry && entry.stage;
-  return stage && typeof stage.durationMs === 'number' ? stage.durationMs : WALK_DEFAULT_DELAY;
+  const durations = (entry?.interactions || []).map(hop => hop.durationMs).filter(value => Number.isFinite(value) && value > 0);
+  return Number.isFinite(stage?.durationMs) && stage.durationMs > 0 ? stage.durationMs : durations.length ? Math.max(...durations) : WALK_DEFAULT_DELAY;
 }
 
 function walkIsActive() {
@@ -90,6 +91,7 @@ function walkMarkerPoint(marker) {
 }
 
 function drawWalkMarkers(markers) {
+  ghostLayer.querySelectorAll('.walk-marker').forEach(marker => marker.remove());
   if (!Array.isArray(markers) || markers.length === 0) return;
   markers.forEach((marker) => {
     const point = walkMarkerPoint(marker);
@@ -192,7 +194,7 @@ function playWalkPackets(entries, index) {
     const edgeId = walkEdgeId(hop, LAYOUT_DATA.edges || []);
     const edge = edgeById.get(edgeId);
     const path = document.getElementById(`path-${edgeId}`);
-    return edge && path ? { edge, path, reverse: edge.source === hop.to && edge.target === hop.from } : null;
+    return edge && path ? { edge, path, recovery: recovery || hop.status === 'recovery', reverse: edge.source === hop.to && edge.target === hop.from } : null;
   }).filter(Boolean);
   if (!hops.length) return;
   const run = walkPacketRun;
@@ -201,7 +203,7 @@ function playWalkPackets(entries, index) {
   const once = () => {
     if (run !== walkPacketRun) return;
     hops.forEach((hop, i) => {
-      const group = el('g', { class: recovery ? 'walk-packet recovery' : 'walk-packet' });
+      const group = el('g', { class: hop.recovery ? 'walk-packet recovery' : 'walk-packet' });
       group.appendChild(el('circle', { class: 'walk-packet-halo', r: '9' }));
       group.appendChild(el('circle', { class: 'walk-packet-core', r: '4.5' }));
       layer.appendChild(group);
@@ -305,6 +307,7 @@ function startWalkthrough(scenarioId, choices) {
 }
 
 function endWalkthrough() {
+  drawWalkMarkers([]);
   stopWalkPlayback();
   stopWalkPackets();
   if (typeof clearSpotlight === 'function') clearSpotlight();
@@ -322,6 +325,7 @@ function suspendWalkthrough() {
   if (!state.scenarioActive) return;
   stopWalkPlayback();
   stopWalkPackets();
+  drawWalkMarkers([]);
   actions.setScenarioActive(false);
   renderWalkTrack();
 }
@@ -434,16 +438,13 @@ function buildWalkButton(className, icon, label, handler) {
 
 // Steps across the main path and every outcome, as the track numbers them.
 function walkAllStepsTotal(scenario) {
-  const entries = linearizeScenario(scenario, {});
-  const decisionIndex = entries.findIndex(entry => entry.kind === 'decision');
-  if (decisionIndex < 0) return walkthroughTotal(entries);
-  let total = walkthroughTotal(entries.slice(0, decisionIndex));
-  entries[decisionIndex].branches.forEach(branch => {
-    const branchEntries = [];
-    walkStages(branch.stages, {}, branchEntries, { next: total + 1 });
-    total += walkthroughTotal(branchEntries);
-  });
-  return total;
+  const count = stages => (Array.isArray(stages) ? stages : []).reduce((total, stage) => {
+    if (!stage || typeof stage !== 'object') return total;
+    return total + (stage.kind === 'branch'
+      ? walkBranches(stage).reduce((sum, branch) => sum + count(branch.stages), 0)
+      : 1);
+  }, 0);
+  return count(scenario?.stages);
 }
 
 function renderWalkTrack() {
@@ -566,14 +567,18 @@ function renderWalkTrack() {
     const decision = entries[decisionIndex];
     decision.branches.forEach((branch, index) => {
       const branchEntries = [];
-      const counter = { next: walkthroughTotal(entries.slice(0, decisionIndex)) + 1 };
+      const counter = { next: walkthroughTotal(entries.slice(0, decisionIndex)) + 1, ids: walkStageIds(scenario) };
       walkStages(branch.stages, active ? state.walkChoices : {}, branchEntries, counter);
-      if (!branchEntries.length) branchEntries.push({ kind: 'end', id: `end:${decision.id}`, decisionId: decision.id, branch });
+      if (!branchEntries.length) branchEntries.push({ kind: 'end', id: walkEndId(decision.id, counter), decisionId: decision.id, branch });
       const row = lane(`\u21b3 ${branch.name || branch.condition || `Outcome ${index + 1}`}`, branchEntries,
         index === decision.chosen ? null : { id: decision.id, index });
       row.dataset.walkOutcomeLane = String(index);
       row.dataset.chosen = String(index === decision.chosen);
     });
+    const chosenEntries = [];
+    walkStages(decision.branches[decision.chosen]?.stages, active ? state.walkChoices : {}, chosenEntries, { next: 1 });
+    const continuation = entries.slice(decisionIndex + 1 + chosenEntries.length + (chosenEntries.length ? 0 : 1));
+    if (continuation.length) lane('Main path', continuation);
   }
   track.append(controls, beads);
   if (current && walkPlaybackNote()) {

@@ -294,20 +294,22 @@ function matchesLayerFilter(node) {
 function dependencyChainSet(nodeId) {
   const edges = LAYOUT_DATA.edges || [];
   const active = new Set([nodeId]);
-  const walk = (current, key, next) => {
+  const walk = (current, key, next, visited) => {
     edges.forEach(e => {
-      if (e[key] === current && !active.has(e[next])) {
+      if (e[key] === current && !visited.has(e[next])) {
         active.add(e[next]);
-        walk(e[next], key, next);
+        visited.add(e[next]);
+        walk(e[next], key, next, visited);
       }
     });
   };
-  walk(nodeId, 'target', 'source');
-  walk(nodeId, 'source', 'target');
+  walk(nodeId, 'target', 'source', new Set([nodeId]));
+  walk(nodeId, 'source', 'target', new Set([nodeId]));
   return active;
 }
 
 function applyVisibility() {
+  applyFocusMode();
   renderLensKey(lensEncoding(state.lens, ARCH_SPEC).keyItems);
   const chain = state.highlightedChain ? dependencyChainSet(state.highlightedChain) : null;
   const hidden = new Set();

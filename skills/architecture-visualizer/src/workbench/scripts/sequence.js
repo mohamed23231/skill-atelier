@@ -98,6 +98,11 @@ function stepSequence(dir) {
 }
 
 function toggleSequencePlay() {
+  // Autoplay is motion: under reduced motion the reader steps through instead, as in the walkthrough.
+  if (!state.sequencePlaying && state.prefersReducedMotion) {
+    announceStatus('Playback is unavailable under reduced motion; use Previous and Next.');
+    return;
+  }
   state.sequencePlaying = !state.sequencePlaying;
   setIconLabel(document.getElementById('seq-play'), state.sequencePlaying ? 'ui-pause' : 'ui-play', state.sequencePlaying ? 'Pause' : 'Play');
   if (state.sequencePlaying) {
@@ -110,7 +115,7 @@ function toggleSequencePlay() {
 function scheduleNextStep() {
   const steps = sequenceSteps();
   const current = steps[state.sequenceIndex] || {};
-  const delay = typeof current.durationMs === 'number' ? current.durationMs : 1800;
+  const delay = Number.isFinite(current.durationMs) && current.durationMs > 0 ? current.durationMs : 1800;
   state.sequenceTimer = setTimeout(() => {
     if (!state.sequencePlaying) return;
     goToSequenceStep(state.sequenceIndex >= steps.length - 1 ? 0 : state.sequenceIndex + 1);

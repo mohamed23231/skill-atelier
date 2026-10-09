@@ -854,11 +854,14 @@ fs.readdirSync(EXAMPLE_DIR)
 
 cases.push(['p8: lens badge text and tokens survive repeated lens switches', () => {
   const spec = { nodes: [
-    { ...service('added'), delta: 'ADDED', failureModes: [{ name: 'Unavailable' }] },
+    { ...service('added'), delta: 'ADDED', details: { failureModes: [{ failure: 'Unavailable' }] } },
     { ...service('changed'), delta: 'CHANGED' },
     { ...service('removed'), delta: 'REMOVED' },
     service('unchanged'),
   ], edges: [{ id: 'new', source: 'added', target: 'changed', delta: 'ADDED' }] };
+  const risk = encode('risk', spec);
+  assert.strictEqual(risk.nodes.added.badge.text, '1 failure mode');
+  assert.strictEqual(risk.nodes.added.stroke, 'warn');
   const before = encode('change', spec);
   assert.strictEqual(before.nodes.added.badge.text, 'Added');
   assert.strictEqual(before.nodes.changed.badge.text, 'Changed');
@@ -867,6 +870,26 @@ cases.push(['p8: lens badge text and tokens survive repeated lens switches', () 
   assert.strictEqual(before.edges.new.stroke, 'ok');
   ['risk', 'evidence', 'structure', 'change'].forEach(lens => assertNoOpacity(encode(lens, spec), lens));
   assert.deepStrictEqual(encode('change', spec), before);
+  assert.deepStrictEqual(encode('risk', spec), risk);
+}]);
+
+cases.push(['risk required edges resolve combined id type and boundary selectors', () => {
+  const spec = { nodes: [{ ...service('a'), boundary: 'api' }, { ...service('b'), type: 'database', boundary: 'data' }, { ...service('c'), boundary: 'other' }],
+    edges: [{ id: 'required', source: 'a', target: 'b' }, { id: 'other', source: 'c', target: 'b' }],
+    policies: [{ id: 'p', kind: 'required_dependency', fromType: 'service', fromBoundary: 'api', toType: 'database', toBoundary: 'data' }] };
+  assert.strictEqual(encode('risk', spec).edges.required.stroke, 'ok');
+  assert.strictEqual(encode('risk', spec).edges.other.stroke, 'edge');
+  spec.policies[0].from = 'c';
+  assert.strictEqual(encode('risk', spec).edges.required.stroke, 'edge');
+  assert.strictEqual(encode('risk', spec).edges.other.stroke, 'edge');
+}]);
+
+cases.push(['orthogonal lens marks sample distance along the routed polyline', () => {
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/lens-canvas.js'), 'utf8'), ctx);
+  const edge = { labelX: 99, labelY: 99, controls: null, polyline: [{ x: 0, y: 0 }, { x: 0, y: 80 }, { x: 20, y: 80 }] };
+  assert.deepStrictEqual(host(ctx.lensEdgePoint(edge, 0.4)), { x: 0, y: 40 });
+  assert.deepStrictEqual(host(ctx.lensEdgePoint(edge, 0.5)), { x: 0, y: 50 });
+  assert.deepStrictEqual(host(ctx.lensEdgePoint(edge, 0.9)), { x: 10, y: 80 });
 }]);
 
 module.exports = { name: 'Lens engine', cases };

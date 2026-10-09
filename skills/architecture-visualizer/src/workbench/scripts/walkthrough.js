@@ -53,6 +53,39 @@ function walkStages(stages, choices, entries, counter) {
   });
 }
 
+function walkStageIds(scenario) {
+  const ids = new Set();
+  const visit = stages => (Array.isArray(stages) ? stages : []).forEach(stage => {
+    if (!stage || typeof stage !== 'object') return;
+    ids.add(stage.id);
+    visit(stage.stages);
+    walkBranches(stage).forEach(branch => visit(branch.stages));
+  });
+  visit(scenario?.stages);
+  return ids;
+}
+
+function walkEndId(decisionId, counter) {
+  let id = `end:${decisionId}`;
+  while (counter.ids?.has(id)) id = `end:${id}`;
+  counter.ids?.add(id);
+  return id;
+}
+
+// Expand every decision, including nested and later decisions, for component participation.
+function walkScenarioPaths(scenario) {
+  const paths = [];
+  const expand = choices => {
+    const entries = linearizeScenario(scenario, choices);
+    const decision = entries.find(entry => entry.kind === 'decision' && !Object.hasOwn(choices, entry.id));
+    if (!decision) { paths.push({ choices, entries }); return; }
+    if (!decision.branches.length) { expand({ ...choices, [decision.id]: 0 }); return; }
+    decision.branches.forEach((branch, index) => expand({ ...choices, [decision.id]: index }));
+  };
+  expand({});
+  return paths;
+}
+
 function walkBranch(stage, choices, entries, counter) {
   const branches = walkBranches(stage);
   const chosen = walkChosenIndex(stage, choices);
@@ -60,13 +93,13 @@ function walkBranch(stage, choices, entries, counter) {
   const branch = branches[chosen];
   walkStages(branch && branch.stages, choices, entries, counter);
   if (!branch || !Array.isArray(branch.stages) || branch.stages.length === 0) {
-    entries.push({ kind: 'end', id: `end:${stage.id}`, decisionId: stage.id, branch });
+    entries.push({ kind: 'end', id: walkEndId(stage.id, counter), decisionId: stage.id, branch });
   }
 }
 
 function linearizeScenario(scenario, choices) {
   const entries = [];
-  const counter = { next: 1 };
+  const counter = { next: 1, ids: walkStageIds(scenario) };
   if (scenario && typeof scenario === 'object') walkStages(scenario.stages, choices, entries, counter);
   return entries;
 }

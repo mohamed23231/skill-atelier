@@ -1151,4 +1151,29 @@ cases.push(['lower rows retain neighbour-pulled slots instead of packing left', 
   assert(lower.slot > 0);
 }]);
 
+
+cases.push(['dense orthogonal hubs fall back to curved routing in LR, auto and lanes', () => {
+  for (const [layout, direction, count] of [['columns', 'LR', 10], ['columns', 'auto', 10], ['lanes', 'TB', 30]]) {
+    const spec = { layout: { layout, direction }, boundaries: [{ id: 'a', order: 0 }, { id: 'b', order: 1 }],
+      nodes: [{ id: 'hub', boundary: 'a' }, ...Array.from({ length: count }, (_, i) => ({ id: `n${i}`, boundary: 'b' }))],
+      edges: Array.from({ length: count }, (_, i) => ({ id: `e${i}`, source: 'hub', target: `n${i}` })) };
+    const result = computeDefaultLayout(spec);
+    assert.strictEqual(result.edges.length, count);
+    assert(result.edges.every(e => e.path && !/NaN|Infinity/.test(e.path)));
+    if (direction !== 'auto') {
+      assert.strictEqual(result.config.router, 'curved');
+      assert.match(result.routingFallback, /Too many ports/);
+    }
+  }
+}]);
+
+cases.push(['numeric lane order pins rows and slots despite reversed input and neighbour pulls', () => {
+  const spec = { boundaries: [{ id: 'a', order: 0 }, { id: 'b', order: 1 }],
+    nodes: [{ id: 'pull', boundary: 'a' }, ...[6, 5, 4, 3, 2, 1].map(order => ({ id: `n${order}`, boundary: 'b', order }))],
+    edges: [{ id: 'pull-edge', source: 'pull', target: 'n6' }] };
+  const layout = computeDefaultLayout(spec);
+  const nodes = layout.nodes.filter(n => n.boundary === 'b').sort((a, b) => a.row - b.row || a.slot - b.slot);
+  assert.deepStrictEqual(nodes.map(n => n.order), [1, 2, 3, 4, 5, 6]);
+}]);
+
 module.exports = { name: 'Layout Engine', cases };
