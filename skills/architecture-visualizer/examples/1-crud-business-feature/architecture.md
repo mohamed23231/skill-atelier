@@ -109,7 +109,7 @@ Integration of dynamic supplier discount rules and tiered rebate calculations in
 ### System Flowchart
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph b_client["Client Applications"]
     procurement_portal["Procurement Portal<br/><i>[React / TypeScript SPA]</i>"]
   end
@@ -208,7 +208,7 @@ erDiagram
 | 2 | Clear boundaries | ✅ PASS | 4 boundaries, all nodes assigned. |
 | 3 | Visible dependencies | ✅ PASS | Every non-actor node participates in at least one relationship. |
 | 4 | Intelligible arrows | ✅ PASS | Every edge declares a protocol label and a communication mode. |
-| 5 | Clean routing | ✅ PASS | 1 of 7 drawn edge(s) graze a non-endpoint card (e_valuation_discount), within tolerance. |
+| 5 | Clean routing | ✅ PASS | No drawn edge crosses a non-endpoint card (7 edges sampled). |
 | 6 | Readable labels | ✅ PASS | All labels fit the node card at default zoom. |
 | 7 | Deterministic layout | ✅ PASS | Two consecutive layout runs produced identical coordinates. |
 | 8 | Balanced density | ✅ PASS | Max 3 nodes per boundary, edge ratio 1.0. |
@@ -269,3 +269,22 @@ Grounding mode: `illustrative` · Nodes: 7 · Edges: 7 · VERIFIED: 5 · INFERRE
 ### Implementation traceability
 - Mapped: `audit_store`, `inventory_valuation_service`, `primary_db`, `procurement_portal`, `supplier_discount_service`
 - Gaps: none
+
+## Scenarios
+
+### Purchase Order Creation & Discounted Valuation Lifecycle
+
+Serial procurement flow with dynamic volume discount lookup and fallback recovery path.
+
+1. **Submit Purchase Order**: Procurement Portal sends POST /api/v1/purchase-orders to Enterprise API Gateway. Payload: supplierId=sup-789, items={…}. _(generated)_
+2. **Route Validated Request**: Enterprise API Gateway sends gRPC CreatePO to Purchasing Service. Payload: poId=po-9910, supplierId=sup-789, grossTotal=22500. _(generated)_
+3. **Evaluate Supplier Discounts**: Purchasing Service sends gRPC EvaluateDiscounts to Discount Service. Payload: supplierId=sup-789, volume=500, bracketYear=2026. _(generated)_
+4. **Discount Evaluation Result & Valuation**: Decision: Does the supplier discount service respond within the timeout?. Outcomes: Volume Rebate Applied (Responded in time: the active tier's rate applies (0% when no tier is active)), Discount Service Timeout Fallback (Supplier discount service unavailable or timed out). _(generated)_
+   - **Volume Rebate Applied** (Responded in time: the active tier's rate applies (0% when no tier is active))
+     - Persist Discounted PO: Purchasing Service sends SQL INSERT purchase_orders to Procurement DB. Payload: poId=po-9910, totalDiscount=2700, netTotal=19800. _(generated)_
+     - Read Batch Costs: Valuation Service sends SQL Read Batches to Procurement DB. Payload: sku=SKU-4401. _(generated)_
+     - Fetch Rebate Schedules: Valuation Service sends gRPC GetActiveDiscounts to Discount Service. Payload: sku=SKU-4401. _(generated)_
+     - Append Valuation Audit Entry: Valuation Service sends SQL Append Audit to Audit Log Store. Payload: sku=SKU-4401, netValuation=19800, formulaSnapshot={…}. _(generated)_
+   - **Discount Service Timeout Fallback** (Supplier discount service unavailable or timed out)
+     - Persist Standard PO with Review Flag: Purchasing Service sends SQL INSERT purchase_orders (standard) to Procurement DB. Payload: poId=po-9910, totalDiscount=0, netTotal=22500, status=PENDING_REBATE_SYNC. _(generated)_
+     - Log Unadjusted Valuation Audit: Valuation Service sends SQL Append Audit (Warning) to Audit Log Store. Payload: sku=SKU-4401, netValuation=22500, warning=REBATE_ENGINE_TIMEOUT. _(generated)_

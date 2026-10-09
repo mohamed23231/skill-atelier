@@ -125,7 +125,7 @@ Phased zero-downtime database migration from a monolithic 120M-row orders table 
 ### System Flowchart
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph b_client["Client Traffic & Gateway"]
     client_traffic(["Web & Mobile Clients [INFERRED]"])
   end
@@ -213,7 +213,7 @@ erDiagram
 | 2 | Clear boundaries | ✅ PASS | 4 boundaries, all nodes assigned. |
 | 3 | Visible dependencies | ✅ PASS | Every non-actor node participates in at least one relationship. |
 | 4 | Intelligible arrows | ✅ PASS | Every edge declares a protocol label and a communication mode. |
-| 5 | Clean routing | ✅ PASS | 1 of 8 drawn edge(s) graze a non-endpoint card (e_proxy_target), within tolerance. |
+| 5 | Clean routing | ✅ PASS | No drawn edge crosses a non-endpoint card (8 edges sampled). |
 | 6 | Readable labels | ✅ PASS | All labels fit the node card at default zoom. |
 | 7 | Deterministic layout | ✅ PASS | Two consecutive layout runs produced identical coordinates. |
 | 8 | Balanced density | ✅ PASS | Max 3 nodes per boundary, edge ratio 1.0. |
@@ -267,3 +267,18 @@ Grounding mode: `illustrative` · Nodes: 8 · Edges: 8 · VERIFIED: 2 · INFERRE
 ### Implementation traceability
 - Mapped: `backfill_consumer`, `cdc_debezium_worker`, `kafka_buffer`, `legacy_orders_db`, `migration_proxy`, `orders_api_service`, `partitioned_orders_db`
 - Gaps: none
+
+## Scenarios
+
+### Dual-Write Replication, Backfill & Cutover Verification
+
+Orchestrates concurrent dual-writing and CDC backfilling with observation gate deciding between primary cutover and rollback.
+
+1. **Client Order Placement**: Web & Mobile Clients sends HTTPS POST /orders to Orders API Service. Payload: customerId=usr_998, orderTotal=149.5, items=3. _(generated)_
+2. **Delegate to Migration Proxy**: Orders API Service sends saveOrder(order) to Migration Proxy. Payload: orderId=847291, partitionKey=2026-09. _(generated)_
+3. **Parallel Dual-Writing & CDC Historical Backfill**: In parallel: Migration Proxy sends SQL Primary INSERT to Legacy Orders DB. Payload: orderId=847291, table=orders_legacy; Migration Proxy sends SQL Shadow INSERT to Partitioned Orders DB. Payload: orderId=847291, targetPartition=orders_2026_09; Legacy Orders DB sends WAL Replication Stream to Debezium CDC Connector. Payload: lsn=0/16B2D40, batchSize=2500; Debezium CDC Connector sends Produce CDC Events to Kafka Backfill Topic. Payload: topic=orders.backfill, partition=4; Kafka Backfill Topic sends Batch Consumption to Backfill Consumer. Payload: consumerGroup=orders-backfill-grp, batchCount=500; Backfill Consumer sends Bulk ON CONFLICT Upsert to Partitioned Orders DB. Payload: targetTable=orders_partitioned, rowsUpserted=500. _(generated)_
+4. **Shadow Verification Gate & Cutover Decision**: Decision: Do 50M shadow reads over 7 consecutive days show zero checksum discrepancies and lag under 100ms?. Outcomes: Proceed with Primary Cutover (Discrepancy rate == 0.000% and replication lag < 100ms), Rollback and Abort Cutover (Any data mismatch, or replication lag of 100ms or more). _(generated)_
+   - **Proceed with Primary Cutover** (Discrepancy rate == 0.000% and replication lag < 100ms)
+     - Flip Primary Traffic to Partitioned DB: Migration Proxy sends Promote to Primary Target to Partitioned Orders DB. Payload: primaryTarget=partitioned_orders_db, routingMode=100% Partitioned. _(generated)_
+   - **Rollback and Abort Cutover** (Any data mismatch, or replication lag of 100ms or more)
+     - Revert to Legacy Primary: Migration Proxy sends Revert Primary Traffic to Legacy Orders DB. Payload: primaryTarget=legacy_orders_db, dualWritesEnabled=false, reason=CHECKSUM_MISMATCH_DETECTED. _(generated)_

@@ -1,0 +1,204 @@
+/* --- 1.1.0 additions --- */
+.hidden { display: none !important; }
+
+.edge-group.dimmed .edge-path:not(.highlighted) { stroke: var(--edge) !important; opacity: 0.3 !important; }
+/* A quiet label keeps its solid pill so no line shows through the text; only the text fades. */
+.edge-group.dimmed .edge-label text, .edge-group.out-of-focus .edge-label text { opacity: 0.4; }
+
+.node-group:focus { outline: none; }
+.node-group:focus-visible .node-rect {
+  stroke: var(--accent);
+  stroke-width: 3;
+  filter: none;
+}
+
+.boundary-toggle { cursor: pointer; }
+.boundary-toggle:focus { outline: none; }
+.boundary-toggle:focus-visible { outline: none; }
+.boundary-toggle:focus-visible .boundary-hit-rect {
+  stroke: var(--accent);
+  stroke-width: 2;
+  rx: 4px;
+  filter: none;
+}
+.boundary-toggle:focus-visible .boundary-header {
+  fill: var(--accent);
+}
+.boundary-toggle:hover .boundary-header { fill: var(--accent); }
+.boundary-group.collapsed .boundary-rect { fill-opacity: 0.75; stroke-dasharray: none; }
+
+.tab-btn:focus,
+.btn-icon:focus,
+.lens-key button:focus,
+.viewport-btn:focus,
+.export-menu button:focus {
+  outline: none;
+}
+
+.tab-btn:focus-visible,
+.btn-icon:focus-visible,
+.lens-key button:focus-visible,
+.export-menu button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.viewport-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.search-input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.shape-external { stroke-dasharray: 6 4; }
+.shape-queue, .shape-cylinder, .shape-actor, .shape-worker { rx: 0; }
+
+.edge-path.ghost { stroke: var(--accent); stroke-dasharray: 8 5; opacity: 0.95; }
+.edge-path.write { stroke-width: 2.5; }
+.edge-path.event { stroke-dasharray: 10 4; }
+
+
+.export-wrap { position: relative; }
+.export-menu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  min-width: 190px;
+  z-index: 60;
+  box-shadow: var(--shadow);
+}
+.export-menu.open { display: flex; }
+.export-menu button {
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.export-menu button:hover { background: var(--surface-2); }
+
+.gate-panel {
+  position: absolute;
+  top: 64px;
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  /* Stop above the zoom controls docked at the canvas' bottom-right. */
+  max-height: calc(100vh - 240px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  z-index: 70;
+  display: none;
+  box-shadow: var(--shadow);
+}
+.gate-panel.open { display: block; }
+.gate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.gate-body { padding: 8px 12px 12px; }
+.gate-row {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 12px;
+}
+.gate-row:last-child { border-bottom: none; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.modal.open { display: flex; }
+.modal-card {
+  width: min(820px, 90vw);
+  max-height: 80vh;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-content {
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+[data-focus-member="true"] .node-rect, [data-focus-member="true"].edge-path { stroke-width: 3 !important; }
+[data-focus-member="false"] { opacity: 0.12 !important; }
+body[data-focus-mode] #btn-focus-neighbors, body[data-focus-mode] #btn-focus-affected { border-style: double; }
+body[data-presentation="true"] .trust-strip,
+body[data-presentation="true"] header,
+body[data-presentation="true"] .rail { display: none !important; }
+body[data-presentation="true"] #canvas-container { margin: 0 !important; width: 100% !important; height: 100vh; height: 100dvh; }
+body[data-presentation="true"] .viewport-controls { top: 12px; bottom: auto; right: 20px; }
+.workbench-mobile-toggle { min-width: 32px; display: inline-flex; }
+.workbench-minimap { position: absolute; left: 16px; bottom: 16px; width: 176px; height: 116px; z-index: 35; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); }
+.workbench-minimap[data-idle="true"] { visibility: hidden; }
+.workbench-minimap svg { width: 100%; height: 100%; display: block; }
+[data-minimap-viewport] { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+[data-selected="true"] { outline: 3px double var(--accent); outline-offset: 3px; }
+/* On the canvas an outline is a square frame that ignores the card's corners; the selected card is
+   drawn in ink on its own shape (canvas.css) and a connection darkens with its context instead. */
+.node-group[data-selected="true"], .edge-path[data-selected="true"] { outline: none; }
+[data-action]:focus-visible, [data-search-result]:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+#canvas-container { margin-left: 0; width: 100%; }
+.viewport-controls { right: 20px; }
+
+/* Hover preview: a card's connections darken and their labels read at full strength. */
+.edge-group.hover-focus .edge-path, .edge-group.hover-self .edge-path { stroke: var(--ink); stroke-width: 1.8; }
+.edge-group.hover-focus .edge-label text, .edge-group.hover-self .edge-label text { fill: var(--ink); }
+/* Focus changes fade rather than snap. */
+.node-group, .edge-group, .edge-path, .edge-label text { transition: opacity 0.3s ease, stroke 0.2s ease; }
+@media (prefers-reduced-motion: reduce) { .node-group, .edge-group, .edge-path, .edge-label text { transition: none; } }
+/* Components outside the current walkthrough step recede with their connections. */
+.node-group.out-of-focus { opacity: 0.35; }
+/* The step's own connections are never faded by a lens's quiet style. */
+.edge-path.highlighted { opacity: 1; }
+/* The current step's components carry the accent, as its connections do. */
+.node-group.walk-active .node-rect { stroke: var(--accent); stroke-width: 2; }
+/* A faint dot grid gives the canvas a surface. */
+#canvas-container { background-image: radial-gradient(circle, var(--grid) 1px, transparent 1.4px); background-size: 22px 22px; }
+.edge-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.edge-label { cursor: pointer; }
+
+.workbench-minimap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

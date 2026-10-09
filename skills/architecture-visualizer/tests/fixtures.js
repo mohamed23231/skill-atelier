@@ -176,6 +176,160 @@ const ADVERSARIAL_COLLISION_SPEC = {
   ],
 };
 
+// A deterministic stress model: 6 tiers x 10 components, ~90 labelled edges (mostly between
+// neighbouring tiers, with a few backward and long spans), two policies and one 20-stage scenario.
+// Built in code so the shape stays identical from run to run and can be resized if the budgets move.
+function buildLargeSpec() {
+  const BOUNDARY_COUNT = 6;
+  const PER_BOUNDARY = 10;
+  const TYPES = ['service', 'service', 'api_gateway', 'worker', 'database', 'cache', 'queue', 'topic', 'storage', 'frontend'];
+  const STATUSES = ['VERIFIED', 'INFERRED', 'VERIFIED', 'ASSUMED', 'UNKNOWN'];
+  const DELTAS = ['UNCHANGED', 'CHANGED', 'ADDED', 'UNCHANGED', 'UNCHANGED', 'CHANGED', 'ADDED'];
+
+  const boundaries = [];
+  const nodes = [];
+  for (let b = 0; b < BOUNDARY_COUNT; b += 1) {
+    boundaries.push({ id: `tier_${b}`, label: `Tier ${b + 1}`, type: 'container', order: b + 1 });
+    for (let n = 0; n < PER_BOUNDARY; n += 1) {
+      const index = b * PER_BOUNDARY + n;
+      nodes.push({
+        id: `comp_${b}_${n}`,
+        label: `Component ${b + 1}.${n + 1}`,
+        boundary: `tier_${b}`,
+        type: TYPES[(b + n) % TYPES.length],
+        technology: `Runtime ${((b + n) % 5) + 1}`,
+        status: STATUSES[(b * 2 + n) % STATUSES.length],
+        delta: DELTAS[(b + n * 2) % DELTAS.length],
+        description: `Component ${b + 1}.${n + 1} in tier ${b + 1}.`,
+      });
+    }
+  }
+
+  const nodeId = (b, n) => `comp_${b}_${n}`;
+  const edges = [];
+  const addEdge = (id, source, target, index) => {
+    edges.push({
+      id,
+      source,
+      target,
+      label: `Edge ${index}`,
+      communication: index % 2 === 0 ? 'sync' : 'async',
+      pathType: index % 3 === 0 ? 'request' : index % 3 === 1 ? 'event' : 'read',
+    });
+  };
+
+  let edgeIndex = 0;
+  // 5 adjacent boundaries x 14 edges = 70 forward edges between neighbouring tiers.
+  for (let b = 0; b < BOUNDARY_COUNT - 1; b += 1) {
+    for (let k = 0; k < 14; k += 1) {
+      addEdge(`edge_fwd_${b}_${k}`, nodeId(b, k % PER_BOUNDARY), nodeId(b + 1, (k * 3 + 1) % PER_BOUNDARY), edgeIndex);
+      edgeIndex += 1;
+    }
+  }
+  // 5 backward edges that point against the tier order.
+  for (let b = 0; b < BOUNDARY_COUNT - 1; b += 1) {
+    addEdge(`edge_back_${b}`, nodeId(b + 1, (b * 3 + 4) % PER_BOUNDARY), nodeId(b, (b * 5 + 2) % PER_BOUNDARY), edgeIndex);
+    edgeIndex += 1;
+  }
+  // 15 long edges that skip a tier entirely.
+  for (let k = 0; k < 15; k += 1) {
+    addEdge(`edge_long_${k}`, nodeId(k % 4, (k * 5) % PER_BOUNDARY), nodeId((k % 4) + 2, (k * 7 + 3) % PER_BOUNDARY), edgeIndex);
+    edgeIndex += 1;
+  }
+
+  const scenarioHit = (index) => {
+    const edge = edges[index % edges.length];
+    return { from: edge.source, to: edge.target, edgeId: edge.id, label: edge.label };
+  };
+  const scenarioStage = (id, name, index) => ({
+    id,
+    name,
+    kind: 'interaction',
+    interactions: [Object.assign({ id: `${id}_hop` }, scenarioHit(index))],
+  });
+
+  const stages = [];
+  for (let i = 0; i < 18; i += 1) {
+    stages.push(scenarioStage(`stage_${i + 1}`, `Stage ${i + 1}`, i * 5 + 1));
+  }
+  stages.push({
+    id: 'stage_parallel',
+    name: 'Parallel Stage',
+    kind: 'parallel',
+    description: 'Two hops run at the same time.',
+    interactions: [
+      Object.assign({ id: 'stage_parallel_hop_1' }, scenarioHit(3)),
+      Object.assign({ id: 'stage_parallel_hop_2' }, scenarioHit(31)),
+    ],
+  });
+  stages.push({
+    id: 'stage_branch',
+    name: 'Branch Stage',
+    kind: 'branch',
+    condition: 'Condition holds',
+    branches: [
+      {
+        name: 'Happy Path',
+        condition: 'Everything is intact',
+        status: 'success',
+        stages: [scenarioStage('stage_branch_happy', 'Happy Branch', 47)],
+      },
+      {
+        name: 'Fallback Path',
+        condition: 'Something failed',
+        status: 'recovery',
+        stages: [scenarioStage('stage_branch_fallback', 'Fallback Branch', 74)],
+      },
+    ],
+  });
+
+  return {
+    schemaVersion: 2,
+    meta: {
+      title: 'Large Fixture',
+      description: 'A 60-component, 90-edge stress model for rendered performance budgets.',
+      grounding: 'illustrative',
+      assumptions: ['Synthetic model; no repository backing.'],
+    },
+    boundaries,
+    nodes,
+    edges,
+    views: {
+      sequence: {
+        steps: [
+          Object.assign({ step: 1 }, scenarioHit(1)),
+          Object.assign({ step: 2 }, scenarioHit(12)),
+        ],
+      },
+    },
+    evidence: [],
+    policies: [
+      {
+        id: 'pol_large_layer_direction',
+        kind: 'layer_direction',
+        layers: boundaries.map((boundary) => boundary.id),
+        description: 'Traffic should flow down the tier order.',
+      },
+      {
+        id: 'pol_large_fan_in',
+        kind: 'fan_in',
+        max: 40,
+        description: 'No component should absorb an unreasonable fan-in.',
+      },
+    ],
+    scenarios: [
+      {
+        id: 'scenario_large',
+        name: 'Large Scenario',
+        description: 'Twenty stages across the large model, including a parallel step and a branch.',
+        stages,
+      },
+    ],
+  };
+}
+
+const LARGE_SPEC = buildLargeSpec();
+
 module.exports = {
   VALID_SPEC,
   VERSION_2_SPEC,
@@ -184,5 +338,7 @@ module.exports = {
   ADVERSARIAL_CLIPPED_BOUNDS_SPEC,
   ADVERSARIAL_SIBLING_SPEC,
   ADVERSARIAL_COLLISION_SPEC,
+  LARGE_SPEC,
+  buildLargeSpec,
   clone,
 };

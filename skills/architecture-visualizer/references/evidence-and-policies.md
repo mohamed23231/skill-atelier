@@ -20,6 +20,10 @@ Every evidence item is evaluated against the local repository during `validate` 
 | `asserted` | Non-file evidence recorded as an assertion. | Applied to `assertion` or `command` evidence types that cannot be verified solely by checking static files on disk. |
 | `compatibility` | Synthesized from legacy v1 fields. | Created automatically when normalizing legacy v1 `details.files`, `details.apis`, or `details.tables`. |
 
+### Workbench evidence states and counts
+
+The trust model reports `Verified`, `Declared`, `Declared but not checked`, `Missing`, `Stale`, `Asserted`, `Planned`, and `Inferred` / `Assumed` / `Unknown`; the worst evidence record determines a component's state. A component lacks evidence only when it claims evidence that is absent. Actors are not counted because repository files cannot back them. An empty model is unchecked, never verified. The trust strip's counts and gate summary come from validator output.
+
 ### Locators
 
 Locators identify the exact target of an evidence record:
@@ -139,7 +143,7 @@ When policies fail or evidence checks detect discrepancies, structured findings 
 
 Findings are surfaced directly in:
 1. **CLI Output**: Formatted warning and error summaries during `arch-viz validate`.
-2. **Offline HTML Workbench**: The interactive Findings & Evidence inspector panel with severity badges and node-highlight links.
+2. **Offline HTML Workbench**: The Review and Evidence rail chapters with severity badges, evidence locators, and links that select components or frame rule endpoints.
 3. **Markdown Architecture Report**: Dedicated `### Findings` and `### Evidence manifest` sections.
 
 ---

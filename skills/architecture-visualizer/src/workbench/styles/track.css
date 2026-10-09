@@ -1,0 +1,325 @@
+/* Walkthrough track and chapter. The track sits along the bottom of the canvas while a
+   walkthrough is active; the chapter list mirrors the same path in the rail. */
+
+.walk-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 7px 14px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.walk-track[hidden] {
+  display: none;
+}
+
+/* Keep camera controls reachable above both the idle and expanded track. */
+body { --walk-track-height: 0px; }
+body .workbench-minimap { bottom: calc(var(--walk-track-height, 0px) + 16px); }
+body .viewport-controls { bottom: calc(var(--walk-track-height, 0px) + 20px); }
+body .sequence-controls { bottom: calc(var(--walk-track-height, 0px) + 20px); }
+
+.walk-track-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.walk-track-controls button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+}
+
+.walk-track-controls button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.walk-count {
+  flex: none;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.walk-note {
+  flex: none;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.walk-beads {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 4px 2px;
+}
+
+.walk-bead {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.walk-bead:hover {
+  border-color: var(--accent);
+}
+
+.walk-bead[aria-selected="true"] {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.walk-bead[aria-selected="true"]::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1px solid var(--accent);
+  border-radius: inherit;
+}
+
+.walk-bead-parallel {
+  box-shadow: inset 0 0 0 3px var(--surface-2), inset 0 0 0 4px var(--line);
+}
+
+.walk-bead-parallel::before,
+.walk-bead-parallel::after {
+  content: '';
+  position: absolute;
+  background: var(--line);
+}
+
+.walk-bead-parallel::before {
+  width: 1px;
+  height: 32px;
+}
+
+.walk-bead-parallel::after {
+  width: 32px;
+  height: 1px;
+}
+
+.walk-bead-decision {
+  border-radius: 4px;
+  transform: rotate(45deg);
+}
+
+.walk-bead-decision .walk-bead-number {
+  transform: rotate(-45deg);
+}
+
+.walk-bead-end {
+  border-radius: 3px 12px 12px 3px;
+  background: var(--surface);
+}
+
+.walk-bead-number {
+  line-height: 1;
+}
+
+/* Parallel hop markers drawn over the canvas. */
+.walk-marker-dot {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.walk-marker-number {
+  fill: var(--accent-ink);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+/* Walkthrough chapter: an ordered list of the same path. */
+.walk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.walk-item {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.walk-item.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.walk-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.walk-item-number {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.walk-item.current .walk-item-number {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.walk-item-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.walk-item-tag {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--surface-2);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.walk-item-narrative {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.walk-generated {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.walk-condition {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.walk-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.walk-outcome {
+  padding: 5px 9px;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.walk-outcome:hover {
+  border-color: var(--accent);
+}
+
+.walk-outcome[aria-pressed="true"] {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.walk-outcome-name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.walk-track { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; padding: 10px 14px 12px; box-shadow: none; }
+.walk-track-controls { flex-wrap: nowrap; }
+.walk-track-controls .walk-play { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.walk-count, .walk-length { color: var(--muted); font-size: 12px; font-weight: 400; }
+.walk-length { flex-basis: auto; white-space: nowrap; }
+.walk-beads { display: grid; gap: 5px; padding: 0; max-height: 132px; overflow-y: auto; }
+.walk-lane { display: flex; gap: 5px; align-items: center; min-width: max-content; height: 22px; }
+.walk-lane-label { width: 136px; flex: none; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.walk-lane[data-chosen="false"] { opacity: .45; }
+.walk-bead { width: auto; min-width: 30px; height: 22px; padding: 0 8px; border-radius: 6px; gap: 4px; font-weight: 400; }
+.walk-bead[aria-selected="true"]::after, .walk-bead-parallel::before, .walk-bead-parallel::after { display: none; }
+.walk-bead-decision { border-style: dashed; transform: none; }
+.walk-bead-decision .walk-bead-number { transform: none; }
+.walk-parallel-ticks { display: inline-flex; gap: 3px; }
+.walk-parallel-ticks i { width: 3px; height: 12px; border-radius: 2px; background: currentColor; opacity: .55; }
+.walk-note { grid-column: 1 / -1; white-space: normal; }
+.walk-item { padding: 10px; border-color: transparent; border-radius: 10px; }
+.walk-item.current { border-color: transparent; }
+.walk-item-number { width: 28px; height: 28px; border-radius: 8px; font-size: 12px; }
+.walk-item-name { font-size: 14px; font-weight: 650; }
+.walk-item-narrative { margin-left: 36px; color: var(--ink); font-size: 15px; line-height: 1.5; }
+.walk-generated { margin-left: 36px; color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 11px; }
+.walk-item-route { margin: 10px 0 0 36px; color: var(--muted); font-family: var(--mono); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.walk-payload { display: block; margin: 8px 0 0 36px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; }
+.walk-payload th { color: var(--muted); font-weight: 400; text-align: left; padding-right: 18px; }
+.walk-payload td { color: var(--ink); }
+@media (max-width: 767px) { .walk-track { grid-template-columns: minmax(0, 1fr); gap: 8px; } .walk-track-controls { max-width: none; } .walk-length { flex-basis: auto; } }
+.walk-item-activatable { cursor: pointer; }
+.walk-item-activatable:not(.current):hover { background: var(--surface-2); }
+.walk-item-activatable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

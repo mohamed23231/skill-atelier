@@ -1,0 +1,182 @@
+/* Top Navigation Bar */
+header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 50;
+  box-shadow: none;
+}
+
+/* The title block takes the space that is left and ellipsizes; the controls never get pushed off. */
+.brand-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.brand-section > div { min-width: 0; }
+.brand-section > .brand-mark { flex: none; }
+#doc-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-actions { flex: none; }
+
+.badge-status[hidden] { display: none; }
+.badge-status {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+}
+.badge-status.PROPOSED { color: var(--accent); background: var(--accent-soft); }
+.badge-status.ACCEPTED { color: var(--ok); background: var(--ok-soft); }
+.badge-status.VERIFIED,
+.badge-status.ADDED { color: var(--ok); background: var(--ok-soft); }
+.badge-status.INFERRED,
+.badge-status.CHANGED,
+.badge-status.IN_REVIEW,
+.badge-status.MOVED { color: var(--warn); background: var(--warn-soft); }
+.badge-status.ASSUMED,
+.badge-status.REMOVED { color: var(--risk); background: var(--risk-soft); }
+.badge-status.UNKNOWN,
+.badge-status.UNCHANGED,
+.badge-status.CURRENT { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+
+.brand-mark { width: 26px; height: 26px; color: var(--ink); stroke-width: 1.2; }
+
+.lens-switcher {
+  display: flex;
+  flex: none;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 3px;
+  gap: 2px;
+}
+.lens-switcher button {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.lens-switcher button[aria-checked="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+}
+.lens-switcher button:focus-visible,
+.lens-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lens-select {
+  display: none;
+  flex: none;
+  max-width: 100px;
+  padding: 6px;
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-icon {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+/* Square buttons that hold only an icon; their name comes from aria-label. */
+.btn-icon.icon-only {
+  width: 32px;
+  padding: 0;
+  flex: none;
+}
+
+.btn-icon:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+  border-color: var(--faint);
+}
+
+/* Trust strip: whether to believe this document, one pill per question, each opening its chapter. */
+.trust-strip {
+  position: absolute;
+  top: 56px;
+  left: 0;
+  right: 0;
+  height: calc(var(--chrome-top) - 56px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  z-index: 49;
+  min-width: 0;
+}
+.trust-lead { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); flex: none; }
+.trust-pills { display: flex; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.trust-pills::-webkit-scrollbar { display: none; }
+.trust-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  white-space: nowrap;
+  flex: none;
+  cursor: pointer;
+}
+.trust-pill:hover { border-color: var(--faint); }
+.trust-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.trust-pill[data-illustrative="true"] { border-style: dashed; }
+.trust-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.trust-pill[data-state="ok"] .trust-dot { background: var(--ok); }
+.trust-pill[data-state="warn"] .trust-dot { background: var(--warn); }
+.trust-pill[data-state="risk"] .trust-dot { background: var(--risk); }
+.trust-pill[data-state="unchecked"] .trust-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+
+/* Inside an embedded viewer the host owns the address bar, so a view link has nothing to point at. */
+body[data-embedded] #btn-copy-link { display: none; }
+
+.header-meta { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trust-pill { color: var(--muted); }
+.trust-pill strong { color: var(--ink); font-weight: 650; }

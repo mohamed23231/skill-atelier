@@ -26,7 +26,7 @@ The C4 model provides a hierarchical way to describe software architecture at di
 
 ### Level 4: Code (Audience: Implementing Engineers)
 - **What it shows:** Direct connection to source code, functions, database columns, and PR tasks.
-- **In Arch-Viz:** Accessible directly via the **Inspector Drawer** when clicking on any component:
+- **In Arch-Viz:** Clicking a component opens its sheet in the reading rail; source locators are in the sheet and the Evidence chapter, and schema details in the Data chapter:
   - Linked source file paths with line numbers.
   - API endpoint signatures (`POST /api/v1/orders`).
   - Database schema columns with types, PK, and FK constraints.

@@ -3,9 +3,17 @@
 const suites = [
   require('./validator.test.js'),
   require('./layout.test.js'),
+  require('./orthogonal.test.js'),
   require('./compiler.test.js'),
+  require('./narrative.test.js'),
+  require('./url.test.js'),
+  require('./trust.test.js'),
+  require('./lenses.test.js'),
+  require('./walkthrough.test.js'),
   require('./cli.test.js'),
   require('./scaffold.test.js'),
+  require('./freshness.test.js'),
+  require('./generated.test.js'),
   require('./rendered.test.js')
 ];
 

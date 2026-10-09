@@ -2,8 +2,11 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { computeLayout, buildEdgeGeometry, cubicPointAt, curveSanityScore, resolveLabelCollisions } = require('../src/engine/layout.js');
+const { computeLayout: computeDefaultLayout, buildEdgeGeometry, cubicPointAt, curveSanityScore, resolveLabelCollisions } = require('../src/engine/layout.js');
+// Existing geometry cases explicitly exercise the curved fallback.
+const computeLayout = (spec, config = {}) => computeDefaultLayout(spec, { layout: 'columns', direction: spec.layout?.direction || 'LR', ...config, router: 'curved' });
 const geometry = require('../src/engine/geometry.js');
+const { loadTemplate } = require('../src/workbench/assemble.js');
 const {
   VALID_SPEC,
   ADVERSARIAL_RECIPROCAL_SPEC,
@@ -33,6 +36,27 @@ const crossingSpec = {
 };
 
 const cases = [
+  [
+    'labelLeader tethers a displaced label to its curve and stays silent for a label on its edge',
+    () => {
+      const onCurve = { labelX: 100, labelY: 50, labelWidth: 60, labelTether: { x: 100, y: 50 } };
+      assert.strictEqual(geometry.labelLeader(onCurve), null);
+      const pushedRight = { labelX: 300, labelY: 50, labelWidth: 60, labelTether: { x: 100, y: 50 } };
+      assert.deepStrictEqual(geometry.labelLeader(pushedRight), { x1: 100, y1: 50, x2: 270, y2: 50 });
+      assert.strictEqual(geometry.labelLeader({ labelX: 1, labelY: 1, labelWidth: 0, labelTether: { x: 99, y: 99 } }), null);
+    },
+  ],
+  [
+    'every edge label in the examples records the curve point it was placed from',
+    () => {
+      ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow'].forEach((name) => {
+        const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', name, 'architecture.json'), 'utf8'));
+        computeLayout(spec).edges.filter((e) => e.labelWidth > 0).forEach((e) => {
+          assert.ok(e.labelTether && Number.isFinite(e.labelTether.x), `${name}: edge ${e.id} has no label tether`);
+        });
+      });
+    },
+  ],
   [
     'throws a helpful error when nodes are missing',
     () => {
@@ -208,49 +232,21 @@ const cases = [
   ],
 
   [
-    'shaped nodes: endpoints land on the chevron, pill and cylinder outlines, not the bounding box',
+    'all component kinds share rounded card attachment geometry',
     () => {
-      // Chevron (queue/topic): backward edges arrive on the pointed right face.
-      // With a port offset the outline sits left of the rectangular edge.
-      const queue = { id: 'q', label: 'Q', type: 'topic', x: 100, y: 100, width: 200, height: 80 };
-      const right1 = { id: 'r1', label: 'R1', type: 'service', x: 500, y: 40, width: 160, height: 70 };
-      const g1 = buildEdgeGeometry(right1, queue, true, { targetPortOffset: 24 });
-      assert.strictEqual(g1.points.targetFace, 'right');
-      const chevronOutline = geometry.shapeRightX(queue, 24);
-      assert.ok(
-        chevronOutline < queue.x + queue.width - 5,
-        `chevron outline at offset should recede from the rectangular edge (got ${chevronOutline}, rect edge ${queue.x + queue.width})`
-      );
-      assert.ok(
-        Math.abs(g1.points.x2 - (chevronOutline + geometry.EDGE_END_GAP)) < 0.01,
-        `chevron endpoint x=${g1.points.x2} does not sit one gap off the outline at ${chevronOutline}`
-      );
-
-      // Pill (actor): the right cap is a semicircle, so an off-centre backward
-      // connection must land on the arc, not the corner of the bounding box.
-      const actor = { id: 'a', label: 'A', type: 'actor', x: 400, y: 300, width: 120, height: 60 };
-      const svcLeft = { id: 's', label: 'S', type: 'service', x: 0, y: 300, width: 160, height: 70 };
-      const g2 = buildEdgeGeometry(svcLeft, actor, true, { targetPortOffset: 20 });
-      assert.strictEqual(g2.points.targetFace, 'left');
-      const pillOutline = geometry.shapeLeftX(actor, 20);
-      assert.ok(pillOutline > actor.x + 5, `pill outline at offset should recede from the rectangular edge (got ${pillOutline})`);
-      assert.ok(
-        Math.abs(g2.points.x2 - (pillOutline - geometry.EDGE_END_GAP)) < 0.01,
-        `pill endpoint x=${g2.points.x2} does not sit one gap off the outline at ${pillOutline}`
-      );
-
-      // Cylinder (database/storage): the domed top rises above the rectangular
-      // top edge, so an off-centre top connection follows the dome.
-      const db = { id: 'd', label: 'D', type: 'database', x: 100, y: 500, width: 180, height: 80 };
-      const above = { id: 't', label: 'T', type: 'service', x: 120, y: 300, width: 160, height: 70 };
-      const g3 = buildEdgeGeometry(above, db, false, { targetPortOffset: 40 });
-      assert.strictEqual(g3.points.targetFace, 'top');
-      const domeOutline = geometry.shapeTopY(db, 40);
-      assert.ok(domeOutline > db.y + 1, `cylinder dome at offset should sit below the corner height (got ${domeOutline})`);
-      assert.ok(
-        Math.abs(g3.points.y2 - (domeOutline - geometry.EDGE_END_GAP)) < 0.01,
-        `cylinder endpoint y=${g3.points.y2} does not sit one gap off the dome at ${domeOutline}`
-      );
+      const card = { x: 100, y: 100, width: 220, height: 72 };
+      for (const type of ['service', 'database', 'storage', 'queue', 'topic', 'actor', 'worker', 'cloud_function', 'external']) {
+        const n = { ...card, type };
+        assert.strictEqual(geometry.shapeRightX(n, 24), 320);
+        assert.strictEqual(geometry.shapeLeftX(n, 24), 100);
+        assert.strictEqual(geometry.shapeTopY(n, 40), 100);
+        assert.strictEqual(geometry.shapeBottomY(n, 40), 172);
+        assert.strictEqual(geometry.shapeRightX(n, 36), 308);
+        assert.strictEqual(geometry.shapeLeftX(n, 36), 112);
+        assert.strictEqual(geometry.shapeTopY(n, 110), 112);
+        assert.strictEqual(geometry.shapeBottomY(n, 110), 160);
+        assert.strictEqual(geometry.shapeHorizontalPortOffset(n, 110), 98);
+      }
     },
   ],
 
@@ -393,31 +389,60 @@ const cases = [
   ],
 
   [
-    'template.html defines WCAG AA contrast tokens and excludes dead accent-indigo',
+    'every design token pair meets WCAG contrast in both themes (text 4.5:1, graphics 3:1)',
     () => {
-      const templatePath = path.join(__dirname, '../src/engine/template.html');
-      const html = fs.readFileSync(templatePath, 'utf8');
+      const css = fs.readFileSync(path.join(__dirname, '../src/workbench/styles/tokens.css'), 'utf8');
+      const block = (selector) => {
+        const start = css.indexOf(`${selector} {`);
+        assert.ok(start >= 0, `tokens.css must define ${selector}`);
+        const body = css.slice(start, css.indexOf('}', start));
+        return Object.fromEntries([...body.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+      };
+      const parse = (value) => {
+        const hex = value.match(/^#([0-9a-f]{6})$/i);
+        if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)).concat(1);
+        const rgba = value.match(/^rgba?\(([^)]+)\)$/);
+        assert.ok(rgba, `unparseable color ${value}`);
+        const parts = rgba[1].split(',').map((p) => Number(p.trim()));
+        return [parts[0], parts[1], parts[2], parts.length > 3 ? parts[3] : 1];
+      };
+      const over = (fg, bg) => fg.slice(0, 3).map((c, i) => Math.round(c * fg[3] + bg[i] * (1 - fg[3])));
+      const luminance = (rgb) => {
+        const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      };
+      const ratio = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
-      assert.strictEqual(html.includes('--accent-indigo'), false, 'dead --accent-indigo should be removed');
-      assert.ok(html.includes('--text-dim: #8b9bb0;'), 'dark text-dim token should be #8b9bb0');
-      assert.ok(html.includes('--text-dim: #64748b;'), 'light text-dim token should be #64748b');
-      assert.ok(html.includes('--accent-blue: #0369a1;'), 'light accent-blue token should be #0369a1');
-      assert.ok(html.includes('--accent-green: #047857;'), 'light accent-green token should be #047857');
-      assert.ok(html.includes('--accent-amber: #b45309;'), 'light accent-amber token should be #b45309');
-      assert.ok(html.includes('--accent-rose: #be123c;'), 'light accent-rose token should be #be123c');
-      assert.ok(html.includes('--badge-tint: rgba(148, 163, 184, 0.15);'), 'dark badge-tint should be defined');
-      assert.ok(html.includes('--badge-tint: #f1f5f9;'), 'light badge-tint should be defined');
-      assert.ok(html.includes('border: 1px solid currentColor;'), 'badge-status should use currentColor border');
-      assert.ok(html.includes('--border-node: #64748b;'), 'dark border-node should be #64748b');
-      assert.ok(html.includes('--border-node: #7c8aa3;'), 'light border-node should be #7c8aa3');
+      const dark = block(':root');
+      const themes = { dark, light: { ...dark, ...block('[data-theme="light"]') } };
+      const failures = [];
+      Object.entries(themes).forEach(([theme, tokens]) => {
+        const solid = (name) => { const c = parse(tokens[name]); return c[3] === 1 ? c.slice(0, 3) : over(c, solid('--surface')); };
+        const check = (fg, bg, min, fgColor) => {
+          const value = ratio(fgColor || solid(fg), solid(bg));
+          if (value < min) failures.push(`${theme}: ${fg} on ${bg} is ${value.toFixed(2)}:1, needs ${min}:1`);
+        };
+        // Text people must read.
+        ['--ink', '--muted'].forEach((fg) => ['--bg', '--surface', '--surface-2', '--lane'].forEach((bg) => check(fg, bg, 4.5)));
+        check('--accent', '--surface', 4.5);
+        check('--accent-ink', '--accent', 4.5);
+        ['--ok', '--warn', '--risk'].forEach((tone) => {
+          check(tone, '--surface', 4.5);
+          check(tone, `${tone}-soft`, 4.5, solid(tone)); // badge text on its own tint, composited over the surface
+        });
+        // Supplementary text (counts, hints) has the same text contrast requirement.
+        ['--bg', '--surface', '--surface-2', '--lane'].forEach((bg) => check('--faint', bg, 4.5));
+        // Information-bearing graphics have a separate 3:1 requirement.
+        ['--edge', '--accent', '--ok', '--warn', '--risk'].forEach((fg) => ['--bg', '--surface', '--lane'].forEach((bg) => check(fg, bg, 3)));
+      });
+      assert.deepStrictEqual(failures, []);
     },
   ],
 
   [
-    'template.html normalises boundary tier heights without mutating layout data',
+    'workbench template normalises boundary tier heights without mutating layout data',
     () => {
-      const templatePath = path.join(__dirname, '../src/engine/template.html');
-      const html = fs.readFileSync(templatePath, 'utf8');
+      const html = loadTemplate();
 
       assert.ok(html.includes('tierBottom.set(b.y, Math.max(tierBottom.get(b.y) ?? -Infinity, b.y + b.height));'), 'tierBottom map should record max bottom coordinate per y');
       assert.ok(html.includes('height: collapsed ? COLLAPSED_PILL_HEIGHT : (tierBottom.get(b.y) - b.y)'), 'boundary height should normalize display height across tier');
@@ -441,16 +466,16 @@ const cases = [
   ],
 
   [
-    'template.html contains dvh fallbacks, responsive viewport rules, and debounced resize listener with userMovedView latch',
+    'workbench template contains dvh fallbacks, responsive viewport rules, and debounced resize listener with userMovedView latch',
     () => {
-      const templatePath = path.join(__dirname, '../src/engine/template.html');
-      const html = fs.readFileSync(templatePath, 'utf8');
+      const html = loadTemplate();
 
-      assert.ok(html.includes('height: 100vh;\n      height: 100dvh;\n      width: 100%;'), 'body should use 100vh with 100dvh and 100% width');
-      assert.ok(html.includes('height: calc(100vh - 56px);\n      height: calc(100dvh - 56px);'), 'canvas-container should use dvh fallback');
-      assert.ok(html.includes('width: min(420px, 100vw);'), 'inspector drawer width should use min(420px, 100vw)');
-      assert.ok(html.includes('right: calc(-1 * min(430px, 102vw));'), 'inspector drawer parked position should be responsive');
-      assert.ok(html.includes('max-height: min(46vh, 320px);'), 'legend-box max-height should be clamped');
+      assert.ok(html.includes('height: 100vh;\nheight: 100dvh;\nwidth: 100%;'), 'body should use 100vh with 100dvh and 100% width');
+      assert.ok(html.includes('height: calc(100vh - var(--chrome-top));\nheight: calc(100dvh - var(--chrome-top));'), 'canvas-container should use dvh fallback below the header and trust strip');
+      assert.ok(html.includes('width: min(400px, calc(100vw - 48px));'), 'rail drawer width should use min(400px, calc(100vw - 48px))');
+      assert.ok(html.includes('transform: translateX(105%);'), 'rail drawer parked position should be responsive');
+      assert.ok(html.includes('top: calc(var(--chrome-top) + 16px);'), 'lens key should sit below the chrome without a filter offset');
+      assert.ok(html.includes('function canvasSafeArea()'), 'camera framing should measure overlay insets');
       assert.ok(html.includes("window.addEventListener('resize'"), 'resize listener should be registered');
       assert.ok(html.includes('!state.userMovedView'), 'resize listener should check userMovedView latch before fitToScreen');
     },
@@ -593,14 +618,16 @@ const cases = [
       const { compileArchitecture } = require('../src/engine/compiler.js');
       const nodeGeometry = require('../src/engine/geometry.js');
       const spec = require(path.join(__dirname, '../examples/1-crud-business-feature/architecture.json'));
-      const compiled = compileArchitecture(spec);
+      const compiled = compileArchitecture(spec, { layoutOverrides: { layout: 'columns', router: 'curved' } });
       const geometrySource = fs.readFileSync(path.join(__dirname, '../src/engine/geometry.js'), 'utf8');
 
-      assert.ok(compiled.html.includes(geometrySource), 'generated HTML must contain the exact geometry runtime');
+      assert.ok(compiled.html.includes(require('../src/workbench/assemble.js').compactSource(geometrySource)), 'generated HTML must contain the exact geometry runtime code');
 
       const ctx = { Math, String, Number, Array, JSON, console };
       vm.createContext(ctx);
-      const injected = compiled.html.slice(compiled.html.indexOf(geometrySource), compiled.html.indexOf(geometrySource) + geometrySource.length);
+      // Run the code exactly as the page carries it, so the parity below is the browser's.
+      const shipped = require('../src/workbench/assemble.js').compactSource(geometrySource);
+      const injected = compiled.html.slice(compiled.html.indexOf(shipped), compiled.html.indexOf(shipped) + shipped.length);
       vm.runInContext(injected, ctx);
       const browserGeometry = ctx.ArchVizGeometry;
       assert.ok(browserGeometry, 'injected runtime must attach ArchVizGeometry');
@@ -643,12 +670,13 @@ const cases = [
         assert.deepStrictEqual(JSON.parse(JSON.stringify(fromBrowser)), JSON.parse(JSON.stringify(fromNode)), `live drag recomputation diverged on edge ${edge.id}`);
       });
 
-      const recipCompiled = compileArchitecture(clone(ADVERSARIAL_RECIPROCAL_SPEC));
+      const recipCompiled = compileArchitecture(clone(ADVERSARIAL_RECIPROCAL_SPEC), { layoutOverrides: { layout: 'columns', router: 'curved' } });
       const makeEl = () => ({
         querySelector: () => makeEl(),
         querySelectorAll: () => [],
         getAttribute: () => '50',
         setAttribute: () => {},
+        toggleAttribute: () => {},
         classList: { add: () => {}, remove: () => {} },
       });
       const runtimeCtx = {
@@ -954,6 +982,240 @@ const cases = [
       });
     },
   ],
+  [
+    'p4: band-aware fit clears cards and labels without shrinking desktop examples below 0.75',
+    () => {
+      const { compileArchitecture } = require('../src/engine/compiler.js');
+      const source = fs.readFileSync(path.join(__dirname, '../src/workbench/scripts/fit.js'), 'utf8');
+      for (const name of fs.readdirSync(path.join(__dirname, '../examples'))) {
+        const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8'));
+        const { layout } = compileArchitecture(spec);
+        for (const [width, height] of [[1040, 806], [1024, 674]]) {
+          const overlay = (left, top, w, h, isKey = false) => ({ hidden: false,
+            matches: () => isKey, getBoundingClientRect: () => ({ left, top, right: left + w, bottom: top + h, width: w, height: h }) });
+          const elements = {
+            '.lens-key': overlay(width - 262, 16, 246, 190, true),
+            '.workbench-minimap': overlay(16, height - 132, 176, 116),
+            '.viewport-controls': overlay(width - 58, height - 166, 38, 146),
+          };
+          const state = { collapsedBoundaries: new Set() };
+          const context = vm.createContext({ LAYOUT_DATA: layout, ArchVizGeometry: geometry, state,
+            svg: { getBoundingClientRect: () => ({ left: 0, top: 0, width, height }) },
+            document: { querySelector: selector => elements[selector] }, getComputedStyle: () => ({ display: 'block' }),
+            isNodeHidden: () => false, clampZoom: zoom => Math.max(0.15, Math.min(4, zoom)),
+            actions: { setCamera: camera => Object.assign(state, camera) }, updateTransform() {} });
+          vm.runInContext(source + '\nfitToScreen();', context);
+          if (width === 1040) assert.ok(state.zoom >= 0.75, name + ': ' + state.zoom);
+          const marks = layout.nodes.concat(layout.edges.filter(edge => edge.labelBounds)
+            .map(edge => ({ x: edge.labelBounds.left, y: edge.labelBounds.top, width: edge.labelBounds.width, height: edge.labelBounds.height })));
+          // The minimap hides once the diagram fits, so fitting may use the space under it.
+          marks.forEach(mark => Object.entries(elements).filter(([selector]) => selector !== '.workbench-minimap').map(([, element]) => element).forEach(element => {
+            const b = element.getBoundingClientRect();
+            const a = { left: state.panX + mark.x * state.zoom, top: state.panY + mark.y * state.zoom };
+            a.right = a.left + mark.width * state.zoom; a.bottom = a.top + mark.height * state.zoom;
+            assert.ok(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom,
+              name + ': a card or label overlaps an overlay');
+          }));
+        }
+      }
+    },
+  ],
+
 ];
+
+cases.push(['orthogonal layout is the default and widens overfull column gaps', () => {
+  const spec = clone(ADVERSARIAL_DENSE_PORTS_SPEC);
+  const narrow = computeDefaultLayout(spec, { layout: 'columns', boundaryGapX: 0 });
+  const curved = computeLayout(spec, { boundaryGapX: 0 });
+  assert.strictEqual(narrow.config.router, 'orthogonal');
+  assert.strictEqual(narrow.routingStats.cardCrossings, 0);
+  assert.ok(narrow.nodes.some(n => n.x > curved.nodes.find(c => c.id === n.id).x), 'overfull gap must widen');
+  assert.ok(!narrow.routingStats.gapDemand, 'widening resolves track demand');
+  narrow.boundaries.forEach(b => {
+    const left = Math.min(...narrow.nodes.filter(n => n.boundary === b.id).map(n => n.x));
+    assert.strictEqual(left - b.x, narrow.config.boundaryPaddingX, 'whole boundary moves with its columns');
+  });
+  assert.deepStrictEqual(narrow, computeDefaultLayout(spec, { layout: 'columns', boundaryGapX: 0 }));
+}]);
+
+cases.push(['auto selects the larger reference fit with LR winning ties', () => {
+  const specs = [VALID_SPEC, ADVERSARIAL_RECIPROCAL_SPEC, ADVERSARIAL_DENSE_PORTS_SPEC,
+    ADVERSARIAL_CLIPPED_BOUNDS_SPEC, ADVERSARIAL_SIBLING_SPEC, ADVERSARIAL_COLLISION_SPEC];
+  for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
+    specs.push(JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8')));
+  }
+  const fit = ({ totalVisualBounds: b }) => Math.min(1040 / (b.width + 48), 806 / (b.height + 48), 1.4);
+  for (const spec of specs) {
+    for (const router of ['orthogonal', 'curved']) {
+      const lr = computeDefaultLayout(spec, { layout: 'columns', direction: 'LR', router });
+      const tb = computeDefaultLayout(spec, { layout: 'columns', direction: 'TB', router });
+      const auto = computeDefaultLayout(spec, { layout: 'columns', direction: 'auto', router });
+      assert.deepStrictEqual(auto, fit(tb) > fit(lr) ? tb : lr);
+      assert.deepStrictEqual(auto, computeDefaultLayout(spec, { layout: 'columns', direction: 'auto', router }));
+      auto.nodes.forEach(n => assert.deepStrictEqual([n.width, n.height], [220, 72]));
+      if (router === 'orthogonal') assert.strictEqual(auto.routingStats.cardCrossings, 0);
+    }
+  }
+  assert.throws(() => computeDefaultLayout(VALID_SPEC, { direction: 'diagonal' }), /direction/);
+}]);
+
+cases.push(['lanes share a full-width grid, keep spec ties, and contain every card', () => {
+  const fixtures = require('./fixtures.js');
+  const specs = Object.entries(fixtures).filter(([key]) => key.startsWith('ADVERSARIAL_')).map(([, value]) => value);
+  for (const name of ['1-crud-business-feature', '2-complex-database-migration', '3-async-event-driven-workflow']) {
+    specs.push(JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8')));
+  }
+  specs.push({ boundaries: [{ id: 'z', type: 'container' }, { id: 'a', type: 'container' }],
+    nodes: Array.from({ length: 9 }, (_, i) => ({ id: `n${i}`, boundary: i < 8 ? 'z' : 'a' })), edges: [] });
+  for (const spec of specs) {
+    const before = JSON.stringify(spec);
+    const layout = computeDefaultLayout(spec);
+    assert.strictEqual(layout.config.layout, 'lanes');
+    assert.strictEqual(layout.config.direction, 'TB');
+    assert.deepStrictEqual(layout, computeDefaultLayout(spec));
+    assert.strictEqual(JSON.stringify(spec), before, 'input is immutable');
+    const k = layout.boundaries[0].slotCount;
+    layout.boundaries.forEach((b, i) => {
+      assert.strictEqual(b.x, 24);
+      assert.strictEqual(b.width, layout.boundaries[0].width);
+      if (i) assert.strictEqual(b.y - layout.boundaries[i - 1].y - layout.boundaries[i - 1].height, 56);
+      const members = layout.nodes.filter(n => n.boundary === b.id);
+      assert.strictEqual(b.height, Math.max(1, Math.ceil(members.length / k)) * layout.config.nodeHeight + 48 + b.rowGaps.reduce((sum, gap) => sum + gap, 0));
+      members.forEach(n => {
+        assert.ok(n.x >= b.x + b.gutterWidth);
+        assert.ok(n.x + n.width <= b.x + b.width && n.y >= b.y && n.y + n.height <= b.y + b.height);
+        assert.strictEqual(n.x - b.x - 170, n.slot * (n.width + b.slotGap));
+        assert.ok(n.slot < k);
+      });
+    });
+    assert.strictEqual(layout.routingStats.cardCrossings, 0);
+  }
+  const tied = computeDefaultLayout(specs[specs.length - 1]);
+  assert.deepStrictEqual(tied.boundaries.map(b => b.id), ['z', 'a']);
+}]);
+
+cases.push(['sparse lanes leave gaps that align connected cards', () => {
+  const spec = { boundaries: [{ id: 'top', order: 0 }, { id: 'bottom', order: 1 }],
+    nodes: [{ id: 'a', boundary: 'top' }, { id: 'b', boundary: 'top' }, { id: 'c', boundary: 'top' }, { id: 'd', boundary: 'bottom' }],
+    edges: [{ id: 'link', source: 'c', target: 'd', label: 'call' }] };
+  const layout = computeDefaultLayout(spec, { direction: 'LR' });
+  assert.strictEqual(layout.nodes.find(n => n.id === 'd').slot, 2);
+  assert.strictEqual(layout.edges[0].polyline.length, 2);
+}]);
+
+cases.push(['example labels display in full through the twenty-eight character limit', () => {
+  assert.strictEqual(geometry.labelDisplayText('x'.repeat(28)), 'x'.repeat(28));
+  assert.strictEqual(geometry.labelDisplayText('x'.repeat(29)), 'x'.repeat(27) + '…');
+  for (const name of fs.readdirSync(path.join(__dirname, '../examples')).sort()) {
+    const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '../examples', name, 'architecture.json'), 'utf8'));
+    for (const edge of spec.edges) {
+      const label = edge.label || edge.packetLabel || '';
+      assert.strictEqual(geometry.labelDisplayText(label), label, `${name}/${edge.id}`);
+    }
+  }
+}]);
+
+cases.push(['saga preserves its three jumps and fourteen bends after label and port spreading', () => {
+  const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '../examples/3-async-event-driven-workflow/architecture.json'), 'utf8'));
+  const first = computeDefaultLayout(spec);
+  assert.strictEqual(first.routingStats.cardCrossings, 0);
+  assert(first.routingStats.crossings <= 3);
+  assert.strictEqual(first.routingStats.bends, 14);
+  assert.deepStrictEqual(computeDefaultLayout(spec), first);
+}]);
+
+
+cases.push(['lane row width maximizes canvas fit, with smaller widths winning ties', () => {
+  for (const count of [9, 14, 24, 40]) {
+    const spec = { nodes: Array.from({ length: count }, (_, i) => ({ id: `n${i}` })), edges: [] };
+    const layout = computeDefaultLayout(spec);
+    const lane = layout.boundaries[0];
+    const scores = Array.from({ length: 4 }, (_, i) => {
+      const slots = i + 4, rows = Math.ceil(count / slots);
+      return { slots, zoom: Math.min(1040 / (194 + slots * 220 + (slots - 1) * 24 + 48),
+        700 / (rows * 72 + 48 + (rows - 1) * 56 + 48), 1.4) };
+    }).sort((a, b) => b.zoom - a.zoom || a.slots - b.slots);
+    assert.strictEqual(lane.slotCount, scores[0].slots);
+    assert(lane.slotCount >= 4 && lane.slotCount <= 7);
+  }
+}]);
+
+cases.push(['lower rows retain neighbour-pulled slots instead of packing left', () => {
+  const spec = { boundaries: [{ id: 'top', order: 0 }, { id: 'bottom', order: 1 }],
+    nodes: [...Array.from({ length: 5 }, (_, i) => ({ id: `n${i}`, boundary: 'top' })),
+      ...Array.from({ length: 4 }, (_, i) => ({ id: `t${i}`, boundary: 'bottom' }))],
+    edges: [{ id: 'pull', source: 'n4', target: 't3' }] };
+  const layout = computeDefaultLayout(spec);
+  const lower = layout.nodes.find(n => n.id === 'n4'), neighbor = layout.nodes.find(n => n.id === 't3');
+  assert.strictEqual(lower.row, 1);
+  assert.strictEqual(lower.slot, neighbor.slot);
+  assert(lower.slot > 0);
+}]);
+
+
+cases.push(['dense orthogonal hubs fall back to curved routing in LR, auto and lanes', () => {
+  for (const [layout, direction, count] of [['columns', 'LR', 10], ['columns', 'auto', 10], ['lanes', 'TB', 30]]) {
+    const spec = { layout: { layout, direction }, boundaries: [{ id: 'a', order: 0 }, { id: 'b', order: 1 }],
+      nodes: [{ id: 'hub', boundary: 'a' }, ...Array.from({ length: count }, (_, i) => ({ id: `n${i}`, boundary: 'b' }))],
+      edges: Array.from({ length: count }, (_, i) => ({ id: `e${i}`, source: 'hub', target: `n${i}` })) };
+    const result = computeDefaultLayout(spec);
+    assert.strictEqual(result.edges.length, count);
+    assert(result.edges.every(e => e.path && !/NaN|Infinity/.test(e.path)));
+    assert.strictEqual(result.config.router, 'curved');
+    assert.match(result.routingFallback, /Too many ports/);
+  }
+}]);
+
+cases.push(['numeric lane order pins rows and slots despite reversed input and neighbour pulls', () => {
+  const spec = { boundaries: [{ id: 'a', order: 0 }, { id: 'b', order: 1 }],
+    nodes: [{ id: 'pull', boundary: 'a' }, ...[6, 5, 4, 3, 2, 1].map(order => ({ id: `n${order}`, boundary: 'b', order }))],
+    edges: [{ id: 'pull-edge', source: 'pull', target: 'n6' }] };
+  const layout = computeDefaultLayout(spec);
+  const nodes = layout.nodes.filter(n => n.boundary === 'b').sort((a, b) => a.row - b.row || a.slot - b.slot);
+  assert.deepStrictEqual(nodes.map(n => n.order), [1, 2, 3, 4, 5, 6]);
+}]);
+
+cases.push(['gap expansion leaves empty boundaries before the gap in place', () => {
+  const spec = require('./spec-generator.js').generateSpec(9);
+  spec.boundaries.unshift({ id: 'empty_before', label: 'Empty before', order: -100 });
+  spec.boundaries.push({ id: 'empty_after', label: 'Empty after', order: 100 });
+  const file = path.join(__dirname, '../src/engine/layout.js');
+  const localRequire = require('node:module').createRequire(file);
+  const run = expand => {
+    let calls = 0;
+    const sandbox = { module: { exports: {} }, require: id => id === './orthogonal.js' ? {
+      routeOrthogonal: () => ({ routes: {}, stats: expand && calls++ === 0
+        ? { gapDemand: { 0: 64 }, gapAvailable: { 0: 0 } } : {} }),
+    } : localRequire(id) };
+    vm.runInNewContext(fs.readFileSync(file, 'utf8'), sandbox);
+    return sandbox.module.exports.computeLayout(spec, { layout: 'lanes', direction: 'TB' });
+  };
+  const baseline = run(false), widened = run(true);
+  assert.ok(widened.nodes.some(n => n.y > baseline.nodes.find(other => other.id === n.id).y), 'fixture must expand a gap');
+  const first = widened.boundaries.find(b => b.id === 'empty_before');
+  assert.strictEqual(first.y, baseline.boundaries.find(b => b.id === 'empty_before').y);
+  const last = widened.boundaries.find(b => b.id === 'empty_after');
+  assert.ok(last.y > baseline.boundaries.find(b => b.id === 'empty_after').y, 'following empty lane must move');
+  widened.boundaries.slice(1).forEach((b, i) => assert.ok(b.y >= widened.boundaries[i].y + widened.boundaries[i].height, 'boundary order and spacing'));
+}]);
+
+cases.push(['lane slot swaps score only affected crossing pairs on dense graphs', () => {
+  // Exercise the private grid search without paying for orthogonal routing.
+  const source = fs.readFileSync(path.join(__dirname, '../src/engine/layout.js'), 'utf8');
+  const assign = vm.runInNewContext(source.slice(source.indexOf('function assignLaneSlots('),
+    source.indexOf('/**\n * Iterative barycenter')) + ';assignLaneSlots');
+  let reads = 0;
+  const boundaries = [0, 1].map(rank => ({ id: `b${rank}`, nodes: Array.from({ length: 20 }, (_, i) => {
+    let slot;
+    return { id: `n${rank}_${i}`, get slot() { reads++; return slot; }, set slot(value) { slot = value; } };
+  }) }));
+  const edges = boundaries[0].nodes.flatMap(a => boundaries[1].nodes.map(b => ({ source: a.id, target: b.id })));
+  assign(boundaries, edges, 4);
+  assert.ok(reads < 5000000, `${reads} slot reads: unchanged crossing pairs were rescored`);
+  boundaries.forEach(boundary => {
+    const occupied = new Set(boundary.nodes.map(node => `${node.row}:${node.slot}`));
+    assert.strictEqual(occupied.size, boundary.nodes.length);
+  });
+}]);
 
 module.exports = { name: 'Layout Engine', cases };

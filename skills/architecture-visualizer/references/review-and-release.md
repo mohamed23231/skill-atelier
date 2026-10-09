@@ -65,28 +65,28 @@ INSPECT → MODEL → VALIDATE → BUILD → REVIEW → RELEASE
 
 ## 2. Browser & Accessibility Implementation Truth
 
+### Evidence freshness
+
+Run `arch-viz validate <spec.json> --stamp` after clean validation to record the checked commit as `meta.groundedAt`. Builds record `meta.builtFrom` and mark every cited evidence record whose file changed since the stamp, or is untracked (ignored files included), with `stale` and `staleSince`; `assertion` records and records already `asserted`, `unresolved` or `stale` are skipped by the freshness pass (build validation can still reclassify stale evidence as `unresolved` when its locator no longer resolves). Legacy `details.files` paths are checked too. `arch-viz validate <spec.json> --fresh` lists stale records and exits 1 on drift. Illustrative specs are not stamped or freshness-checked.
+
 The generated HTML viewer is an offline single-page application built on standard HTML5, CSS3, and vanilla ES6.
 
-- **Responsive Four-Region Workbench**:
-  1. *Header Bar*: Title, metadata, scenario controls, view tabs, search, and export actions.
-  2. *Navigator Panel*: Searchable hierarchy of boundaries, nodes, and layers.
-  3. *Main Canvas*: Deterministic SVG canvas with pan, zoom, minimap, and edge routing.
-  4. *Inspector Drawer*: Component details, evidence, findings, tasks, and failure modes.
-- **Mobile Support & Focus Restoration**: Tested across viewports 320px (mobile), 768px (tablet), and 1440px (desktop). On mobile viewports, panels open as accessible modal drawers with focus trapping and automatic focus restoration to the trigger element on close.
-- **Search & Highlighting**: Live filtering across node labels, technologies, types, descriptions, and edge labels. Supports focus-neighbor and affected-path isolation.
-- **Canvas Controls**: Fullscreen presentation mode, URL state synchronization for shareable view anchors, and model-namespaced `localStorage` persistence for custom node layout positions.
+- **Workbench regions**: Header, trust strip, canvas, and reading rail. The rail contains Overview, Walkthrough, Changes, Review and Evidence chapters, Data when the spec has tables, Plan when it has plan phases, and a component sheet. See [`workbench-guide.md`](workbench-guide.md) for chapter, lens, key, and link details.
+- **Responsive Reading Rail**: The rail docks from 900px; below 900px the page stacks canvas, walkthrough track, then the always-open rail. Component selection scrolls its sheet into view.
+- **Search & Highlighting**: Search opens the Cmd/Ctrl+K palette for components, connections, stages, and commands. Selection spotlights neighbours; the sheet and palette offer Show neighbours / Show blast radius.
+- **Canvas Controls**: Fullscreen presentation mode, URL state synchronization for shareable view anchors, and model- and layout-specific `localStorage` persistence for custom node layout positions.
 - **Non-Color State Indicators**: Information is never conveyed by color alone:
-  - Distinct node shapes: Box (services), Cylinder (databases), Chevron (queues/topics), Pill (boundaries/actors).
+  - Uniform cards with kind icons, technology labels, and evidence/change chips.
   - Edge styles: Solid lines for synchronous RPCs, dashed lines for asynchronous messaging.
   - Status and delta badges carry explicit textual labels and high-contrast borders.
-- **Motion & Accessibility**: Fully honors `prefers-reduced-motion` by disabling CSS transitions and halting auto-playing particle streams.
+- **Motion & Accessibility**: Honors `prefers-reduced-motion`: highlights remain, the camera jumps instead of gliding, and walkthrough playback and particles are disabled.
 - **Keyboard Shortcuts**: Full keyboard navigation:
   - `F`: Fit to screen.
   - `0`: Reset zoom/pan.
   - `+` / `-`: Zoom in/out.
   - `A`: Toggle animated particle flow.
-  - `Arrow keys`: Pan canvas.
-  - `Esc`: Close open drawers, modals, or clear node selection.
+  - `Arrow keys`: Pan canvas when idle; right/j and left/k step through a walkthrough.
+  - `Esc`: End a walkthrough, close an overlay, or clear selection. `?` lists all shortcuts; `1`–`4` select lenses.
   - `Tab` / `Shift+Tab`: Traverse focusable nodes and controls.
 
 ---

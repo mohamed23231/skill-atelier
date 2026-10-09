@@ -876,6 +876,105 @@ const cases = [
       }
     },
   ],
+  [
+    'normalizes flat scenario stages (type, from/to, nested parallel stages) into the canonical interaction shape',
+    () => {
+      const spec = clone(VALID_SPEC);
+      spec.scenarios = [{
+        id: 'flat',
+        name: 'Flat dialect',
+        stages: [
+          { id: 's1', name: 'Write order', type: 'interaction', source: 'api', target: 'db', label: 'INSERT', payload: { id: 1 }, status: 'success' },
+          { id: 's2', type: 'parallel', stages: [{ id: 's2a', type: 'interaction', from: 'api', to: 'db', label: 'A' }, { id: 's2b', type: 'interaction', from: 'db', to: 'api', label: 'B' }] },
+          { id: 's3', type: 'branch', branches: [{ name: 'retry', stages: [{ id: 's3a', type: 'interaction', from: 'api', to: 'db', label: 'Retry' }] }] },
+        ],
+      }];
+      const res = validateArchitecture(spec);
+      assert.deepStrictEqual(res.errors, []);
+      const [s1, s2, s3] = res.model.scenarios[0].stages;
+      assert.strictEqual(s1.kind, 'interaction');
+      assert.deepStrictEqual(s1.interactions, [{ id: 's1', from: 'api', to: 'db', edgeId: 'e1', label: 'INSERT', payload: { id: 1 }, status: 'success' }]);
+      assert.strictEqual(s2.kind, 'parallel');
+      assert.deepStrictEqual(s2.interactions.map((i) => i.label), ['A', 'B']);
+      assert.strictEqual(s3.branches[0].stages[0].interactions[0].edgeId, 'e1');
+      assert.strictEqual(spec.scenarios[0].stages[0].interactions, undefined, 'normalization must not mutate the input spec');
+    },
+  ],
+  [
+    'checks node references inside flat scenario stages',
+    () => {
+      const spec = clone(VALID_SPEC);
+      spec.scenarios = [{ id: 'flat', stages: [{ id: 's1', type: 'interaction', from: 'api', to: 'ghost', label: 'Lost' }] }];
+      const res = validateArchitecture(spec);
+      assert.ok(res.errors.some((e) => e.includes('invalid "to" node "ghost"')), res.errors.join('\n'));
+    },
+  ],
+  [
+    'notices a scenario without any authored narrative instead of warning about it',
+    () => {
+      const spec = clone(VALID_SPEC);
+      spec.schemaVersion = 2;
+      spec.scenarios = [
+        {
+          id: 'flat',
+          name: 'Flat',
+          stages: [
+            { id: 's1', kind: 'interaction', interactions: [{ id: 'i1', from: 'api', to: 'db', label: 'Write', edgeId: 'e1' }] },
+          ],
+        },
+      ];
+      const res = validateArchitecture(spec);
+      assert.ok(res.notices.some((n) => n.includes('Scenario "flat"') && n.includes('no authored narrative')));
+      assert.ok(!res.warnings.some((w) => w.includes('no authored narrative')), 'this must not be a warning');
+      assert.deepStrictEqual(res.errors, []);
+    },
+  ],
+  [
+    'does not notice a scenario that has an authored narrative',
+    () => {
+      const spec = clone(VALID_SPEC);
+      spec.schemaVersion = 2;
+      spec.scenarios = [
+        {
+          id: 'authored',
+          name: 'Authored',
+          stages: [
+            {
+              id: 's1',
+              kind: 'interaction',
+              interactions: [{ id: 'i1', from: 'api', to: 'db', label: 'Write', edgeId: 'e1', narrative: 'Hand written.' }],
+            },
+          ],
+        },
+      ];
+      const res = validateArchitecture(spec);
+      assert.ok(!res.notices.some((n) => n.includes('no authored narrative')));
+      assert.ok(!res.warnings.some((w) => w.includes('no authored narrative')));
+    },
+  ],
 ];
+
+cases.push(['parallel normalization collects recursively nested branch interactions', () => {
+  const spec = clone(VALID_SPEC);
+  spec.scenarios = [{ id: 'nested', stages: [{ id: 'p', type: 'parallel', stages: [
+    { id: 'decision', type: 'branch', branches: [
+      { name: 'success', stages: [{ id: 'write', type: 'interaction', from: 'api', to: 'db', label: 'Write' }] },
+      { name: 'retry', stages: [{ id: 'nested-decision', type: 'branch', branches: [
+        { name: 'recover', stages: [{ id: 'read', type: 'interaction', from: 'db', to: 'api', label: 'Recover', recovery: 'retry' }] },
+      ] }] },
+    ] },
+    { id: 'last', type: 'interaction', from: 'api', to: 'db', label: 'Finish' },
+  ] }] }];
+  const result = validateArchitecture(spec);
+  assert.deepStrictEqual(result.errors, []);
+  const interactions = result.model.scenarios[0].stages[0].interactions;
+  assert.deepStrictEqual(interactions.map(hop => hop.label), ['Write', 'Recover', 'Finish']);
+  assert.ok(interactions.every(hop => hop.edgeId === 'e1'));
+  assert.strictEqual(interactions[1].recovery, 'retry');
+  assert.strictEqual(spec.scenarios[0].stages[0].interactions, undefined);
+  assert.deepStrictEqual(validateArchitecture(result.model).model.scenarios, result.model.scenarios, 'scenario normalization stays idempotent');
+  spec.scenarios[0].stages[0].stages[0].branches[0].stages[0].to = 'ghost';
+  assert.ok(validateArchitecture(spec).errors.some(error => error.includes('invalid "to" node "ghost"')));
+}]);
 
 module.exports = { name: 'Validator', cases };

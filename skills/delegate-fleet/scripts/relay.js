@@ -464,9 +464,12 @@ async function main() {
     }
     let execResult;
     try {
+      // A worker whose CLI keeps shared local state (a database, a lock) gets its own copy per workspace,
+      // so parallel runs in different worktrees do not block each other.
+      const isolatedEnv = typeof adapter.isolate === 'function' ? adapter.isolate({ cwd: effective.workspace, env: process.env }) : null;
       execResult = await exec.run({
         command, args: built.args, cwd: effective.workspace,
-        env: process.env, timeoutSeconds: effective.timeoutSeconds,
+        env: isolatedEnv ? { ...process.env, ...isolatedEnv } : process.env, timeoutSeconds: effective.timeoutSeconds,
         stdin: delivery === 'stdin' ? text : null,
         onStdout: (c) => { try { fs.appendFileSync(liveStdout, c); } catch { /* best effort */ } if (opts.stream) streamOut(c); },
         onStderr: (c) => { try { fs.appendFileSync(liveStderr, c); } catch { /* best effort */ } if (opts.stream) streamOut(c); },

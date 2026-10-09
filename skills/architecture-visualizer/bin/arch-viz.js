@@ -6,6 +6,7 @@ const { spawn } = require('node:child_process');
 const { compileArchitecture, validateArchitecture, exportToMermaid, RepoInspector } = require('../src/index.js');
 const { STARTER_SPEC } = require('../src/utils/starter-spec.js');
 const { scaffoldFromDiff } = require('../src/utils/diff-scaffold.js');
+const { currentCommit, applyFreshness, getLocatorPath } = require('../src/utils/freshness.js');
 
 const HELP = `
 architecture-visualizer (arch-viz) CLI
@@ -24,12 +25,14 @@ Options for 'build':
   -o, --output <file>      Output HTML file (default: ./architecture.html)
   --md <file>              Also write a Markdown architecture report
   --strict                 Fail the build if any quality warning is found
-  --direction <LR|TB>      Layout flow direction (default: LR)
+  --direction <LR|TB>      Column layout flow direction (selects columns; default: lanes TB)
+  --router <curved|orthogonal> Routing style (default: orthogonal)
   --repo-root <dir>        Root used to resolve VERIFIED file paths (default: cwd)
   --no-open                Do not open the generated HTML in the default browser
                            (build opens it automatically unless this flag or ARCH_VIZ_NO_OPEN is set)
 
 Options for 'scaffold':
+  --router <curved|orthogonal> Routing style for the drafted spec
   -o, --output <file>      Where to write the draft spec (default: ./architecture.json)
   --base <ref>             Diff against this git ref instead of the uncommitted working tree
   --repo-root <dir>        Repository to read the diff from (default: cwd)
@@ -40,6 +43,8 @@ Options for 'validate':
   --strict                 Exit non-zero on quality warnings, not just errors
   --repo-root <dir>        Root used to resolve VERIFIED file paths (default: cwd)
   --json                   Emit the raw validation result as JSON
+  --stamp                  Record the current commit as meta.groundedAt after clean validation
+  --fresh                  Check evidence freshness against meta.groundedAt
 
 Options for 'mermaid':
   --view <flowchart|sequence|er>   Which diagram to print (default: flowchart)
@@ -61,7 +66,7 @@ function parseOptions(args) {
   const opts = { _: [] };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    const needsValue = ['-o', '--output', '--md', '--direction', '--repo-root', '--view', '--base', '--title', '--ignore'];
+    const needsValue = ['-o', '--output', '--md', '--direction', '--router', '--repo-root', '--view', '--base', '--title', '--ignore'];
     if (needsValue.includes(arg)) {
       const value = args[i + 1];
       if (value === undefined || value.startsWith('-')) fail(`Option ${arg} requires a value.`);
@@ -71,6 +76,9 @@ function parseOptions(args) {
       else if (arg === '--direction') {
         if (value !== 'LR' && value !== 'TB') fail(`--direction must be LR or TB, received "${value}".`);
         opts.direction = value;
+      } else if (arg === '--router') {
+        if (!['curved', 'orthogonal'].includes(value)) fail('--router must be curved or orthogonal.');
+        opts.router = value;
       } else if (arg === '--repo-root') opts.repoRoot = value;
       else if (arg === '--view') opts.view = value;
       else if (arg === '--base') opts.base = value;
@@ -80,6 +88,10 @@ function parseOptions(args) {
       opts.strict = true;
     } else if (arg === '--json') {
       opts.json = true;
+    } else if (arg === '--stamp') {
+      opts.stamp = true;
+    } else if (arg === '--fresh') {
+      opts.fresh = true;
     } else if (arg === '--no-open') {
       opts.noOpen = true;
     } else if (arg.startsWith('-')) {
@@ -141,8 +153,92 @@ function printGate(gate) {
 
 function commandValidate(args) {
   const opts = parseOptions(args);
-  const spec = readSpec(opts._[0]);
-  const result = validateArchitecture(spec, { repoRoot: opts.repoRoot ? path.resolve(opts.repoRoot) : process.cwd() });
+  const specPath = opts._[0];
+  const spec = readSpec(specPath);
+  const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : process.cwd();
+
+  if (opts.stamp) {
+    if (spec.meta?.grounding === 'illustrative') {
+      console.log('Not stamped: illustrative specs are not checked against a repository.');
+      process.exit(0);
+    }
+
+    const stampSpec = { ...spec, meta: { ...spec.meta } };
+    delete stampSpec.meta.groundedAt;
+    const result = validateArchitecture(stampSpec, { repoRoot });
+    if (result.errors.length > 0) {
+      console.log('\n--- Architecture Quality Gate Report ---');
+      console.log(`\nErrors (${result.errors.length}):`);
+      result.errors.forEach((e) => console.log(`  ❌ ${e}`));
+      console.log('\nResult: FAILED ❌\n');
+      process.exit(1);
+    }
+
+    let sha;
+    try {
+      sha = currentCommit(repoRoot);
+    } catch (err) {
+      fail(err.message);
+    }
+
+    const resolvedPath = path.resolve(specPath);
+    let raw;
+    try {
+      raw = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+    } catch {
+      raw = spec;
+    }
+    raw.meta = raw.meta || {};
+    raw.meta.groundedAt = sha;
+    fs.writeFileSync(resolvedPath, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
+
+    const sha7 = sha.slice(0, 7);
+    console.log(`Stamped groundedAt ${sha7}.`);
+    process.exit(0);
+  }
+
+  if (opts.fresh) {
+    if (spec.meta?.grounding === 'illustrative') {
+      console.log('Not checked: illustrative specs are not checked against a repository.');
+      process.exit(0);
+    }
+
+    if (!spec.meta || !spec.meta.groundedAt) {
+      console.error('Not stamped; run validate --stamp first.');
+      process.exit(1);
+    }
+
+    let freshness;
+    try {
+      freshness = applyFreshness(spec, repoRoot);
+    } catch (err) {
+      fail(err.message);
+    }
+
+    if (freshness.errors && freshness.errors.length > 0) {
+      freshness.errors.forEach((e) => console.error(`Error: ${e}`));
+      process.exit(1);
+    }
+
+    const sha7 = String(spec.meta.groundedAt).slice(0, 7);
+
+    if (freshness.stale.length > 0) {
+      const staleSet = new Set(freshness.stale);
+      const evidence = Array.isArray(spec.evidence) ? spec.evidence : [];
+      evidence.forEach((rec) => {
+        if (staleSet.has(rec.id)) {
+          const locPath = getLocatorPath(rec) || '';
+          console.error(`stale: ${rec.id} ${locPath} changed since ${sha7}`);
+        }
+      });
+      process.exit(1);
+    }
+
+    console.log(`Fresh against ${sha7}.`);
+    process.exit(0);
+  }
+
+  const result = validateArchitecture(spec, { repoRoot });
 
   const failed = !result.valid || (opts.strict && result.warnings.length > 0);
 
@@ -195,7 +291,7 @@ function commandBuild(args) {
       outputMarkdown: opts.markdown || null,
       strict: Boolean(opts.strict),
       repoRoot: opts.repoRoot ? path.resolve(opts.repoRoot) : process.cwd(),
-      layoutOverrides: opts.direction ? { direction: opts.direction } : {},
+      layoutOverrides: { ...(opts.direction ? { direction: opts.direction, layout: 'columns' } : {}), ...(opts.router ? { router: opts.router } : {}) },
     });
 
     console.log('\n--- Architecture Visualization Generated ---');
@@ -239,6 +335,7 @@ function commandScaffold(args) {
   }
 
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  if (opts.router) result.spec.layout = { ...result.spec.layout, router: opts.router };
   fs.writeFileSync(targetPath, JSON.stringify(result.spec, null, 2), 'utf8');
 
   console.log(`\nScaffolded draft specification: ${targetPath}`);

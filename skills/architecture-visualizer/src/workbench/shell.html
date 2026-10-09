@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>__DOCUMENT_TITLE__</title>
+  <style>
+    <!-- include: styles/tokens.css -->
+
+    <!-- include: styles/base.css -->
+
+    <!-- include: styles/header.css -->
+
+    <!-- include: styles/overlays.css -->
+
+    <!-- include: styles/canvas.css -->
+
+    <!-- include: styles/panels.css -->
+
+    <!-- include: styles/track.css -->
+
+    <!-- include: styles/workbench.css -->
+
+    <!-- include: styles/responsive.css -->
+
+    <!-- include: styles/palette.css -->
+
+  </style>
+</head>
+<body data-theme="dark">
+  <svg class="icon-sprite" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <defs>
+        <symbol id="ui-mark" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5"/><rect x="4" y="4.5" width="4" height="3" rx="0.8" fill="currentColor" stroke="none"/><rect x="8.5" y="9" width="4" height="3" rx="0.8"/><path d="M6 7.5v3h2.5"/></g></symbol>
+        <symbol id="ui-architecture" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 14 5 8 8 2 5z"/><path d="m2 8 6 3 6-3M2 11l6 3 6-3"/></g></symbol>
+        <symbol id="ui-delta" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="8" height="8" rx="1.5"/><rect x="6" y="6" width="8" height="8" rx="1.5"/></g></symbol>
+        <symbol id="ui-flow" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 5.5c2-2 4-2 6.5 0s4.5 2 6.5 0M1.5 10.5c2-2 4-2 6.5 0s4.5 2 6.5 0"/></g></symbol>
+        <symbol id="ui-sequence" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="3.5" cy="4" r="1.5"/><circle cx="12.5" cy="12" r="1.5"/><path d="M5 4h4a2 2 0 0 1 2 2v4.5"/></g></symbol>
+        <symbol id="ui-data" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M6.5 6.5v7"/></g></symbol>
+        <symbol id="ui-plan" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/><path d="m2 4 1 1 1.6-1.8M2 8l1 1 1.6-1.8"/><circle cx="3.2" cy="12" r="1"/></g></symbol>
+        <symbol id="ui-menu" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></g></symbol>
+        <symbol id="ui-info" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v4M8 4.9v.2"/></g></symbol>
+        <symbol id="ui-play" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.2v9.6L12.6 8z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="ui-pause" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 3.2h2.3v9.6H4.6zM9.1 3.2h2.3v9.6H9.1z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="ui-prev" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5v9"/><path d="M12.5 3.5 6 8l6.5 4.5z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="ui-next" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 3.5v9"/><path d="M3.5 3.5 10 8l-6.5 4.5z" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="ui-moon" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/></g></symbol>
+        <symbol id="ui-sun" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1"/></g></symbol>
+        <symbol id="ui-check-circle" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="m5.4 8.2 1.8 1.8 3.5-3.7"/></g></symbol>
+        <symbol id="ui-alert" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2 14.3 13H1.7z"/><path d="M8 6.4v3.2M8 11.3v.2"/></g></symbol>
+        <symbol id="ui-skip" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M5 8h6"/></g></symbol>
+        <symbol id="ui-export" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M4.8 7.5 8 10.7l3.2-3.2M3 13.5h10"/></g></symbol>
+        <symbol id="ui-close" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m4 4 8 8M12 4l-8 8"/></g></symbol>
+        <symbol id="ui-plus" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></g></symbol>
+        <symbol id="ui-minus" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"/></g></symbol>
+        <symbol id="ui-fit" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></g></symbol>
+        <symbol id="ui-reset" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a5 5 0 1 0 1.5-3.6"/><path d="M2.8 2.4v2.8h2.8"/></g></symbol>
+        <symbol id="ui-file" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1.8h5.2L12.5 5v9.2H4z"/><path d="M9 1.8V5h3.5"/></g></symbol>
+        <symbol id="ui-table" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.5h12M2 10h12"/></g></symbol>
+        <symbol id="ui-link" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.6 2.6 0 0 1 3.6 3.6L10.6 8M9 11.5l-1.3 1.3a2.6 2.6 0 0 1-3.6-3.6L5.4 8"/></g></symbol>
+        <symbol id="ui-copy" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></g></symbol>
+        <symbol id="ui-check" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></g></symbol>
+        <symbol id="ui-keyboard" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 6.5h.1M6.5 6.5h.1M9 6.5h.1M11.5 6.5h.1M5 9.5h6"/></g></symbol>
+        <symbol id="ui-chevron-left" viewBox="0 0 16 16"><path d="M10 3.5 5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="ui-chevron-right" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="ui-collapse" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4 5.5 8l4 4M13 4 9 8l4 4"/></g></symbol>
+        <symbol id="ui-panel" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></symbol><symbol id="ui-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="m10.5 10.5 3.3 3.3"/></symbol>
+      </defs>
+  </svg>
+
+  <!-- Top Navigation -->
+  <header data-region="topbar">
+    <div class="brand-section">
+      <svg class="icon brand-mark" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-mark"></use></svg>
+      <div>
+        <h1 id="doc-title" style="font-size: 14px; font-weight: 700;">Architecture Visualizer</h1>
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 2px;">
+          <span id="doc-status" class="badge-status PROPOSED">PROPOSED</span>
+          <span id="doc-subtitle" class="header-meta">Interactive System Model</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lens controls share one selection across desktop and phone layouts. -->
+    <div class="lens-switcher" role="radiogroup" aria-label="Lens">
+      <button type="button" role="radio" aria-checked="true" tabindex="0" data-lens="structure">Structure</button>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="evidence">Evidence</button>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="change">Change</button>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-lens="risk">Risk</button>
+    </div>
+    <select class="lens-select" aria-label="Lens">
+      <option value="structure">Structure</option>
+      <option value="evidence">Evidence</option>
+      <option value="change">Change</option>
+      <option value="risk">Risk</option>
+    </select>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <button id="btn-palette" class="btn-icon" aria-keyshortcuts="Control+K Meta+K" aria-label="Search and commands"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-search"></use></svg><span>Search</span><kbd>Ctrl K</kbd></button>
+      <button id="btn-copy-link" class="btn-icon" title="Copy a link to this exact view"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Copy link</span></button>
+      <button class="btn-icon icon-only workbench-mobile-toggle" data-action="rail-toggle" aria-label="Open reading rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-panel"></use></svg></button>
+      <button id="btn-theme" class="btn-icon icon-only" title="Toggle Light/Dark Theme" aria-label="Toggle light and dark theme">
+        <span id="theme-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-moon"></use></svg></span>
+      </button>
+      <div class="export-wrap">
+        <button id="btn-export" class="btn-icon" title="Export this visualization"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-export"></use></svg><span>Export</span></button>
+        <div id="export-menu" class="export-menu">
+          <button data-export="html">Standalone HTML</button>
+          <button data-export="svg">SVG vector</button>
+          <button data-export="png">PNG image (2x)</button>
+          <button data-export="markdown">Markdown report</button>
+          <button data-export="mermaid">Mermaid source</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <nav class="trust-strip" aria-label="Trust summary"><span class="trust-lead">Trust</span><div class="trust-pills" data-trust-pills></div></nav>
+
+  <!-- Sequence Playback Bar -->
+  <div id="sequence-bar" class="sequence-controls">
+    <button id="seq-prev" class="btn-icon" style="height: 28px;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-prev"></use></svg><span>Prev</span></button>
+    <button id="seq-play" class="btn-icon" style="height: 28px;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-play"></use></svg><span>Play</span></button>
+    <button id="seq-next" class="btn-icon" style="height: 28px;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-next"></use></svg><span>Next</span></button>
+    <span id="seq-step-info" style="font-size: 12px; font-weight: 600; min-width: 120px; flex: 1 1 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Step 1 of 5</span>
+    <input type="range" id="seq-slider" aria-label="Walkthrough step" min="1" max="5" value="1" style="cursor: pointer; width: 140px;" />
+  </div>
+
+  <!-- Viewport Zoom Controls -->
+  <div class="viewport-controls">
+    <button id="btn-zoom-in" class="viewport-btn" title="Zoom In" aria-label="Zoom in"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-plus"></use></svg></button>
+    <button id="btn-zoom-out" class="viewport-btn" title="Zoom Out" aria-label="Zoom out"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-minus"></use></svg></button>
+    <button id="btn-fit" class="viewport-btn" title="Fit to Screen" aria-label="Fit to screen"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-fit"></use></svg></button>
+    <button id="btn-reset" class="viewport-btn" title="Reset View" aria-label="Reset view"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-reset"></use></svg></button>
+  </div>
+
+  <!-- Lens encodings and controls -->
+  <div class="lens-key" aria-live="polite" aria-label="Lens key"></div>
+
+  <!-- Data-flow hint -->
+
+
+  <!-- Text modal (Mermaid source, export errors) -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <strong id="modal-title">Source</strong>
+        <div style="display:flex; gap:8px;">
+          <button id="modal-copy" class="btn-icon"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-copy"></use></svg><span>Copy</span></button>
+          <button id="modal-close" class="btn-icon" style="width:28px;padding:0;" aria-label="Close"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
+        </div>
+      </div>
+      <pre id="modal-content" class="modal-content"></pre>
+    </div>
+  </div>
+
+
+  <!-- Interactive SVG Canvas Container -->
+  <div id="canvas-container" data-region="canvas">
+    <svg id="arch-svg">
+      <defs>
+        <!-- Component kind icons live in the canvas so exports carry them -->
+        <symbol id="kind-actor" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.6"/><path d="M3 14c.6-2.8 2.6-4.3 5-4.3s4.4 1.5 5 4.3"/></g></symbol>
+        <symbol id="kind-frontend" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.5" width="12.4" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11v3"/></g></symbol>
+        <symbol id="kind-mobile" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4.25" y="1.75" width="7.5" height="12.5" rx="1.75"/><path d="M7 11.75h2"/></g></symbol>
+        <symbol id="kind-api_gateway" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5v11M13 2.5v11"/><path d="M5.5 8h6M9.3 5.8 11.5 8l-2.2 2.2"/></g></symbol>
+        <symbol id="kind-service" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.9 13.3 5v6L8 14.1 2.7 11V5z"/><circle cx="8" cy="8" r="1.7" fill="currentColor" stroke="none"/></g></symbol>
+        <symbol id="kind-worker" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 6.6A5.3 5.3 0 0 0 3.4 5M2.8 9.4a5.3 5.3 0 0 0 9.8 1.6"/><path d="M13.6 2.9v3.9H9.7M2.4 13.1V9.2h3.9"/></g></symbol>
+        <symbol id="kind-database" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="3.8" rx="5" ry="1.9"/><path d="M3 3.8v8.4c0 1 2.2 1.9 5 1.9s5-.9 5-1.9V3.8M3 8c0 1 2.2 1.9 5 1.9S13 9 13 8"/></g></symbol>
+        <symbol id="kind-storage" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="3.5" rx="1"/><path d="M3 6.5V13h10V6.5M6.5 9h3"/></g></symbol>
+        <symbol id="kind-cache" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.8 3.5 9h4.2L7 14.2 12.5 7H8.3z"/></g></symbol>
+        <symbol id="kind-queue" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9.5h3l1 2h4l1-2h3v3.2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M4 6.5h8M5.5 3.5h5"/></g></symbol>
+        <symbol id="kind-topic" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h9M2 8h12M2 11.5h9"/><path d="m11.8 6.2 2.2 1.8-2.2 1.8"/></g></symbol>
+        <symbol id="kind-external" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 1.8 2.6 3.8 2.6 6S9.8 12.2 8 14M8 2C6.2 3.8 5.4 5.8 5.4 8s.8 4.2 2.6 6"/></g></symbol>
+        <symbol id="kind-cloud_function" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5a3 3 0 0 1-.4-6 4 4 0 0 1 7.7-.9 2.9 2.9 0 0 1-.3 6.9z"/></g></symbol>
+        <symbol id="kind-component" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="2"/><rect x="5.5" y="5.5" width="5" height="5" rx="1"/></g></symbol>
+        <!-- Marker definitions -->
+        <marker id="arrow-sync" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" class="arrowhead" />
+        </marker>
+        <marker id="arrow-async" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" class="arrowhead" />
+        </marker>
+        <marker id="arrow-highlight" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10.5" markerHeight="10.5" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 10 5 L 0 8.5 z" class="arrowhead-active" />
+        </marker>
+      </defs>
+      <!-- Background Grid -->
+      <g id="viewport-group" transform="matrix(1 0 0 1 0 0)">
+        <g id="boundaries-layer"></g>
+        <g id="edges-layer"></g>
+        <g id="ghost-layer"></g>
+        <g id="particles-layer"></g>
+        <g id="nodes-layer"></g>
+      </g>
+    </svg>
+    <div class="workbench-minimap" data-region="minimap" tabindex="0" role="button" aria-label="Architecture minimap. Arrow keys pan; Enter or Space centers the diagram.">
+      <svg id="minimap-svg" aria-hidden="true"><g id="minimap-content"></g><rect data-minimap-viewport></rect></svg>
+    </div>
+    <div class="walk-track" role="listbox" aria-label="Walkthrough steps" hidden></div>
+  </div>
+
+  <!-- Reading Rail -->
+  <aside id="rail" class="rail" data-region="rail" data-open="true" data-sheet="none" aria-label="Reading rail">
+    <div class="rail-head">
+      <button class="rail-tabs-scroll" data-tabs-scroll="-1" aria-label="Show earlier chapters" tabindex="-1" hidden><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-chevron-left"></use></svg></button>
+      <div class="rail-chapters" role="tablist" aria-label="Chapters"></div>
+      <button class="rail-tabs-scroll" data-tabs-scroll="1" aria-label="Show more chapters" tabindex="-1" hidden><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-chevron-right"></use></svg></button>
+      <button class="btn-icon icon-only" data-action="rail-close" aria-label="Close rail"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
+    </div>
+    <div class="rail-body">
+      <section id="chapter-overview" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-overview" data-chapter-panel="overview">
+        <h2 id="overview-title">Overview</h2>
+        <p id="overview-description" class="voice-serif"></p>
+        <p id="overview-meta" class="rail-muted"></p>
+        <dl id="overview-facts" class="overview-facts"></dl>
+        <h3>Trust</h3>
+        <div id="overview-trust" class="overview-trust"></div>
+        <h3>How it works</h3>
+        <ol id="overview-stages" class="overview-stages"></ol>
+        <h3>What this proposal changes</h3>
+        <div id="overview-changes" class="overview-changes"></div>
+        <h3>Open items</h3>
+        <div id="overview-open" class="overview-open"></div>
+      </section>
+      <section id="chapter-walkthrough" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-walkthrough" data-chapter-panel="walkthrough" hidden>
+        <h2>Walkthrough</h2>
+        <div data-navigator-section="scenarios">No scenario selected.</div>
+      </section>
+      <section id="chapter-changes" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-changes" data-chapter-panel="changes" hidden>
+        <h2>Changes</h2>
+        <div id="changes-deltas"></div>
+        <h3>Blast radius</h3>
+        <div id="changes-blast"></div>
+        <h3>Traceability</h3>
+        <div id="changes-traceability"></div>
+      </section>
+      <section id="chapter-review" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-review" data-chapter-panel="review" hidden>
+        <h2>Review</h2>
+        <section id="section-gate">
+          <h3>Quality gate</h3>
+          <div id="gate-line" class="gate-line" style="font-weight: 600; font-size: 13px; margin-bottom: 8px;"></div>
+          <div id="gate-body" class="gate-body"></div>
+        </section>
+        <section id="section-rules">
+          <h3>Rules</h3>
+          <div id="review-rules"></div>
+        </section>
+        <section id="section-findings">
+          <h3>Findings</h3>
+          <div data-navigator-section="findings">No findings selected.</div>
+        </section>
+        <section id="section-assumptions">
+          <h3>Assumptions</h3>
+          <div id="review-assumptions"></div>
+        </section>
+        <section id="section-questions">
+          <h3>Open questions</h3>
+          <div id="review-questions"></div>
+        </section>
+        <section id="section-decisions">
+          <h3>Decisions</h3>
+          <div id="review-decisions"></div>
+        </section>
+      </section>
+      <section id="chapter-evidence" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-evidence" data-chapter-panel="evidence" hidden>
+        <h2>Evidence</h2>
+        <div id="evidence-list"></div>
+      </section>
+      <section id="chapter-data" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-data" data-chapter-panel="data" hidden>
+        <h2>Data model</h2>
+        <div id="er-tables-container" class="er-grid"></div>
+      </section>
+      <section id="chapter-plan" class="rail-panel" role="tabpanel" aria-labelledby="chapter-tab-plan" data-chapter-panel="plan" hidden>
+        <h2>Plan</h2>
+        <div id="plan-container" class="plan-container"></div>
+      </section>
+    </div>
+    <section class="rail-sheet" id="component-sheet" aria-label="Component details" hidden>
+      <div class="sheet-header">
+        <button class="sheet-back" data-action="sheet-back"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-chevron-left"></use></svg><span>Back to Walkthrough</span></button>
+        <button class="btn-icon icon-only" data-action="inspector-close" aria-label="Close details" style="width: 28px; height: 28px; padding: 0;"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-close"></use></svg></button>
+      </div>
+      <div id="node-inspector-body" class="inspector-body sheet-reading">
+        <p class="sheet-kind"><svg class="icon" id="ins-kind-icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#kind-service"></use></svg><span id="ins-tech">Technology</span></p>
+        <h2 id="ins-title" class="sheet-title">Component Details</h2>
+        <p id="ins-description" class="sheet-prose"></p>
+        <div class="sheet-chips">
+          <span id="ins-status-badge" class="sheet-state">Unknown</span>
+          <span id="ins-delta-badge" class="sheet-state">Unchanged</span>
+        </div>
+        <div class="sheet-focus-row">
+          <button id="btn-focus-neighbors" class="sheet-link" aria-pressed="false" title="Focus selected component and direct neighbors">Show neighbours</button>
+          <button id="btn-focus-affected" class="sheet-link" aria-pressed="false" title="Focus downstream affected path">Show blast radius</button>
+          <button id="ins-btn-highlight" class="sheet-link"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><use href="#ui-link"></use></svg><span>Highlight Dependency Chain</span></button>
+        </div>
+
+        <section class="sheet-section" data-sheet-section="walkthrough">
+          <h3>Appears in the walkthrough <span class="sheet-aside" id="ins-walk-count"></span></h3>
+          <ul id="ins-walk" class="sheet-list"></ul>
+        </section>
+        <section class="sheet-section" data-sheet-section="responsibilities">
+          <h3>Responsibilities</h3>
+          <ul id="ins-responsibilities" class="sheet-bullets"></ul>
+        </section>
+        <section class="sheet-section" data-sheet-section="connections">
+          <h3>Connections <span class="sheet-aside" id="ins-connection-count"></span></h3>
+          <ul id="ins-connections" class="sheet-list"></ul>
+        </section>
+        <section class="sheet-section" data-sheet-section="files">
+          <h3>Evidence and source files</h3>
+          <div id="ins-files" class="sheet-rows"></div>
+        </section>
+        <section class="sheet-section" data-sheet-section="apis">
+          <h3>APIs and interfaces</h3>
+          <div id="ins-apis" class="sheet-rows"></div>
+        </section>
+        <section class="sheet-section" data-sheet-section="tables">
+          <h3>Data entities</h3>
+          <div id="ins-tables" class="sheet-rows"></div>
+        </section>
+        <section class="sheet-section" data-sheet-section="risks">
+          <h3>Failure modes</h3>
+          <div id="ins-risks"></div>
+        </section>
+        <section class="sheet-section" data-sheet-section="tasks">
+          <h3>Implementation tasks</h3>
+          <div id="ins-tasks" class="sheet-rows"></div>
+        </section>
+      </div>
+      <div id="review-inspector-body" class="inspector-body workbench-hidden" tabindex="-1"></div>
+    </section>
+  </aside>
+
+  <!-- Embedded Specification & Computed Layout Data -->
+  <script>
+/* __GEOMETRY_RUNTIME__ */
+  </script>
+  <script>
+    <!-- include: scripts/state.js -->
+
+    <!-- include: scripts/store.js -->
+
+    <!-- include: scripts/dom.js -->
+
+    <!-- include: scripts/drawers.js -->
+
+    <!-- include: scripts/minimap.js -->
+
+    <!-- include: scripts/trust.js -->
+
+    <!-- include: scripts/lenses.js -->
+
+    <!-- include: scripts/walkthrough.js -->
+
+    <!-- include: scripts/url.js -->
+
+    <!-- include: scripts/view-state.js -->
+
+    <!-- include: scripts/review.js -->
+
+    <!-- include: scripts/scenarios.js -->
+
+    <!-- include: scripts/walkthrough-ui.js -->
+
+    <!-- include: scripts/boot.js -->
+
+    <!-- include: scripts/canvas.js -->
+
+    <!-- include: scripts/lens-canvas.js -->
+
+    <!-- include: scripts/inspector.js -->
+
+    <!-- include: scripts/rail.js -->
+
+    <!-- include: scripts/trust-strip.js -->
+
+    <!-- include: scripts/flow.js -->
+
+    <!-- include: scripts/sequence.js -->
+
+    <!-- include: scripts/subviews.js -->
+
+    <!-- include: scripts/camera.js -->
+
+    <!-- include: scripts/drag.js -->
+
+    <!-- include: scripts/fit.js -->
+
+    <!-- include: scripts/exports.js -->
+
+    <!-- include: scripts/palette.js -->
+
+    <!-- include: scripts/shortcuts.js -->
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+  <div id="palette-scrim" class="palette-scrim" data-open="false" hidden>
+    <div id="palette-dialog" class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input type="text" id="palette-input" class="palette-input" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" placeholder="Search commands, views, components..." spellcheck="false" autocomplete="off" />
+      <div id="palette-list" class="palette-list" role="listbox"></div>
+    </div>
+  </div>
+  <div id="shortcuts-scrim" class="palette-scrim" data-open="false" hidden>
+    <div id="shortcuts-dialog" class="palette shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" tabindex="-1">
+      <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+      <table class="shortcuts-table">
+        <tbody>
+          <tr><th colspan="2">Navigate</th></tr>
+          <tr><td><kbd>⌘K</kbd> / <kbd>Ctrl K</kbd></td><td>Open command palette</td></tr>
+          <tr><td><kbd>→</kbd> / <kbd>j</kbd></td><td>Next walkthrough step</td></tr>
+          <tr><td><kbd>←</kbd> / <kbd>k</kbd></td><td>Previous walkthrough step</td></tr>
+          <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td><td>Pan diagram</td></tr>
+          <tr><th colspan="2">Walkthrough</th></tr>
+          <tr><td><kbd>Space</kbd></td><td>Play or pause</td></tr>
+          <tr><th colspan="2">Lenses</th></tr>
+          <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Select a lens</td></tr>
+          <tr><th colspan="2">View</th></tr>
+          <tr><td><kbd>F</kbd></td><td>Fit diagram</td></tr>
+          <tr><td><kbd>0</kbd></td><td>Reset view</td></tr>
+          <tr><td><kbd>+</kbd> / <kbd>−</kbd></td><td>Zoom</td></tr>
+          <tr><td><kbd>A</kbd></td><td>Animate data flow</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close dialog</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Show this sheet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="workbench-status" class="workbench-sr-only" role="status" aria-live="polite"></div>
+</body>
+</html>

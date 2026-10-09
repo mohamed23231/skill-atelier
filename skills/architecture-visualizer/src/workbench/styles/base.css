@@ -1,0 +1,26 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: var(--sans);
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+#arch-svg, button, [role="slider"] { user-select: none; }
+
+/* Three voices: interface (sans), explanation (serif), machine facts (mono). */
+.voice-serif { font-family: var(--serif); }
+.voice-mono, code, kbd { font-family: var(--mono); }
+
+/* Icons from the shared sprite: 16-unit line glyphs that take the current text color. */
+.icon { width: 15px; height: 15px; flex: none; display: inline-block; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.icon.filled { fill: currentColor; stroke: none; }

@@ -1,7 +1,7 @@
 /**
  * Deterministic hierarchical layout engine for architecture diagrams.
  * Boundaries become ranks, nodes are ordered inside a rank by iterative barycenter
- * sweeps, and every edge is routed as a cubic bezier with an on-curve label anchor.
+ * sweeps, and edges use orthogonal routes with on-line label slots by default.
  * No randomness: identical input always yields identical coordinates.
  */
 
@@ -22,17 +22,22 @@ const {
   round,
 } = require('./geometry.js');
 
+const geometry = require('./geometry.js');
+const { routeOrthogonal, buildRouteGeometry } = require('./orthogonal.js');
+
 const DEFAULT_CONFIG = {
-  direction: 'LR',
-  nodeWidth: 200,
-  nodeHeight: 96,
-  nodeGapY: 34,
-  nodeGapX: 50,
-  boundaryPaddingX: 20,
-  boundaryPaddingY: 28,
-  boundaryHeaderHeight: 36,
-  boundaryGapX: 120,
-  boundaryGapY: 80,
+  layout: 'lanes',
+  router: 'orthogonal',
+  direction: 'auto',
+  nodeWidth: 220,
+  nodeHeight: 72,
+  nodeGapY: 24,
+  nodeGapX: 24,
+  boundaryPaddingX: 16,
+  boundaryPaddingY: 16,
+  boundaryHeaderHeight: 32,
+  boundaryGapX: 96,
+  boundaryGapY: 96,
   barycenterSweeps: 4,
 };
 
@@ -65,7 +70,18 @@ function computeLayout(spec, customConfig = {}) {
   }
 
   const config = { ...DEFAULT_CONFIG, ...(spec.layout || {}), ...customConfig };
-  const isLR = config.direction !== 'TB';
+  if (!['curved', 'orthogonal'].includes(config.router)) throw new RangeError('router must be curved or orthogonal.');
+  if (!['LR', 'TB', 'auto'].includes(config.direction)) throw new RangeError('direction must be LR, TB or auto.');
+  if (!['lanes', 'columns'].includes(config.layout)) throw new RangeError('layout must be lanes or columns.');
+  const isLanes = config.layout === 'lanes';
+  if (isLanes) config.direction = 'TB';
+  if (config.direction === 'auto') {
+    const lr = computeLayout(spec, { ...config, direction: 'LR' });
+    const tb = computeLayout(spec, { ...config, direction: 'TB' });
+    const fit = ({ totalVisualBounds: b }) => Math.min(1040 / (b.width + 48), 806 / (b.height + 48), 1.4);
+    return fit(tb) > fit(lr) ? tb : lr;
+  }
+  const isLR = config.direction === 'LR';
 
   const nodeMap = new Map();
   spec.nodes.forEach((n) => {
@@ -118,6 +134,7 @@ function computeLayout(spec, customConfig = {}) {
   }
 
   boundaries.sort((a, b) => {
+    if (isLanes) return (a.order ?? getTierRank(a.id, a.type, a.label)) - (b.order ?? getTierRank(b.id, b.type, b.label));
     const hasOrderA = typeof a.order === 'number';
     const hasOrderB = typeof b.order === 'number';
     if (hasOrderA && hasOrderB) return a.order - b.order || a.id.localeCompare(b.id);
@@ -129,10 +146,13 @@ function computeLayout(spec, customConfig = {}) {
     return a.id.localeCompare(b.id);
   });
 
-  const populatedBoundaries = boundaries.filter((b) => b.nodes.length > 0);
-  orderNodesByBarycenter(populatedBoundaries, spec.edges || [], config.barycenterSweeps);
+  const populatedBoundaries = isLanes ? boundaries : boundaries.filter((b) => b.nodes.length > 0);
+  const laneGrid = isLanes ? chooseLaneGrid(populatedBoundaries, spec.edges || [], config) : null;
+  if (isLanes) assignLaneSlots(populatedBoundaries, spec.edges || [], laneGrid.slots);
+  else orderNodesByBarycenter(populatedBoundaries, spec.edges || [], config.barycenterSweeps);
+  const slotCount = laneGrid?.slots;
 
-  let currentBoundaryCoord = 60;
+  let currentBoundaryCoord = isLanes ? 24 : 60;
   const computedBoundaries = [];
   const computedNodes = [];
 
@@ -142,7 +162,24 @@ function computeLayout(spec, customConfig = {}) {
       node.rank = rankIndex;
     });
 
-    if (isLR) {
+    if (isLanes) {
+      b.x = 24;
+      b.y = currentBoundaryCoord;
+      b.gutterWidth = 150;
+      b.width = 170 + slotCount * config.nodeWidth + (slotCount - 1) * laneGrid.gap + 24;
+      const rows = Math.max(1, Math.ceil(nodes.length / slotCount));
+      b.slotCount = slotCount;
+      b.slotGap = laneGrid.gap;
+      b.rowGaps = laneGrid.rowGaps.get(b.id);
+      b.height = rows * config.nodeHeight + 48 + b.rowGaps.reduce((sum, gap) => sum + gap, 0);
+      nodes.forEach(node => {
+        node.x = b.x + 170 + node.slot * (config.nodeWidth + laneGrid.gap);
+        node.y = b.y + 24 + node.row * config.nodeHeight + b.rowGaps.slice(0, node.row).reduce((sum, gap) => sum + gap, 0);
+        computedNodes.push(node);
+      });
+      computedBoundaries.push(b);
+      currentBoundaryCoord += b.height + 56;
+    } else if (isLR) {
       const subColumns = nodes.length > 4 ? 2 : 1;
       const rowsPerSubCol = Math.ceil(nodes.length / subColumns);
 
@@ -189,15 +226,16 @@ function computeLayout(spec, customConfig = {}) {
       });
 
       computedBoundaries.push(b);
-      currentBoundaryCoord += boundaryHeight + config.boundaryGapY;
+      // In TB the 96px card-to-card gap includes the next row header and padding.
+      currentBoundaryCoord += boundaryHeight + Math.max(0, config.boundaryGapY - config.boundaryHeaderHeight - config.boundaryPaddingY * 2);
     }
   });
 
   const boundaryHeaderBoxes = computedBoundaries.map((b) => ({
     x: b.x + 12,
     y: b.y + 8,
-    width: Math.min(b.width - 24, Math.max(String(b.label || '').length * 7.5, 60)),
-    height: 24,
+    width: isLanes ? 138 : Math.min(b.width - 24, Math.max(String(b.label || '').length * 7.5, 60)),
+    height: isLanes ? 64 : 24,
   }));
 
   const band = computedNodes.reduce(
@@ -218,7 +256,8 @@ function computeLayout(spec, customConfig = {}) {
     directedPairs.add(`${e.source}->${e.target}`);
   });
 
-  const computedEdges = (spec.edges || []).map((edge, idx) => {
+  let routingStats;
+  let computedEdges = (spec.edges || []).map((edge, idx) => {
     const sourceNode = nodeMap.get(edge.source);
     const targetNode = nodeMap.get(edge.target);
     const id = edge.id || `edge_${edge.source}_${edge.target}_${idx}`;
@@ -237,7 +276,7 @@ function computeLayout(spec, customConfig = {}) {
       sourcePortOffset,
       targetPortOffset,
       isReciprocal,
-      ...buildEdgeGeometry(sourceNode, targetNode, isLR, {
+      ...(config.router === 'orthogonal' ? {} : buildEdgeGeometry(sourceNode, targetNode, isLR, {
         obstacles: [...computedNodes, ...boundaryHeaderBoxes, ...placedLabels],
         placedLabels,
         nodes: computedNodes,
@@ -246,14 +285,66 @@ function computeLayout(spec, customConfig = {}) {
         sourcePortOffset,
         targetPortOffset,
         isReciprocal,
-      }),
+      })),
     };
   });
 
-  resolveLabelCollisions(computedEdges, computedNodes, boundaryHeaderBoxes);
+  if (config.router === 'orthogonal') {
+    const labelWidths = Object.fromEntries(computedEdges.map(e => [e.id, estimateLabelWidth(e.label || e.packetLabel)]));
+    const input = { config, nodes: computedNodes, boundaries: computedBoundaries, edges: computedEdges.filter(e => nodeMap.has(e.source) && nodeMap.has(e.target)) };
+    let result;
+    for (let pass = 0; pass <= 3; pass++) {
+      try {
+        result = routeOrthogonal(input, { labelWidths, direction: config.direction, lanes: isLanes });
+      } catch (err) {
+        const fallback = computeLayout(spec, { ...config, router: 'curved' });
+        fallback.routingFallback = err.message;
+        return fallback;
+      }
+      if ((isLanes && !computedNodes.some(n => n.row > 0)) || pass === 3 || !result.stats.gapDemand) break;
+      // Router gap indexes refer to merged occupied x slabs, including subcolumns.
+      const columns = [];
+      const margin = Math.min(14, config.nodeGapX / 2, config.nodeGapY / 2);
+      const axis = isLR ? 'x' : 'y';
+      const size = isLR ? 'width' : 'height';
+      computedNodes.map(n => ({ left: n[axis], right: n[axis] + n[size] })).sort((a, b) => a.left - b.left).forEach(box => {
+        const last = columns[columns.length - 1];
+        if (last && box.left - margin < last.right + margin) last.right = Math.max(last.right, box.right);
+        else columns.push({ ...box });
+      });
+      let widened = false;
+      Object.entries(result.stats.gapDemand).sort((a, b) => Number(b[0]) - Number(a[0])).forEach(([index, demand]) => {
+        const left = columns[Number(index)];
+        const right = columns[Number(index) + 1];
+        if (!left || !right) return;
+        const shift = Math.ceil(Math.max(0, demand - (result.stats.gapAvailable?.[index] ?? (right.left - left.right))) / 8) * 8;
+        if (!shift) return;
+        widened = true;
+        computedBoundaries.forEach(b => {
+          const members = computedNodes.filter(n => n.boundary === b.id);
+          if (members.length ? members.every(n => n[axis] >= right.left) : b[axis] >= right.left) b[axis] += shift;
+          else if (members.some(n => n[axis] >= right.left)) {
+            b[size] += shift;
+            if (isLanes) {
+              const row = Math.min(...members.filter(n => n[axis] >= right.left).map(n => n.row));
+              if (row > 0) b.rowGaps[row - 1] += shift;
+            }
+          }
+        });
+        computedNodes.forEach(n => { if (n[axis] >= right.left) n[axis] += shift; });
+      });
+      if (!widened) break;
+    }
+    routingStats = result.stats;
+    computedEdges = computedEdges.map(e => result.routes[e.id]
+      ? { ...e, ...buildRouteGeometry(result.routes[e.id], labelWidths[e.id], geometry, { source: nodeMap.get(e.source), target: nodeMap.get(e.target) }) } : e);
+    boundaryHeaderBoxes.forEach((box, i) => { box.x = computedBoundaries[i].x + 12; box.y = computedBoundaries[i].y + 8; });
+  } else {
+    resolveLabelCollisions(computedEdges, computedNodes, boundaryHeaderBoxes);
+  }
 
   computedEdges.forEach((edge) => {
-    if (!edge.points) return;
+    if (!edge.points || config.router === 'orthogonal') return;
     edge.labelAnchor = { x: edge.labelX, y: edge.labelY };
     edge.labelBounds = {
       left: round(edge.labelX - edge.labelWidth / 2),
@@ -333,12 +424,148 @@ function computeLayout(spec, customConfig = {}) {
       canvasHeight,
     },
     totalVisualBounds,
+    routingStats,
     config,
     boundaries: computedBoundaries,
     boundaryHeaderBoxes,
     nodes: computedNodes,
     edges: computedEdges,
   };
+}
+
+/** Score the shared grid against the docked workbench, including every row channel. */
+function chooseLaneGrid(boundaries, edges, config) {
+  const largest = Math.max(...boundaries.map(b => b.nodes.length), 1);
+  // Single-row diagrams retain their label-friendly spacing.
+  const gap = largest <= 4 ? 170 : 24;
+  let best;
+  for (let slots = Math.min(4, largest); slots <= Math.min(7, largest); slots++) {
+    assignLaneSlots(boundaries, edges, slots);
+    const nodes = new Map(boundaries.flatMap((b, rank) => b.nodes.map(n => [n.id, { ...n, laneRank: rank }])));
+    const rowGaps = new Map(boundaries.map(b => {
+      const rows = Math.max(1, Math.ceil(b.nodes.length / slots));
+      const gaps = Array.from({ length: rows - 1 }, (_, row) => {
+        // Count simultaneous spans, rather than all edges in a lane: disjoint spans reuse tracks.
+        const spans = edges.flatMap(e => {
+          const a = nodes.get(e.source), c = nodes.get(e.target);
+          if (!a || !c) return [];
+          const rankA = a.laneRank;
+          const rankC = c.laneRank;
+          const rank = boundaries.indexOf(b);
+          const positionA = rankA * (largest + 1) + a.row;
+          const positionC = rankC * (largest + 1) + c.row;
+          const channel = rank * (largest + 1) + row + 0.5;
+          if (channel <= Math.min(positionA, positionC) || channel >= Math.max(positionA, positionC)) return [];
+          return [[Math.min(a.slot, c.slot), Math.max(a.slot, c.slot)]];
+        });
+        const demand = Math.max(0, ...Array.from({ length: slots }, (_, col) => spans.filter(([low, high]) => low < col + 0.5 && high > col + 0.5).length));
+        return Math.max(56, (demand - 1) * 14 + 52);
+      });
+      return [b.id, gaps];
+    }));
+    const width = 194 + slots * config.nodeWidth + (slots - 1) * gap;
+    const height = boundaries.reduce((sum, b) => sum + Math.max(1, Math.ceil(b.nodes.length / slots)) * config.nodeHeight + 48
+      + rowGaps.get(b.id).reduce((total, value) => total + value, 0), 0) + Math.max(0, boundaries.length - 1) * 56;
+    const zoom = Math.min(1040 / (width + 48), 700 / (height + 48), 1.4);
+    if (!best || zoom > best.zoom) best = { slots, gap, rowGaps, zoom };
+  }
+  return best;
+}
+
+/** Assign shared slots in two deterministic sweeps, retaining spec order on ties. */
+function assignLaneSlots(boundaries, edges, k) {
+  boundaries.forEach(b => b.nodes.sort((a, c) => {
+    const ao = typeof a.order === 'number' ? a.order : Infinity;
+    const co = typeof c.order === 'number' ? c.order : Infinity;
+    return ao === co ? 0 : ao - co;
+  }));
+  const neighbors = new Map();
+  edges.forEach(e => {
+    for (const [id, other] of [[e.source, e.target], [e.target, e.source]]) {
+      if (!neighbors.has(id)) neighbors.set(id, []);
+      neighbors.get(id).push(other);
+    }
+  });
+  const laneOf = new Map(boundaries.flatMap((b, rank) => b.nodes.map(n => [n.id, rank])));
+  const nodes = new Map(boundaries.flatMap(b => b.nodes.map(n => [n.id, n])));
+  // Only pairs incident to a moved node can change their crossing status.
+  // Index comparable pairs once, then score the exact delta for each permutation.
+  const links = edges.filter(e => laneOf.has(e.source) && laneOf.has(e.target) && laneOf.get(e.source) !== laneOf.get(e.target))
+    .map(e => laneOf.get(e.source) < laneOf.get(e.target) ? [e.source, e.target] : [e.target, e.source]);
+  const pairsByNode = new Map();
+  links.forEach(([a, b], i) => {
+    for (let j = i + 1; j < links.length; j++) {
+      const [c, d] = links[j];
+      if (a === c || b === d || laneOf.get(a) !== laneOf.get(c) || laneOf.get(b) !== laneOf.get(d)) continue;
+      const pair = [nodes.get(a), nodes.get(b), nodes.get(c), nodes.get(d)];
+      for (const id of [a, b, c, d]) {
+        if (!pairsByNode.has(id)) pairsByNode.set(id, []);
+        pairsByNode.get(id).push(pair);
+      }
+    }
+  });
+  const crosses = ([a, b, c, d]) => (a.slot - c.slot) * (b.slot - d.slot) < 0;
+  const placed = new Map();
+  for (const sweep of [boundaries, [...boundaries].reverse()]) {
+    sweep.forEach(b => {
+      b.nodes.forEach(n => placed.delete(n.id));
+      const occupied = new Set();
+      b.nodes.forEach((n, index) => {
+        const adjacent = (neighbors.get(n.id) || []).filter(id => placed.has(id));
+        const center = typeof n.order === 'number' ? index % k : adjacent.length
+          ? adjacent.reduce((sum, id) => sum + placed.get(id), 0) / adjacent.length
+          : index % k;
+        const row = Math.floor(index / k);
+        const free = Array.from({ length: k }, (_, slot) => slot).filter(slot => !occupied.has(`${row}:${slot}`));
+        free.sort((a, c) => Math.abs(a - center) - Math.abs(c - center) || a - c);
+        n.slot = free[0];
+        n.row = row;
+        occupied.add(`${row}:${n.slot}`);
+        placed.set(n.id, n.slot);
+      });
+    });
+  }
+  for (const pair of new Set([...pairsByNode.values()].flat())) pair.crossing = crosses(pair);
+  // Preserve sweep results on ties; compare mirrored and pairwise swapped slots.
+  boundaries.forEach(b => {
+    const movable = b.nodes.filter(n => typeof n.order !== 'number');
+    const consider = permutation => {
+      const previous = movable.map(n => n.slot);
+      const affected = new Set();
+      movable.forEach((n, i) => {
+        if (previous[i] !== permutation[i]) {
+          for (const pair of pairsByNode.get(n.id) || []) affected.add(pair);
+        }
+      });
+      let before = 0;
+      for (const pair of affected) if (pair.crossing) before++;
+      movable.forEach((n, i) => { n.slot = permutation[i]; });
+      let after = 0;
+      for (const pair of affected) {
+        pair.nextCrossing = crosses(pair);
+        if (pair.nextCrossing) after++;
+      }
+      if (after < before) {
+        for (const pair of affected) pair.crossing = pair.nextCrossing;
+      } else movable.forEach((n, i) => { n.slot = previous[i]; });
+    };
+    const mirrored = movable.map(n => n.slot);
+    const rows = [...new Set(movable.map(n => n.row))];
+    rows.forEach(row => {
+      const indexes = movable.map((n, i) => n.row === row ? i : -1).filter(i => i >= 0);
+      const slots = indexes.map(i => mirrored[i]).reverse();
+      indexes.forEach((index, i) => { mirrored[index] = slots[i]; });
+    });
+    consider(mirrored);
+    for (let i = 0; i < movable.length; i++) {
+      for (let j = i + 1; j < movable.length; j++) {
+        if (movable[i].row !== movable[j].row) continue;
+        const slots = movable.map(n => n.slot);
+        [slots[i], slots[j]] = [slots[j], slots[i]];
+        consider(slots);
+      }
+    }
+  });
 }
 
 /**

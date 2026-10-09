@@ -40,10 +40,14 @@ architecture-visualizer/
 ├── src/
 │   ├── index.js               # Library entry point
 │   ├── engine/
-│   │   ├── template.html      # Standalone interactive visualization HTML template
 │   │   ├── layout.js          # Deterministic hierarchical & rank layout engine
 │   │   ├── validator.js       # Architecture schema & quality gate validator
 │   │   └── compiler.js        # Compiles architecture JSON into standalone HTML & Markdown
+│   ├── workbench/             # The interactive page, assembled into one offline HTML file
+│   │   ├── shell.html         # Page skeleton and markup; include lines place each module
+│   │   ├── assemble.js        # Joins shell.html and its modules into the template
+│   │   ├── styles/            # CSS modules, in the order shell.html includes them
+│   │   └── scripts/           # Script modules sharing one <script> scope, in execution order
 │   └── utils/
 │       ├── repo-inspector.js  # Inspects git repository, discovers components & files
 │       └── mermaid-exporter.js # Generates Mermaid fallback code
@@ -120,12 +124,53 @@ node bin/arch-viz.js build examples/3-async-event-driven-workflow/architecture.j
 Inject a small probe script before `</body>` to drive `switchView`, `toggleBoundary`, `goToSequenceStep` and
 `runExport`, and assert there are no `window.onerror` entries.
 
+## Workbench modules
+
+The workbench page lives in `src/workbench/`: `shell.html` holds the skeleton and markup, and each
+`<!-- include: … -->` line is replaced by a style or script module, indented to match. All scripts share one
+`<script>` scope, so their order in `shell.html` is their execution order. A module may not include another,
+and every file under `styles/` and `scripts/` must be included exactly once; the compiler suite checks both.
+
+## Design tokens
+
+Every color in the workbench comes from `src/workbench/styles/tokens.css`, defined for dark on `:root` and again
+for `[data-theme="light"]`. Add a token there, list it in `DESIGN_TOKENS` in `scripts/state.js` so exports carry
+it, and extend the contrast test if it draws text or meaning. The compiler suite rejects color literals outside
+the token file, any `var(--…)` not defined in `tokens.css` or the same module (except the listed layout variables), and emoji or bracketed status tags anywhere in the
+workbench. Interface text uses `--sans`, explanation `--serif`, and protocols, paths and technology `--mono`.
+
+## Visual regression gates
+
+A single screenshot comparison is not a valid visual gate for the workbench: flow particles and CSS transitions
+keep moving between captures, and Chrome itself alternates between two rasterizations of the same page (about
+190 to 270 differing pixels at 1440×900). Compare frames this way instead:
+
+1. **Freeze motion.** Emulate `prefers-reduced-motion: reduce` (DevTools Protocol
+   `Emulation.setEmulatedMedia`). The workbench honours it: particles and autoplay stop and transitions collapse.
+2. **Capture the same states on both builds**, each in a fresh browser profile, at the reference viewport of
+   1440×900, in both themes: initial load, light theme, a walkthrough step, a component sheet open, the Change
+   lens, and the Review chapter with its quality gate unfolded. Walkthrough playback is disabled under reduced
+   motion; pause it before capturing a step.
+3. **Capture each build at least twice** and record the noise floor: the pixel difference between two captures
+   of the same build.
+4. **Frame equivalence passes** when every candidate frame equals at least one baseline frame of the same state
+   with 0 differing pixels. A difference the size of the noise floor is not a pass; it means a capture landed on
+   the other rasterization and needs a matching baseline frame.
+5. **For an intentional visual change**, frames are expected to differ. Prove instead that only presentation
+   changed: identical embedded spec and layout data, identical DOM structure (ids, roles, accessible names, data
+   attributes), identical node and edge geometry, every rendered test passing, and a side-by-side review of each
+   state in both themes.
+
 ## Layout engine invariants
 
-Any change to `src/engine/layout.js` must keep these true (the layout suite enforces them):
+Any change to `src/engine/layout.js` or `src/engine/orthogonal.js` must keep these true (the layout, router and
+generated-spec suites enforce them):
 
 - the same spec produces byte-identical coordinates on repeated runs;
-- every node stays inside its boundary box;
+- every node stays inside its boundary box (its lane, in the default `lanes` layout);
 - an explicit numeric `order` always wins over barycenter ordering;
-- every edge is classified `forward`, `sibling`, `backward` or `self`, and the label anchor sits on the curve;
-- the browser's drag-time geometry in `template.html` stays in sync with `buildEdgeGeometry`.
+- no route crosses a card, every crossing has a jump, and every placed label clears cards, other labels and
+  other routes; a label with no clear room is left off the canvas, never drawn over something;
+- every generated spec lays out below the suite's 1.5-second limit (the browser re-routes with the same code on drag);
+- with `--router curved`, every edge is classified `forward`, `sibling`, `backward` or `self`, and the label anchor sits on the curve;
+- the browser's drag-time geometry in `src/workbench/scripts/drag.js` stays in sync with the Node layout.

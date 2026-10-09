@@ -1,4 +1,8 @@
 'use strict';
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 /**
  * OpenCode (`opencode run`).
  * Note: OpenCode has no --read-only flag. Read-only is the built-in `plan`
@@ -43,6 +47,39 @@ module.exports = {
     if (req.effort) args.push('--variant', req.effort);
     if (req.session) args.push('--session', req.session);
     return { args };
+  },
+  // OpenCode keeps sessions in one SQLite database under XDG_DATA_HOME, so two runs at once fail
+  // with "database is locked". Each workspace gets its own data dir (stable across fix attempts, so
+  // --session still resumes) with the user's auth files linked in.
+  isolate({ cwd, env = process.env } = {}) {
+    if (!cwd) return null;
+    const shared = path.join(env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'opencode');
+    const key = crypto.createHash('sha1').update(path.resolve(cwd)).digest('hex').slice(0, 16);
+    // The user's own cache, not a shared /tmp: there another user could pre-create the directory or plant a
+    // symlink in its place. Stable per workspace, so fix attempts resume the same session.
+    const cache = env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache');
+    const root = path.join(cache, 'delegate-fleet', 'opencode', key);
+    const data = path.join(root, 'opencode');
+    // The data dir holds session history: only this user may read it, whatever the umask.
+    fs.mkdirSync(data, { recursive: true, mode: 0o700 });
+    for (const dir of [root, data]) { try { fs.chmodSync(dir, 0o700); } catch { /* not ours to tighten */ } }
+    for (const name of ['auth.json', 'mcp-auth.json']) {
+      const target = path.join(shared, name);
+      const link = path.join(data, name);
+      if (!fs.existsSync(target)) {
+        // A link to credentials that are no longer shared must not outlive them.
+        // unlinkSync, not rmSync: rmSync follows a dangling link, finds nothing and silently keeps it.
+        try { if (fs.lstatSync(link).isSymbolicLink()) fs.unlinkSync(link); } catch { /* no link */ }
+        continue;
+      }
+      // Re-point a link left by an earlier run (a moved or deleted XDG_DATA_HOME leaves it dangling).
+      let current = null;
+      try { current = fs.readlinkSync(link); } catch { current = null; }
+      if (current === target) continue;
+      try { fs.unlinkSync(link); } catch { /* no earlier link */ }
+      try { fs.symlinkSync(target, link); } catch { /* a concurrent run linked it first */ }
+    }
+    return { XDG_DATA_HOME: root };
   },
   // `opencode models` prints one provider/model id per line.
   listModels: {

@@ -2153,6 +2153,62 @@ test('route and limits config is validated field by field', () => {
  * Quota and budget: steer away from workers that cannot take the job
  * ------------------------------------------------------------------ */
 
+test('quota: agy\'s "Individual quota reached" / RESOURCE_EXHAUSTED counts as out of quota', () => {
+  const ledger = require('../scripts/lib/ledger.js');
+  assert.ok(ledger.matchesQuota('error: Individual quota reached. Please upgrade your subscription. Resets in 2h29m28s.'));
+  assert.ok(ledger.matchesQuota('AGY_ERROR: {"status":"RESOURCE_EXHAUSTED","error_code":429}'));
+  assert.ok(!ledger.matchesQuota('Error: database is locked'));
+});
+
+// Some platforms (Windows without the privilege) cannot create symlinks; isolate() then runs without auth links.
+const CAN_SYMLINK = (() => {
+  try { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'df-ln-')); fs.symlinkSync(path.join(d, 'x'), path.join(d, 'l')); return true; } catch { return false; }
+})();
+
+test('opencode gets a private data dir per workspace, stable across attempts, with auth linked in', () => {
+  const adapter = require('../scripts/adapters/opencode.js');
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'df-xdg-'));
+  fs.mkdirSync(path.join(shared, 'opencode'));
+  fs.writeFileSync(path.join(shared, 'opencode', 'auth.json'), '{}');
+  const env = { XDG_DATA_HOME: shared, XDG_CACHE_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'df-cache-')) };
+  const a1 = adapter.isolate({ cwd: '/tmp/worktree-a', env });
+  const a2 = adapter.isolate({ cwd: '/tmp/worktree-a', env });
+  const b = adapter.isolate({ cwd: '/tmp/worktree-b', env });
+  assert.strictEqual(a1.XDG_DATA_HOME, a2.XDG_DATA_HOME, 'a fix attempt must reuse the same data dir so --session resumes');
+  assert.notStrictEqual(a1.XDG_DATA_HOME, b.XDG_DATA_HOME, 'two worktrees must not share an opencode database');
+  assert.notStrictEqual(a1.XDG_DATA_HOME, shared, 'the user\'s own opencode database is never used by a worker');
+  const link = path.join(a1.XDG_DATA_HOME, 'opencode', 'auth.json');
+  if (CAN_SYMLINK) assert.strictEqual(fs.realpathSync(link), fs.realpathSync(path.join(shared, 'opencode', 'auth.json')), 'auth is linked, not copied');
+  assert.strictEqual(adapter.isolate({ env }), null, 'no workspace, no isolation');
+});
+
+test('opencode data dir is private to the user and drops auth links whose shared file is gone', () => {
+  const adapter = require('../scripts/adapters/opencode.js');
+  const shared = fs.mkdtempSync(path.join(os.tmpdir(), 'df-xdg-'));
+  fs.mkdirSync(path.join(shared, 'opencode'));
+  fs.writeFileSync(path.join(shared, 'opencode', 'auth.json'), '{}');
+  const env = { XDG_DATA_HOME: shared, XDG_CACHE_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'df-cache-')) };
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'df-ws-'));
+  const first = adapter.isolate({ cwd, env });
+  const data = path.join(first.XDG_DATA_HOME, 'opencode');
+  if (process.platform !== 'win32') {
+    assert.strictEqual(fs.statSync(data).mode & 0o777, 0o700, 'session history must not be readable by other users');
+    assert.strictEqual(fs.statSync(first.XDG_DATA_HOME).mode & 0o777, 0o700);
+  }
+  // The workspace lives in this user's cache, not a shared /tmp another user could pre-create or redirect.
+  assert.ok(first.XDG_DATA_HOME.startsWith(path.join(env.XDG_CACHE_HOME, 'delegate-fleet', 'opencode') + path.sep), first.XDG_DATA_HOME);
+  if (!CAN_SYMLINK) return;
+  assert.ok(fs.lstatSync(path.join(data, 'auth.json')).isSymbolicLink());
+  fs.rmSync(path.join(shared, 'opencode', 'auth.json'));
+  adapter.isolate({ cwd, env });
+  assert.throws(() => fs.lstatSync(path.join(data, 'auth.json')), /ENOENT/, 'a link to credentials no longer shared is removed');
+  // A dangling link from a moved XDG_DATA_HOME is re-pointed, not kept.
+  fs.symlinkSync(path.join(os.tmpdir(), 'df-gone', 'auth.json'), path.join(data, 'auth.json'));
+  fs.writeFileSync(path.join(shared, 'opencode', 'auth.json'), '{}');
+  adapter.isolate({ cwd, env });
+  assert.strictEqual(fs.readlinkSync(path.join(data, 'auth.json')), path.join(shared, 'opencode', 'auth.json'));
+});
+
 test('quota: a worker whose output says it is out of quota is marked, and routes skip it', () => {
   const repo = H.tmpRepo({ files: { 'src/a.js': 'x\n' } });
   writeConfig(repo, { workers: { claude: { cli: H.STUB }, codex: { cli: H.STUB } }, routes: { mechanical: [{ backend: 'claude' }, { backend: 'codex' }] } });

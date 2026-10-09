@@ -1,0 +1,148 @@
+/* Bottom Floating Controls: Zoom, Pan, Fit */
+.viewport-controls {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.viewport-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.viewport-btn:last-child {
+  border-bottom: none;
+}
+
+.viewport-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+/* Overlays centre on the canvas, not the window, so docked panels never push them under each other. */
+body { --canvas-left: 0px; --canvas-right: 0px; --overlay-clearance: 8px; --chrome-top: 94px; }
+@media (min-width: 768px) { body { --overlay-clearance: 136px; } }
+@media (min-width: 1100px) { body { --overlay-clearance: 208px; } }
+
+/* Sequence Playback Controls Bar */
+.sequence-controls {
+  position: absolute;
+  bottom: 20px;
+  left: calc(var(--canvas-left) + (100vw - var(--canvas-left) - var(--canvas-right)) / 2);
+  /* Clear the minimap (bottom-left) and the zoom controls (bottom-right); --overlay-clearance grows with the minimap. */
+  max-width: calc(100vw - var(--canvas-left) - var(--canvas-right) - 2 * var(--overlay-clearance));
+  flex-wrap: wrap;
+  justify-content: center;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 8px 16px;
+  border-radius: 9999px;
+  box-shadow: var(--shadow);
+}
+
+.sequence-controls.visible {
+  display: flex;
+}
+
+body.presentation-mode #floating-bar {
+  display: none;
+}
+.workbench-hidden { display: none !important; }
+.workbench-sr-only { position: fixed; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.workbench-review-list { display: grid; gap: 6px; }
+.workbench-review-item, .workbench-scenario-control { width: 100%; padding: 7px 8px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; text-align: left; cursor: pointer; font: inherit; }
+.workbench-review-item[data-state="unresolved"], .workbench-review-item[data-state="warn"], .workbench-stage[data-stage-status="failed"], .workbench-stage[data-stage-status="blocked"] { border-left: 5px double var(--warn); }
+.workbench-review-item[data-state="verified"], .workbench-stage[data-stage-status="completed"] { border-left: 5px solid var(--ok); }
+.workbench-review-field { padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow-wrap: anywhere; }
+.workbench-review-field strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; }
+.workbench-scenario-player { display: grid; gap: 8px; }
+.workbench-scenario-toolbar { display: grid; grid-template-columns: auto auto auto 1fr; gap: 5px; }
+.workbench-scenario-toolbar button { min-width: 32px; text-align: center; }
+.workbench-scenario-toolbar input { min-width: 0; }
+.workbench-stage { padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.workbench-stage-group { display: grid; gap: 6px; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--line); }
+
+/* Lens key follows the canvas inset. */
+.lens-key {
+  position: absolute;
+  top: calc(var(--chrome-top) + 16px);
+  right: calc(var(--canvas-right) + 16px);
+  z-index: 40;
+  max-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: 11px;
+}
+.lens-key strong { display: block; margin-bottom: 6px; }
+.lens-key-row { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.lens-key-swatch { width: 24px; flex-shrink: 0; border-top: 2px solid var(--line); }
+.lens-key-swatch[data-lens-style="dashed"] { border-top-style: dashed; }
+.lens-key-swatch[data-lens-style="dotted"] { border-top-style: dotted; }
+.lens-key button {
+  margin-top: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.lens-key button[aria-pressed="true"] { border-color: var(--ink); }
+@media (max-width: 767px) {
+  .lens-key { top: calc(var(--chrome-top) + 16px); max-width: 160px; }
+}
+.lens-key-swatch[data-lens-stroke="line"] { border-top-color: var(--line); }
+.lens-key-swatch[data-lens-stroke="ink"] { border-top-color: var(--ink); }
+.lens-key-swatch[data-lens-stroke="ok"] { border-top-color: var(--ok); }
+.lens-key-swatch[data-lens-stroke="warn"] { border-top-color: var(--warn); }
+.lens-key-swatch[data-lens-stroke="risk"] { border-top-color: var(--risk); }
+.lens-key-swatch[data-lens-stroke="edge"] { border-top-color: var(--edge); }
+
+.lens-key-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.lens-key-controls > span { flex-basis: 100%; color: var(--muted); }
+.lens-key-controls button { margin: 0; padding: 3px 6px; font-size: 11px; }
+.lens-key-controls button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.lens-key { display: flex; align-items: center; gap: 14px; height: 34px; box-sizing: border-box; padding: 0 12px; max-width: calc(100vw - var(--canvas-left) - var(--canvas-right) - 32px); white-space: nowrap; }
+.lens-key strong { display: inline; margin: 0; font-size: 12px; font-weight: 650; }
+.lens-key-row { margin: 0; gap: 6px; color: var(--muted); }
+.lens-key-swatch { width: 18px; }
+.lens-key button { margin: 0; font-size: 11px; }
+.lens-key-controls { margin: 0; flex-wrap: nowrap; }
+.lens-filters { position: absolute; top: 40px; right: 0; width: 240px; max-width: calc(100vw - 32px); padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); white-space: normal; }
+.lens-filters[hidden] { display: none; }
+.lens-filters .lens-key-controls { flex-wrap: wrap; margin-top: 10px; }
+@media (max-width: 1099px) { .lens-key { gap: 10px; } .lens-key-swatch { width: 14px; } }
+/* Phones keep only the lens name and Filters; the encodings are in the Filters popover's lens. */
+@media (max-width: 767px) { .lens-key { gap: 8px; } .lens-key-row { display: none; } }
+@media (max-width: 767px) {
+  .lens-key { gap: 6px; padding: 0 8px; }
+  .lens-key-delta { gap: 2px; }
+  .lens-key-delta button { padding: 4px; }
+}

@@ -1,4 +1,5 @@
 const { RepoInspector, resolveRepoPath, EVIDENCE_TYPE, EVIDENCE_VERIFICATION, EVIDENCE_ORIGIN } = require('../utils/repo-inspector.js');
+const { isCommit } = require('../utils/freshness.js');
 
 const VALID_NODE_TYPES = new Set(['actor', 'frontend', 'mobile', 'api_gateway', 'service', 'worker', 'database', 'cache', 'queue', 'topic', 'storage', 'external', 'cloud_function', 'boundary_group']);
 
@@ -218,7 +219,11 @@ function resolveModelEvidence(model, options) {
       return cloned;
     }
     const inspected = inspector.inspectEvidence(cloned);
-    cloned.verification = inspected.verification;
+    if (cloned.verification === EVIDENCE_VERIFICATION.STALE && inspected.verification !== EVIDENCE_VERIFICATION.UNRESOLVED) {
+      cloned.verification = EVIDENCE_VERIFICATION.STALE;
+    } else {
+      cloned.verification = inspected.verification;
+    }
     if (Object.prototype.hasOwnProperty.call(inspected, 'exists')) {
       cloned.exists = inspected.exists;
     }
@@ -363,10 +368,59 @@ function findEdgeId(edges, from, to) {
   return undirected ? undirected.id || null : null;
 }
 
+const INTERACTION_FIELDS = ['narrative', 'edgeId', 'label', 'sync', 'durationMs', 'condition', 'payload', 'metadata', 'optional', 'status', 'failure', 'recovery'];
+
+// A stage written as one flat hop ({ type, from|source, to|target, label, ... }) becomes the canonical
+// { kind, interactions: [...] } shape, so the validator and the player see a single dialect.
+function stageAsInteraction(stage, edges) {
+  const from = stage.from || stage.source;
+  const to = stage.to || stage.target;
+  if (!from && !to) return null;
+  const interaction = { id: stage.id, from, to };
+  INTERACTION_FIELDS.forEach((field) => {
+    if (stage[field] !== undefined) interaction[field] = stage[field];
+  });
+  if (!interaction.label && stage.name) interaction.label = stage.name;
+  if (!interaction.edgeId && from && to) {
+    const edgeId = findEdgeId(edges, from, to);
+    if (edgeId) interaction.edgeId = edgeId;
+  }
+  return interaction;
+}
+
+// The canonical parallel stage plays a flat list of hops, including every nested branch outcome.
+function collectStageInteractions(stage) {
+  if (!stage || typeof stage !== 'object') return [];
+  return (Array.isArray(stage.interactions) ? stage.interactions : []).concat(
+    (stage.branches || []).flatMap((branch) => (branch.stages || []).flatMap(collectStageInteractions))
+  );
+}
+
+function normalizeStage(stage, edges) {
+  if (!stage || typeof stage !== 'object') return stage;
+  if (!stage.kind && typeof stage.type === 'string') stage.kind = stage.type;
+  if (!Array.isArray(stage.interactions)) {
+    if (stage.kind === STAGE_KIND.PARALLEL && Array.isArray(stage.stages)) {
+      stage.interactions = stage.stages
+        .map((child) => normalizeStage(child, edges))
+        .flatMap(collectStageInteractions);
+    } else if (stage.kind !== STAGE_KIND.BRANCH) {
+      const interaction = stageAsInteraction(stage, edges);
+      if (interaction) stage.interactions = [interaction];
+    }
+  }
+  if (!stage.kind) stage.kind = STAGE_KIND.INTERACTION;
+  (stage.branches || []).forEach((branch) => {
+    (branch.stages || []).forEach((child) => normalizeStage(child, edges));
+  });
+  return stage;
+}
+
 function normalizeScenarios(model) {
   if (Array.isArray(model.scenarios) && model.scenarios.length > 0) {
     model.scenarios.forEach((scenario) => {
       if (!scenario.origin) scenario.origin = SCENARIO_ORIGIN.AUTHOR;
+      (scenario.stages || []).forEach((stage) => normalizeStage(stage, model.edges));
     });
     return;
   }
@@ -409,6 +463,21 @@ function walkStages(stages, visit) {
       (stage.branches || []).forEach((branch) => walkStages(branch.stages, visit));
     }
   });
+}
+
+function hasAuthoredNarrative(item) {
+  return Boolean(item) && typeof item.narrative === 'string' && item.narrative.trim() !== '';
+}
+
+function scenarioHasAuthoredNarrative(scenario) {
+  let found = false;
+  walkStages(scenario.stages, (stage) => {
+    if (hasAuthoredNarrative(stage)) found = true;
+    (stage.interactions || []).forEach((interaction) => {
+      if (hasAuthoredNarrative(interaction)) found = true;
+    });
+  });
+  return found;
 }
 
 function validateScenarios(model, nodeIds, edgeKeySet, errors, warnings) {
@@ -759,6 +828,7 @@ function normalizeArchitecture(spec) {
 function validateArchitecture(spec, options = {}) {
   const errors = [];
   const warnings = [];
+  const notices = [];
   const repoRoot = options.repoRoot || process.cwd();
 
   if (!spec || typeof spec !== 'object') {
@@ -766,6 +836,7 @@ function validateArchitecture(spec, options = {}) {
       valid: false,
       errors: ['Specification must be a non-null object'],
       warnings: [],
+      notices: [],
       stats: {},
       gate: [],
       model: null,
@@ -793,6 +864,11 @@ function validateArchitecture(spec, options = {}) {
     }
     if (!spec.meta.description || typeof spec.meta.description !== 'string') {
       warnings.push('spec.meta.description is missing or empty.');
+    }
+    if (spec.meta.groundedAt && !illustrative) {
+      if (!isCommit(repoRoot, spec.meta.groundedAt)) {
+        errors.push(`meta.groundedAt ${spec.meta.groundedAt} is not a commit in this repository.`);
+      }
     }
   }
 
@@ -1003,6 +1079,12 @@ function validateArchitecture(spec, options = {}) {
 
   validateScenarios(model, nodeIds, edgeKeySet, errors, warnings);
 
+  (model.scenarios || []).forEach((scenario) => {
+    if (!scenarioHasAuthoredNarrative(scenario)) {
+      notices.push(`Scenario "${scenario.id}" has no authored narrative; generated sentences will be shown.`);
+    }
+  });
+
   // 6. Database ER view
   if (spec.views && spec.views.database_er) {
     const er = spec.views.database_er;
@@ -1104,6 +1186,7 @@ function validateArchitecture(spec, options = {}) {
     valid,
     errors,
     warnings,
+    notices,
     stats,
     gate,
     model,
@@ -1140,9 +1223,18 @@ function measureEdgeCardCrossings(spec) {
   const ids = [];
 
   layout.edges.forEach((edge) => {
-    if (!edge.points || !edge.controls) return;
+    if (!edge.points) return;
     const hit = layout.nodes.some((node) => {
       if (node.id === edge.source || node.id === edge.target) return false;
+      if (edge.polyline) {
+        return edge.polyline.slice(1).some((b, i) => {
+          const a = edge.polyline[i];
+          return a.y === b.y
+            ? a.y > node.y && a.y < node.y + node.height && Math.min(a.x, b.x) < node.x + node.width && Math.max(a.x, b.x) > node.x
+            : a.x > node.x && a.x < node.x + node.width && Math.min(a.y, b.y) < node.y + node.height && Math.max(a.y, b.y) > node.y;
+        });
+      }
+      if (!edge.controls) return false;
       for (let i = 1; i < SAMPLES; i++) {
         const p = cubicPointAt(i / SAMPLES, edge.points, edge.controls);
         if (p.x > node.x && p.x < node.x + node.width && p.y > node.y && p.y < node.y + node.height) return true;
@@ -1152,7 +1244,12 @@ function measureEdgeCardCrossings(spec) {
     if (hit) ids.push(edge.id);
   });
 
-  return { count: ids.length, total: layout.edges.length, ids };
+  const slots = layout.edges.filter(e => e.labelWidth > 0);
+  const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  const labelIssues = layout.config.router === 'orthogonal' ? slots.filter((edge, i) => !edge.labelSlot ||
+    layout.nodes.some(n => overlaps(edge.labelBounds, { left: n.x, right: n.x + n.width, top: n.y, bottom: n.y + n.height })) ||
+    slots.slice(0, i).some(other => other.labelBounds && overlaps(edge.labelBounds, other.labelBounds))).map(e => e.id) : [];
+  return { count: ids.length, total: layout.edges.length, ids, labelIssues };
 }
 
 function runQualityGate(ctx) {
@@ -1236,7 +1333,9 @@ function runQualityGate(ctx) {
     const label = e.label || e.packetLabel || '';
     if (label.length > LIMITS.edgeLabelChars) longLabels.push(`edge ${e.id || `${e.source}->${e.target}`}`);
   });
-  if (longLabels.length > 0) {
+  if (crossing && crossing.labelIssues.length) {
+    add(6, 'Readable labels', GATE_STATUS.WARN, `Missing or overlapping label slots: ${crossing.labelIssues.join(', ')}.`);
+  } else if (longLabels.length > 0) {
     add(6, 'Readable labels', GATE_STATUS.WARN, `Truncated at default zoom: ${longLabels.slice(0, 5).join(', ')}${longLabels.length > 5 ? ` (+${longLabels.length - 5} more)` : ''}.`);
   } else {
     add(6, 'Readable labels', GATE_STATUS.PASS, 'All labels fit the node card at default zoom.');
@@ -1357,6 +1456,7 @@ function runQualityGate(ctx) {
 module.exports = {
   validateArchitecture,
   normalizeArchitecture,
+  liftLegacyEvidence,
   runQualityGate,
   VALID_NODE_TYPES,
   VALID_STATUSES,

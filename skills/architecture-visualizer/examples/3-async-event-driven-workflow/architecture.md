@@ -132,7 +132,7 @@ Event-driven microservice orchestration for order checkout, payment capture, inv
 ### System Flowchart
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph b_client["Client Layer"]
     checkout_app["Checkout Mobile App<br/><i>[React Native (iOS/Android)]</i>"]
   end
@@ -250,7 +250,7 @@ erDiagram
 | 2 | Clear boundaries | ✅ PASS | 5 boundaries, all nodes assigned. |
 | 3 | Visible dependencies | ✅ PASS | Every non-actor node participates in at least one relationship. |
 | 4 | Intelligible arrows | ✅ PASS | Every edge declares a protocol label and a communication mode. |
-| 5 | Clean routing | ✅ PASS | 2 of 14 drawn edge(s) graze a non-endpoint card (e_outbox_poller, e14), within tolerance. |
+| 5 | Clean routing | ✅ PASS | No drawn edge crosses a non-endpoint card (14 edges sampled). |
 | 6 | Readable labels | ✅ PASS | All labels fit the node card at default zoom. |
 | 7 | Deterministic layout | ✅ PASS | Two consecutive layout runs produced identical coordinates. |
 | 8 | Balanced density | ✅ PASS | Max 3 nodes per boundary, edge ratio 1.4. |
@@ -313,3 +313,24 @@ Grounding mode: `illustrative` · Nodes: 10 · Edges: 14 · VERIFIED: 7 · INFER
 ### Implementation traceability
 - Mapped: `dlq_queue`, `dlq_triage_worker`, `inventory_service`, `outbox_poller`, `outbox_table`, `saga_orchestrator`
 - Gaps: none
+
+## Scenarios
+
+### Order Fulfillment Saga with Parallel Execution & DLQ Compensation
+
+Executes parallel payment and inventory fulfillment branches, handling physical warehouse damage via DLQ quarantine and automated compensations.
+
+1. **Initiate Checkout**: Checkout Mobile App sends HTTPS POST /checkout to Saga Orchestrator. Payload: orderId=9901, amount=149, sku=SKU-DESK-01, quantity=2. _(generated)_
+2. **Atomic Order & Outbox Commit**: Saga Orchestrator sends Atomic SQL INSERT to Outbox Table. Payload: orderId=9901, eventType=OrderCreatedEvent, status=PENDING. _(generated)_
+3. **Outbox Polling & Kafka Dispatch**: Outbox Table sends Poll Pending Events to Outbox Relay Worker. Payload: status=PENDING, limit=100. _(generated)_
+4. **Publish to Kafka Event Bus**: Outbox Relay Worker sends Produce OrderCreatedEvent to Apache Kafka Event Bus. Payload: topic=order.events, orderId=9901. _(generated)_
+5. **Parallel Fulfillment Branches (Payment & Inventory)**: In parallel: Apache Kafka Event Bus sends Consume OrderCreated to Payment Service. Payload: orderId=9901, amount=149; Payment Service sends Produce PaymentAuthorized to Apache Kafka Event Bus. Payload: orderId=9901, chargeId=ch_3Mv9x; Apache Kafka Event Bus sends Consume PaymentAuthorized to Inventory Service. Payload: orderId=9901, sku=SKU-DESK-01, quantity=2; Inventory Service sends Produce InventoryReserved to Apache Kafka Event Bus. Payload: orderId=9901, reservationId=res_88291. _(generated)_
+6. **Warehouse Dispatch Attempt**: Apache Kafka Event Bus sends Consume InventoryReserved to Warehouse Service. Payload: orderId=9901, warehouseId=WH-DXB-02. _(generated)_
+7. **Warehouse Dispatch & DLQ Failure Recovery**: Decision: Physical items intact in warehouse bin?. Outcomes: Dispatch Successful (Items verified and courier label generated), Damaged Item DLQ Quarantine & Compensation (Physical stock damaged; retry exhausted (3 attempts failed)). _(generated)_
+   - **Dispatch Successful** (Items verified and courier label generated)
+   - **Damaged Item DLQ Quarantine & Compensation** (Physical stock damaged; retry exhausted (3 attempts failed))
+     - Quarantine to DLQ Queue: Warehouse Service sends Route 3x Failed Message to Fulfillment DLQ. Payload: orderId=9901, retries=3, error=PHYSICAL_DAMAGE_STOCK_EXHAUSTED. _(generated)_
+     - Triage Worker PagerDuty Alert: Fulfillment DLQ sends Consume Poison Message to DLQ Triage Worker. Payload: severity=CRITICAL, incident=PD-58291. _(generated)_
+     - Deliver Failure Event to Orchestrator: Apache Kafka Event Bus sends Failure event to Saga Orchestrator. Payload: orderId=9901, eventType=warehouse.dispatch.failed. _(generated)_
+     - Compensating Payment Refund: Saga Orchestrator sends Compensate: refund to Payment Service. Payload: orderId=9901, refundAmount=149. _(generated)_
+     - Compensating Inventory Release: Saga Orchestrator sends Compensate: release to Inventory Service. Payload: orderId=9901, reservationId=res_88291. _(generated)_

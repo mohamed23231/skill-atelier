@@ -20,6 +20,7 @@ const SCAN_EXTENSIONS = new Set([
   '.yml',
   '.yaml',
   '.html',
+  '.css',
   '.txt'
 ]);
 const SELF = path.relative(ROOT, __filename);

@@ -8,6 +8,10 @@ In Architecture Visualizer 2.0, scenarios model dynamic execution paths across c
 
 Scenarios are defined in the top-level `scenarios` array. Each scenario contains metadata and an ordered sequence of stages.
 
+### Generated narratives and Markdown report
+
+At build time, a stage or interaction without an authored `narrative` receives a generated sentence marked `narrativeGenerated`; authored text is left unchanged. The Markdown report includes a numbered Scenarios section, nests outcomes under decisions, and marks generated sentences. A missing authored narrative produces a validation notice, not a warning, so it does not fail `--strict` by itself.
+
 ```jsonc
 {
   "scenarios": [
